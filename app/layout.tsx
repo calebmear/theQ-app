@@ -13,11 +13,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-100">
+      <body className="bg-gray-100 text-black">
         <div className="flex">
           <Sidebar />
 
-          <main className="flex-1 min-h-screen p-6">
+          <main className="min-h-screen flex-1 p-4 pb-24 md:p-6">
             {children}
           </main>
         </div>

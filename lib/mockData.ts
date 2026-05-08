@@ -1,6 +1,37 @@
+export const customers = [
+  {
+    id: 'C-1001',
+    name: 'Smith Residence',
+    contact: 'John Smith',
+    phone: '555-123-4567',
+    email: 'john@example.com',
+    address: '123 Main St',
+    notes: 'Prefers morning appointments.',
+  },
+  {
+    id: 'C-1002',
+    name: 'Acme Office',
+    contact: 'Sarah Jones',
+    phone: '555-987-6543',
+    email: 'sarah@acme.com',
+    address: '800 Business Pkwy',
+    notes: 'Coordinate work around office hours.',
+  },
+  {
+    id: 'C-1003',
+    name: 'Johnson Home',
+    contact: 'Mark Johnson',
+    phone: '555-222-8899',
+    email: 'mark@example.com',
+    address: '45 Oak Drive',
+    notes: 'Has multiple active home projects.',
+  },
+];
+
 export const projects = [
   {
     id: 'P-1001',
+    customerId: 'C-1001',
     customer: 'Smith Residence',
     name: 'Kitchen Remodel',
     status: 'In Progress',
@@ -10,6 +41,7 @@ export const projects = [
   },
   {
     id: 'P-1002',
+    customerId: 'C-1002',
     customer: 'Acme Office',
     name: 'Conference Room Buildout',
     status: 'Scheduled',
@@ -19,6 +51,7 @@ export const projects = [
   },
   {
     id: 'P-1003',
+    customerId: 'C-1003',
     customer: 'Johnson Home',
     name: 'Basement Finish',
     status: 'In Progress',

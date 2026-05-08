@@ -1,6 +1,6 @@
 export default function DashboardPage() {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 text-black">
       <div>
         <h1 className="text-3xl font-bold text-black">
           Revenue & Operations Dashboard
@@ -13,7 +13,9 @@ export default function DashboardPage() {
 
       <div className="grid gap-4">
         <div className="rounded-2xl bg-white p-6 shadow">
-          <p className="text-sm text-gray-500">Revenue</p>
+          <p className="text-sm text-gray-500">
+            Revenue
+          </p>
 
           <p className="mt-2 text-4xl font-bold text-black">
             $142,500

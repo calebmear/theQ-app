@@ -56,6 +56,9 @@ const [timeForm, setTimeForm] = useState<TimeForm>({
   hours: '',
   notes: '',
 });
+const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
+  null
+);
 
 
   useEffect(() => {
@@ -159,18 +162,36 @@ async function submitTimeEntry() {
     return;
   }
 
-  const { error } = await supabase.from('time_entries').insert({
-    project_id: project.id,
-    work_date: timeForm.workDate,
-    work_completed: timeForm.workCompleted,
-    service_vehicle: timeForm.serviceVehicle,
-    hours: Number(timeForm.hours),
-    notes: timeForm.notes,
-  });
+  if (editingTimeEntryId) {
+    const { error } = await supabase
+      .from('time_entries')
+      .update({
+        work_date: timeForm.workDate,
+        work_completed: timeForm.workCompleted,
+        service_vehicle: timeForm.serviceVehicle,
+        hours: Number(timeForm.hours),
+        notes: timeForm.notes,
+      })
+      .eq('id', editingTimeEntryId);
 
-  if (error) {
-    console.error('Error submitting time entry:', error);
-    return;
+    if (error) {
+      console.error('Error updating time entry:', error);
+      return;
+    }
+  } else {
+    const { error } = await supabase.from('time_entries').insert({
+      project_id: project.id,
+      work_date: timeForm.workDate,
+      work_completed: timeForm.workCompleted,
+      service_vehicle: timeForm.serviceVehicle,
+      hours: Number(timeForm.hours),
+      notes: timeForm.notes,
+    });
+
+    if (error) {
+      console.error('Error submitting time entry:', error);
+      return;
+    }
   }
 
   setTimeForm({
@@ -181,9 +202,36 @@ async function submitTimeEntry() {
     notes: '',
   });
 
+  setEditingTimeEntryId(null);
   loadTimeEntries(project.id);
 }
 
+function editTimeEntry(entry: TimeEntry) {
+  setEditingTimeEntryId(entry.id);
+  setTimeForm({
+    workDate: entry.work_date,
+    workCompleted: entry.work_completed ?? '',
+    serviceVehicle: entry.service_vehicle ?? '',
+    hours: String(entry.hours),
+    notes: entry.notes ?? '',
+  });
+}
+
+async function deleteTimeEntry(entryId: string) {
+  if (!project) return;
+
+  const { error } = await supabase
+    .from('time_entries')
+    .delete()
+    .eq('id', entryId);
+
+  if (error) {
+    console.error('Error deleting time entry:', error);
+    return;
+  }
+
+  loadTimeEntries(project.id);
+}
 
   return (
     <div className="space-y-6 text-black">
@@ -304,8 +352,9 @@ async function submitTimeEntry() {
   onClick={submitTimeEntry}
   className="mt-4 rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
 >
-  Submit Time
+  {editingTimeEntryId ? 'Update Time' : 'Submit Time'}
 </button>
+
 
           </div>
 
@@ -320,6 +369,7 @@ async function submitTimeEntry() {
         <th className="p-4">Work Completed</th>
         <th className="p-4">Vehicle</th>
         <th className="p-4">Notes</th>
+        <th className="p-4">Actions</th>
       </tr>
     </thead>
 
@@ -331,12 +381,31 @@ async function submitTimeEntry() {
           <td className="p-4">{entry.work_completed}</td>
           <td className="p-4">{entry.service_vehicle}</td>
           <td className="p-4">{entry.notes}</td>
+          <td className="p-4">
+  <div className="flex gap-2">
+    <button
+      type="button"
+      onClick={() => editTimeEntry(entry)}
+      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+    >
+      Edit
+    </button>
+
+    <button
+      type="button"
+      onClick={() => deleteTimeEntry(entry.id)}
+      className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+    >
+      Delete
+    </button>
+  </div>
+</td>
         </tr>
       ))}
 
       {timeEntries.length === 0 && (
         <tr>
-          <td colSpan={5} className="p-4 text-center text-gray-500">
+          <td colSpan={6} className="p-4 text-center text-gray-500">
             No time entries submitted yet.
           </td>
         </tr>

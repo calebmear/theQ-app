@@ -12,9 +12,9 @@ export default function CustomerProfilePage({
   }
 
   const customerProjects = projects.filter(
-    (project) => project.customerId === customer.id
+    (project) => project.customer === customer.name
   );
-
+  
   return (
     <div className="space-y-6 text-black">
       <div>

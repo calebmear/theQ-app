@@ -36,7 +36,7 @@ export const projects = [
     status: 'In Progress',
     assignedTo: 'Mike',
     progress: 65,
-    targetCompletion: '2026-06-15',
+    startdateofservice: '2026-06-15',
   },
   {
     id: 'P-1002',
@@ -45,7 +45,7 @@ export const projects = [
     status: 'Scheduled',
     assignedTo: 'Sarah',
     progress: 20,
-    targetCompletion: '2026-06-28',
+    startdateofservice: '2026-06-28',
   },
   {
     id: 'P-1003',
@@ -54,7 +54,7 @@ export const projects = [
     status: 'In Progress',
     assignedTo: 'Chris',
     progress: 45,
-    targetCompletion: '2026-07-10',
+    startdateofservice: '2026-07-10',
   },
 ];
 

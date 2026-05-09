@@ -2,10 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import {
-  customers as mockCustomers,
-  projects as mockProjects,
-} from '../../lib/mockData';
+import { projects as mockProjects } from '../../lib/mockData';
 import { supabase } from '../../lib/supabaseClient';
 
 type Customer = {
@@ -38,7 +35,7 @@ type Employee = {
 
 
 export default function OperationsPage() {
-  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>(mockProjects);
   const [customerSearch, setCustomerSearch] = useState('');
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -58,8 +55,8 @@ export default function OperationsPage() {
   const [newProject, setNewProject] = useState({
     id: '',
     name: '',
-    customer: '',
-    assignedTo: '',
+    customerId: '',
+    assignedToId: '',
     status: 'Active',
     progress: 0,
     startdateofservice: today,
@@ -83,6 +80,34 @@ export default function OperationsPage() {
     }
   
     loadEmployees();
+  }, []);
+
+  useEffect(() => {
+    async function loadCustomers() {
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, name, contact_name, phone, email, address, notes')
+        .order('name');
+  
+      if (error) {
+        console.error('Error loading customers:', error);
+        return;
+      }
+  
+      const formattedCustomers: Customer[] = (data ?? []).map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+        contactName: customer.contact_name ?? '',
+        phone: customer.phone ?? '',
+        email: customer.email ?? '',
+        address: customer.address ?? '',
+        notes: customer.notes ?? '',
+      }));
+  
+      setCustomers(formattedCustomers);
+    }
+  
+    loadCustomers();
   }, []);
 
   
@@ -138,36 +163,64 @@ export default function OperationsPage() {
     setShowCustomerForm(false);
   }
 
-  function saveProject() {
-    if (!newProject.id.trim() || !newProject.customer) {
+  async function saveProject() {
+    if (!newProject.id.trim() || !newProject.customerId) {
       return;
     }
-
+  
+    const { data, error } = await supabase
+      .from('projects')
+      .insert({
+        project_number: newProject.id,
+        customer_id: newProject.customerId,
+        assigned_to: newProject.assignedToId || null,
+        status: newProject.status,
+        progress: Number(newProject.progress),
+        service_start_date: newProject.startdateofservice,
+        notes: newProject.notes,
+      })
+      .select()
+      .single();
+  
+    if (error) {
+      console.error('Error saving project:', error);
+      return;
+    }
+  
+    const selectedCustomer = customers.find(
+      (customer) => customer.id === newProject.customerId
+    );
+  
+    const selectedEmployee = employees.find(
+      (employee) => employee.id === newProject.assignedToId
+    );
+  
     const project: Project = {
-      id: newProject.id,
-      name: newProject.id,
-      customer: newProject.customer,
-      assignedTo: newProject.assignedTo,
-      status: newProject.status,
-      progress: Number(newProject.progress),
-      startdateofservice: newProject.startdateofservice,
-      notes: newProject.notes,
+      id: data.project_number,
+      name: data.project_number,
+      customer: selectedCustomer?.name ?? '',
+      assignedTo: selectedEmployee?.name ?? '',
+      status: data.status ?? 'Active',
+      progress: Number(data.progress ?? 0),
+      startdateofservice: data.service_start_date ?? '',
+      notes: data.notes ?? '',
     };
-
+  
     setProjects([...projects, project]);
+  
     setNewProject({
       id: '',
       name: '',
-      customer: '',
-      assignedTo: '',
+      customerId: '',
+      assignedToId: '',
       status: 'Active',
       progress: 0,
       startdateofservice: today,
       notes: '',
     });
+  
     setShowProjectForm(false);
   }
-
   return (
     <div className="space-y-6 text-black">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -380,19 +433,22 @@ onChange={(e) =>
                   Customer
                 </label>
                 <select
-                  value={newProject.customer}
-                  onChange={(e) =>
-                    setNewProject({ ...newProject, customer: e.target.value })
-                  }
-                  className="w-full rounded-lg border p-3"
-                >
-                  <option value="">Select customer</option>
-                  {customers.map((customer) => (
-                    <option key={customer.id} value={customer.name}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
+  value={newProject.customerId}
+  onChange={(e) =>
+    setNewProject({ ...newProject, customerId: e.target.value })
+  }
+  className="w-full rounded-lg border p-3"
+>
+  <option value="" disabled hidden>
+    Select customer
+  </option>
+
+  {customers.map((customer) => (
+    <option key={customer.id} value={customer.id}>
+      {customer.name}
+    </option>
+  ))}
+</select>
               </div>
 
               <div>
@@ -416,23 +472,22 @@ onChange={(e) =>
   </label>
 
   <select
-    value={newProject.assignedTo}
-    onChange={(e) =>
-      setNewProject({ ...newProject, assignedTo: e.target.value })
-    }
-    className="w-full rounded-lg border p-3"
-  >
-    <option value="" disabled hidden>
-  Select Technician
-</option>
-    {employees
-      .filter((employee) => employee.active)
-      .map((employee) => (
-        <option key={employee.id} value={employee.name}>
-          {employee.name}
-        </option>
-      ))}
-  </select>
+  value={newProject.assignedToId}
+  onChange={(e) =>
+    setNewProject({ ...newProject, assignedToId: e.target.value })
+  }
+  className="w-full rounded-lg border p-3"
+>
+  <option value="" disabled hidden>
+    Select Technician
+  </option>
+
+  {employees.map((employee) => (
+    <option key={employee.id} value={employee.id}>
+      {employee.name}
+    </option>
+  ))}
+</select>
 </div>
 
               <div>

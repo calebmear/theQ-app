@@ -31,7 +31,8 @@ export default function ProjectDetailPage({
           <div><p className="text-sm text-gray-500">Status</p><p className="font-semibold">{project.status}</p></div>
           <div><p className="text-sm text-gray-500">Assigned</p><p className="font-semibold">{project.assignedTo}</p></div>
           <div><p className="text-sm text-gray-500">Progress</p><p className="font-semibold">{project.progress}%</p></div>
-          <div><p className="text-sm text-gray-500">Target Completion</p><p className="font-semibold">{project.targetCompletion}</p></div>
+          <div><p className="text-sm text-gray-500">Service Start Date</p><p className="font-semibold">{project.startdateofservice}</p></div>
+
         </div>
       </div>
 

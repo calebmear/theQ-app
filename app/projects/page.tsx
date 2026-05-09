@@ -209,7 +209,7 @@ export default function ProjectsPage() {
                           <td className="p-4">{project.name}</td>
                           <td className="p-4">{project.status}</td>
                           <td className="p-4">{project.progress}%</td>
-                          <td className="p-4">{project.targetCompletion}</td>
+                          <td className="p-4">{project.startdateofservice}</td>
                         </tr>
                       ))}
 

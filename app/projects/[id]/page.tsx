@@ -29,8 +29,8 @@ type TimeEntry = {
   hours: number;
   notes: string | null;
   created_at: string;
-  deleted_at: string | null;
-deleted_reason: string | null;
+  deleted_at?: string | null;
+deleted_reason?: string | null;
 updated_at: string | null;
 };
 

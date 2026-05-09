@@ -158,7 +158,7 @@ export default function ProjectsPage() {
                   </button>
                 </div>
 
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
+                <div className="mt-6 grid gap-4 md:grid-cols-3">
                   <div>
                     <p className="text-sm text-gray-500">Email</p>
                     <p className="font-medium">{selectedCustomer.email}</p>
@@ -197,7 +197,7 @@ export default function ProjectsPage() {
                         <th className="p-4">Project ID</th>
                         <th className="p-4">Project</th>
                         <th className="p-4">Status</th>
-                        <th className="p-4">Progress</th>
+                       
                         <th className="p-4">Target Completion</th>
                       </tr>
                     </thead>
@@ -208,7 +208,7 @@ export default function ProjectsPage() {
                           <td className="p-4 font-medium">{project.id}</td>
                           <td className="p-4">{project.name}</td>
                           <td className="p-4">{project.status}</td>
-                          <td className="p-4">{project.progress}%</td>
+                          
                           <td className="p-4">{project.startdateofservice}</td>
                         </tr>
                       ))}

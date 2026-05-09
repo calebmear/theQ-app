@@ -58,6 +58,7 @@ export default function OperationsPage() {
     id: '',
     name: '',
     customerId: '',
+    pricingType: 'Hourly',
     assignedToId: '',
     status: 'Active',
     progress: 0,
@@ -199,6 +200,7 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
         status: newProject.status,
         progress: Number(newProject.progress),
         service_start_date: newProject.startdateofservice,
+        pricing_type: newProject.pricingType,
         notes: newProject.notes,
       })
       .select()
@@ -234,6 +236,7 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
       id: '',
       name: '',
       customerId: '',
+      pricingType: 'Hourly',
       assignedToId: '',
       status: 'Active',
       progress: 0,
@@ -610,28 +613,40 @@ onChange={(e) =>
               </div>
 
               <div>
-  <label className="mb-2 block text-sm font-medium">
-    Assigned To
-  </label>
-
+  <label className="mb-2 block text-sm font-medium">Pricing Model</label>
   <select
-  value={newProject.assignedToId}
-  onChange={(e) =>
-    setNewProject({ ...newProject, assignedToId: e.target.value })
-  }
-  className="w-full rounded-lg border p-3"
->
-  <option value="" disabled hidden>
-    Select Technician
-  </option>
-
-  {employees.map((employee) => (
-    <option key={employee.id} value={employee.id}>
-      {employee.name}
-    </option>
-  ))}
-</select>
+    value={newProject.pricingType}
+    onChange={(e) =>
+      setNewProject({ ...newProject, pricingType: e.target.value })
+    }
+    className="w-full rounded-lg border p-3"
+  >
+    <option>Hourly</option>
+    <option>Per Foot / Lateral</option>
+  </select>
 </div>
+
+<div>
+  <label className="mb-2 block text-sm font-medium">Assigned To</label>
+  <select
+    value={newProject.assignedToId}
+    onChange={(e) =>
+      setNewProject({ ...newProject, assignedToId: e.target.value })
+    }
+    className="w-full rounded-lg border p-3"
+  >
+    <option value="" disabled hidden>
+      Select Technician
+    </option>
+
+    {employees.map((employee) => (
+      <option key={employee.id} value={employee.id}>
+        {employee.name}
+      </option>
+    ))}
+  </select>
+</div>
+
 
               <div>
                 <label className="mb-2 block text-sm font-medium">Status</label>
@@ -665,6 +680,8 @@ onChange={(e) =>
                 />
               </div>
             </div>
+
+            
 
             <div className="mt-6 flex justify-end gap-3">
               <button

@@ -26,7 +26,7 @@ type Project = {
   status: string;
   progress: number;
   startdateofservice: string;
-  notes: string;
+  notes?: string;
 };
 
 export default function OperationsPage() {

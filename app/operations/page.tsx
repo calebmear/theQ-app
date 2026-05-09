@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { projects as mockProjects } from '../../lib/mockData';
+
 import { supabase } from '../../lib/supabaseClient';
 
 type Customer = {
@@ -36,9 +36,11 @@ type Employee = {
 
 export default function OperationsPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [customerSearch, setCustomerSearch] = useState('');
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [completedProjectSearch, setCompletedProjectSearch] = useState('');
+
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
@@ -121,6 +123,26 @@ export default function OperationsPage() {
       customer.email.toLowerCase().includes(search)
     );
   });
+
+  const activeProjects = projects.filter((project) =>
+  ['Active', 'Scheduled'].includes(project.status)
+);
+
+const completedProjects = projects.filter(
+  (project) => project.status === 'Completed'
+);
+
+const filteredCompletedProjects = completedProjects.filter((project) => {
+  const search = completedProjectSearch.toLowerCase();
+
+  return (
+    project.id.toLowerCase().includes(search) ||
+    project.name.toLowerCase().includes(search) ||
+    project.customer.toLowerCase().includes(search) ||
+    project.assignedTo.toLowerCase().includes(search) ||
+    project.startdateofservice.toLowerCase().includes(search)
+  );
+});
 
   async function saveCustomer() {
     if (!newCustomer.name.trim()) return;
@@ -221,6 +243,49 @@ export default function OperationsPage() {
   
     setShowProjectForm(false);
   }
+
+  useEffect(() => {
+    async function loadProjects() {
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          id,
+          project_number,
+          status,
+          progress,
+          service_start_date,
+          notes,
+          customers (
+            name
+          ),
+          employees (
+            name
+          )
+        `)
+        .order('created_at', { ascending: false });
+  
+      if (error) {
+        console.error('Error loading projects:', error);
+        return;
+      }
+  
+      const formattedProjects: Project[] = (data ?? []).map((project) => ({
+        id: project.project_number,
+        name: project.project_number,
+        customer: project.customers?.name ?? '',
+        assignedTo: project.employees?.name ?? '',
+        status: project.status ?? 'Active',
+        progress: Number(project.progress ?? 0),
+        startdateofservice: project.service_start_date ?? '',
+        notes: project.notes ?? '',
+      }));
+  
+      setProjects(formattedProjects);
+    }
+  
+    loadProjects();
+  }, []);
+  
   return (
     <div className="space-y-6 text-black">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -303,7 +368,7 @@ export default function OperationsPage() {
         <h2 className="text-xl font-bold">Active Projects</h2>
 
         <div className="mt-4 space-y-3 md:hidden">
-          {projects.map((project) => (
+        {activeProjects.map((project) => (
             <Link
               key={project.id}
               href={`/projects/${project.id}`}
@@ -333,7 +398,7 @@ export default function OperationsPage() {
             </thead>
 
             <tbody>
-              {projects.map((project) => (
+            {activeProjects.map((project) => (
                 <tr key={project.id} className="border-t hover:bg-gray-50">
                   <td className="p-4">
                     <Link
@@ -353,6 +418,84 @@ export default function OperationsPage() {
           </table>
         </div>
       </div>
+
+      <div className="rounded-2xl bg-white p-4 shadow md:p-6">
+  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div>
+      <h2 className="text-xl font-bold">Completed Projects</h2>
+      <p className="mt-1 text-sm text-gray-600">
+        Search completed work by project, customer, technician, or date.
+      </p>
+    </div>
+  </div>
+
+  <input
+    type="text"
+    placeholder="Search completed projects..."
+    value={completedProjectSearch}
+    onChange={(e) => setCompletedProjectSearch(e.target.value)}
+    className="mt-4 w-full rounded-lg border p-3"
+  />
+
+  <div className="mt-4 space-y-3 md:hidden">
+    {filteredCompletedProjects.map((project) => (
+      <Link
+        key={project.id}
+        href={`/projects/${project.id}`}
+        className="block rounded-xl border p-4"
+      >
+        <p className="text-sm text-gray-500">{project.id}</p>
+        <h3 className="mt-1 font-bold">{project.name}</h3>
+        <p className="text-sm text-gray-600">{project.customer}</p>
+        <div className="mt-3 flex justify-between text-sm">
+          <span>{project.assignedTo}</span>
+          <span className="font-semibold">{project.startdateofservice}</span>
+        </div>
+      </Link>
+    ))}
+  </div>
+
+  <div className="mt-4 hidden overflow-hidden rounded-xl border md:block">
+    <table className="w-full text-left text-sm">
+      <thead className="bg-gray-50">
+        <tr>
+          <th className="p-4">Project</th>
+          <th className="p-4">Customer</th>
+          <th className="p-4">Assigned</th>
+          <th className="p-4">Service Start Date</th>
+          <th className="p-4">Status</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        {filteredCompletedProjects.map((project) => (
+          <tr key={project.id} className="border-t hover:bg-gray-50">
+            <td className="p-4">
+              <Link
+                href={`/projects/${project.id}`}
+                className="font-semibold text-blue-600 hover:underline"
+              >
+                {project.id} — {project.name}
+              </Link>
+            </td>
+            <td className="p-4">{project.customer}</td>
+            <td className="p-4">{project.assignedTo}</td>
+            <td className="p-4">{project.startdateofservice}</td>
+            <td className="p-4">{project.status}</td>
+          </tr>
+        ))}
+
+        {filteredCompletedProjects.length === 0 && (
+          <tr>
+            <td colSpan={5} className="p-4 text-center text-gray-500">
+              No completed projects found.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</div>
 
       {showCustomerForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

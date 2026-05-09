@@ -11,9 +11,11 @@ import {
 type Customer = {
   id: string;
   name: string;
-  contact: string;
+  contactName: string;
   phone: string;
   email: string;
+  address?: string;
+  notes?: string;
 };
 
 type Project = {
@@ -37,7 +39,7 @@ export default function OperationsPage() {
 
   const [newCustomer, setNewCustomer] = useState({
     name: '',
-    contact: '',
+    contactName: '',
     phone: '',
     email: '',
   });
@@ -60,7 +62,7 @@ export default function OperationsPage() {
 
     return (
       customer.name.toLowerCase().includes(search) ||
-      customer.contact.toLowerCase().includes(search) ||
+      customer.contactName.toLowerCase().includes(search) ||
       customer.phone.toLowerCase().includes(search) ||
       customer.email.toLowerCase().includes(search)
     );
@@ -72,7 +74,7 @@ export default function OperationsPage() {
     const customer: Customer = {
       id: `CUST-${customers.length + 1}`,
       name: newCustomer.name,
-      contact: newCustomer.contact,
+      contactName: newCustomer.contactName,
       phone: newCustomer.phone,
       email: newCustomer.email,
     };
@@ -80,7 +82,7 @@ export default function OperationsPage() {
     setCustomers([...customers, customer]);
     setNewCustomer({
       name: '',
-      contact: '',
+      contactName: '',
       phone: '',
       email: '',
     });
@@ -172,7 +174,7 @@ export default function OperationsPage() {
                     <p className="text-sm text-gray-500">{customer.id}</p>
                     <h3 className="font-bold">{customer.name}</h3>
                     <p className="text-sm text-gray-600">
-                      {customer.contact} • {customer.phone}
+                    {customer.contactName} • {customer.phone}
                     </p>
                     <p className="text-sm text-gray-600">{customer.email}</p>
                   </div>
@@ -268,10 +270,10 @@ export default function OperationsPage() {
               <input
                 type="text"
                 placeholder="Contact name"
-                value={newCustomer.contact}
-                onChange={(e) =>
-                  setNewCustomer({ ...newCustomer, contact: e.target.value })
-                }
+                value={newCustomer.contactName}
+onChange={(e) =>
+  setNewCustomer({ ...newCustomer, contactName: e.target.value })
+}
                 className="rounded-lg border p-3"
               />
 

@@ -29,6 +29,9 @@ type TimeEntry = {
   hours: number;
   notes: string | null;
   created_at: string;
+  deleted_at: string | null;
+deleted_reason: string | null;
+updated_at: string | null;
 };
 
 type TimeForm = {
@@ -144,10 +147,13 @@ async function loadTimeEntries(projectId: string) {
   const { data, error } = await supabase
     .from('time_entries')
     .select(
-      'id, work_date, work_completed, service_vehicle, hours, notes, created_at'
+      'id, work_date, work_completed, service_vehicle, hours, notes, created_at, updated_at'
     )
+    
     .eq('project_id', projectId)
-    .order('work_date', { ascending: false });
+.is('deleted_at', null)
+.order('work_date', { ascending: false });
+
 
   if (error) {
     console.error('Error loading time entries:', error);
@@ -222,7 +228,10 @@ async function deleteTimeEntry(entryId: string) {
 
   const { error } = await supabase
     .from('time_entries')
-    .delete()
+    .update({
+      deleted_at: new Date().toISOString(),
+      deleted_reason: 'Deleted from project workspace',
+    })
     .eq('id', entryId);
 
   if (error) {
@@ -231,6 +240,27 @@ async function deleteTimeEntry(entryId: string) {
   }
 
   loadTimeEntries(project.id);
+}
+
+
+function formatTimestamp(value: string | null) {
+  if (!value) return '';
+
+  return new Date(value).toLocaleString('en-US', {
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function submittedUpdatedLabel(entry: TimeEntry) {
+  if (entry.updated_at) {
+    return `Updated: ${formatTimestamp(entry.updated_at)}`;
+  }
+
+  return `Submitted: ${formatTimestamp(entry.created_at)}`;
 }
 
   return (
@@ -369,6 +399,8 @@ async function deleteTimeEntry(entryId: string) {
         <th className="p-4">Work Completed</th>
         <th className="p-4">Vehicle</th>
         <th className="p-4">Notes</th>
+        <th className="p-4">Submitted / Updated</th>
+
         <th className="p-4">Actions</th>
       </tr>
     </thead>
@@ -381,7 +413,9 @@ async function deleteTimeEntry(entryId: string) {
           <td className="p-4">{entry.work_completed}</td>
           <td className="p-4">{entry.service_vehicle}</td>
           <td className="p-4">{entry.notes}</td>
-          <td className="p-4">
+          <td className="p-4">{submittedUpdatedLabel(entry)}</td>
+<td className="p-4">
+
   <div className="flex gap-2">
     <button
       type="button"
@@ -405,7 +439,7 @@ async function deleteTimeEntry(entryId: string) {
 
       {timeEntries.length === 0 && (
         <tr>
-          <td colSpan={6} className="p-4 text-center text-gray-500">
+          <td colSpan={7} className="p-4 text-center text-gray-500">
             No time entries submitted yet.
           </td>
         </tr>

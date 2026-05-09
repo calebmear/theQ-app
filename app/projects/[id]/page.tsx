@@ -224,10 +224,13 @@ async function submitTimeEntry() {
   <div>
     <label className="mb-2 block text-sm font-medium">Work Date</label>
     <input
-      type="date"
-      defaultValue={today}
-      className="w-full rounded-lg border border-black p-3"
-    />
+  type="date"
+  value={timeForm.workDate}
+  onChange={(e) =>
+    setTimeForm({ ...timeForm, workDate: e.target.value })
+  }
+  className="w-full rounded-lg border border-black p-3"
+/>
   </div>
 
   <div>
@@ -235,12 +238,13 @@ async function submitTimeEntry() {
       Type of Work Completed
     </label>
     <select
-  className="w-full rounded-lg border p-3 text-gray-400"
-  defaultValue=""
-  onChange={(e) => {
-    e.currentTarget.classList.remove('text-gray-400');
-    e.currentTarget.classList.add('text-black');
-  }}
+  className={`w-full rounded-lg border p-3 ${
+    timeForm.workCompleted ? 'text-black' : 'text-gray-400'
+  }`}
+  value={timeForm.workCompleted}
+  onChange={(e) =>
+    setTimeForm({ ...timeForm, workCompleted: e.target.value })
+  }
 >
   <option value="" disabled hidden>
     Select work type
@@ -255,12 +259,13 @@ async function submitTimeEntry() {
   <div>
     <label className="mb-2 block text-sm font-medium">Service Vehicle</label>
     <select
-  className="w-full rounded-lg border p-3 text-gray-400"
-  defaultValue=""
-  onChange={(e) => {
-    e.currentTarget.classList.remove('text-gray-400');
-    e.currentTarget.classList.add('text-black');
-  }}
+  className={`w-full rounded-lg border p-3 ${
+    timeForm.serviceVehicle ? 'text-black' : 'text-gray-400'
+  }`}
+  value={timeForm.serviceVehicle}
+  onChange={(e) =>
+    setTimeForm({ ...timeForm, serviceVehicle: e.target.value })
+  }
 >
   <option value="" disabled hidden>
     Select service vehicle
@@ -274,19 +279,23 @@ async function submitTimeEntry() {
   <div>
     <label className="mb-2 block text-sm font-medium">Hours Worked</label>
     <input
-      type="number"
-      placeholder="Enter hours"
-      className="w-full rounded-lg border p-3"
-    />
+  type="number"
+  placeholder="Enter hours"
+  value={timeForm.hours}
+  onChange={(e) => setTimeForm({ ...timeForm, hours: e.target.value })}
+  className="w-full rounded-lg border p-3"
+/>
   </div>
 
   <div className="md:col-span-2">
     <label className="mb-2 block text-sm font-medium">Submission Notes</label>
     <textarea
-      placeholder="Add notes about the work completed..."
-      className="w-full rounded-lg border p-3"
-      rows={4}
-    />
+  placeholder="Add notes about the work completed..."
+  value={timeForm.notes}
+  onChange={(e) => setTimeForm({ ...timeForm, notes: e.target.value })}
+  className="w-full rounded-lg border p-3"
+  rows={4}
+/>
   </div>
 </div>
 

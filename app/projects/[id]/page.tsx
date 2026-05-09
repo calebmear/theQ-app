@@ -59,8 +59,27 @@ export default function ProjectDetailPage({
         return;
       }
 
-      setProject(data);
-      setLoading(false);
+      const customer = Array.isArray(data.customers)
+  ? data.customers[0]
+  : data.customers;
+
+const employee = Array.isArray(data.employees)
+  ? data.employees[0]
+  : data.employees;
+
+setProject({
+  id: data.id,
+  project_number: data.project_number,
+  status: data.status,
+  progress: data.progress,
+  service_start_date: data.service_start_date,
+  notes: data.notes,
+  customers: customer ?? null,
+  employees: employee ?? null,
+});
+
+setLoading(false);
+
     }
 
     loadProject();

@@ -272,16 +272,27 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
         return;
       }
   
-      const formattedProjects: Project[] = (data ?? []).map((project) => ({
-        id: project.project_number,
-        name: project.project_number,
-        customer: project.customers?.name ?? '',
-        assignedTo: project.employees?.name ?? '',
-        status: project.status ?? 'Active',
-        progress: Number(project.progress ?? 0),
-        startdateofservice: project.service_start_date ?? '',
-        notes: project.notes ?? '',
-      }));
+      const formattedProjects: Project[] = (data ?? []).map((project) => {
+        const customer = Array.isArray(project.customers)
+          ? project.customers[0]
+          : project.customers;
+      
+        const employee = Array.isArray(project.employees)
+          ? project.employees[0]
+          : project.employees;
+      
+        return {
+          id: project.project_number,
+          name: project.project_number,
+          customer: customer?.name ?? '',
+          assignedTo: employee?.name ?? '',
+          status: project.status ?? 'Active',
+          progress: Number(project.progress ?? 0),
+          startdateofservice: project.service_start_date ?? '',
+          notes: project.notes ?? '',
+        };
+      });
+      
   
       setProjects(formattedProjects);
     }

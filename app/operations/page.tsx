@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   customers as mockCustomers,
   projects as mockProjects,
-  employees,
 } from '../../lib/mockData';
+import { supabase } from '../../lib/supabaseClient';
 
 type Customer = {
   id: string;
@@ -29,10 +29,19 @@ type Project = {
   notes?: string;
 };
 
+type Employee = {
+  id: string;
+  name: string;
+  role: string | null;
+  active: boolean;
+};
+
+
 export default function OperationsPage() {
   const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
   const [projects, setProjects] = useState<Project[]>(mockProjects);
   const [customerSearch, setCustomerSearch] = useState('');
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
@@ -57,6 +66,26 @@ export default function OperationsPage() {
     notes: '',
   });
 
+  useEffect(() => {
+    async function loadEmployees() {
+      const { data, error } = await supabase
+        .from('employees')
+        .select('id, name, role, active')
+        .eq('active', true)
+        .order('name');
+  
+      if (error) {
+        console.error('Error loading employees:', error);
+        return;
+      }
+  
+      setEmployees(data ?? []);
+    }
+  
+    loadEmployees();
+  }, []);
+
+  
   const filteredCustomers = customers.filter((customer) => {
     const search = customerSearch.toLowerCase();
 
@@ -68,24 +97,44 @@ export default function OperationsPage() {
     );
   });
 
-  function saveCustomer() {
+  async function saveCustomer() {
     if (!newCustomer.name.trim()) return;
-
+  
+    const { data, error } = await supabase
+      .from('customers')
+      .insert({
+        name: newCustomer.name,
+        contact_name: newCustomer.contactName,
+        phone: newCustomer.phone,
+        email: newCustomer.email,
+      })
+      .select()
+      .single();
+  
+    if (error) {
+      console.error('Error saving customer:', error);
+      return;
+    }
+  
     const customer: Customer = {
-      id: `CUST-${customers.length + 1}`,
-      name: newCustomer.name,
-      contactName: newCustomer.contactName,
-      phone: newCustomer.phone,
-      email: newCustomer.email,
+      id: data.id,
+      name: data.name,
+      contactName: data.contact_name ?? '',
+      phone: data.phone ?? '',
+      email: data.email ?? '',
+      address: data.address ?? '',
+      notes: data.notes ?? '',
     };
-
+  
     setCustomers([...customers, customer]);
+  
     setNewCustomer({
       name: '',
       contactName: '',
       phone: '',
       email: '',
     });
+  
     setShowCustomerForm(false);
   }
 
@@ -164,6 +213,7 @@ export default function OperationsPage() {
 
         {customerSearch && (
           <div className="mt-4 space-y-3">
+            
             {filteredCustomers.length > 0 ? (
               filteredCustomers.map((customer) => (
                 <div

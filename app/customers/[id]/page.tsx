@@ -14,7 +14,7 @@ export default function CustomerProfilePage({
   const customerProjects = projects.filter(
     (project) => project.customer === customer.name
   );
-  
+
   return (
     <div className="space-y-6 text-black">
       <div>
@@ -32,7 +32,7 @@ export default function CustomerProfilePage({
           />
           <input
             className="rounded-lg border p-3"
-            defaultValue={customer.contact}
+            defaultValue={customer.contactName}
           />
           <input
             className="rounded-lg border p-3"

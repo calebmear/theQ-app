@@ -360,22 +360,30 @@ onChange={(e) =>
                 />
               </div>
 
-              <select
-                value={newProject.assignedTo}
-                onChange={(e) =>
-                  setNewProject({ ...newProject, assignedTo: e.target.value })
-                }
-                className="w-full rounded-lg border p-3"
-              >
-                <option value="">Select assignment</option>
-                {employees
-                  .filter((employee) => employee.active)
-                  .map((employee) => (
-                    <option key={employee.id} value={employee.name}>
-                      {employee.name}
-                    </option>
-                  ))}
-              </select>
+              <div>
+  <label className="mb-2 block text-sm font-medium">
+    Assigned To
+  </label>
+
+  <select
+    value={newProject.assignedTo}
+    onChange={(e) =>
+      setNewProject({ ...newProject, assignedTo: e.target.value })
+    }
+    className="w-full rounded-lg border p-3"
+  >
+    <option value="" disabled hidden>
+  Select Technician
+</option>
+    {employees
+      .filter((employee) => employee.active)
+      .map((employee) => (
+        <option key={employee.id} value={employee.name}>
+          {employee.name}
+        </option>
+      ))}
+  </select>
+</div>
 
               <div>
                 <label className="mb-2 block text-sm font-medium">Status</label>

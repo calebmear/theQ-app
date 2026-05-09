@@ -84,7 +84,7 @@ export const timeEntries = [
 export const employees = [
   {
     id: 'emp-all',
-    name: 'All Techs',
+    name: 'All',
     role: 'Field Team',
     active: true,
   },

@@ -26,11 +26,26 @@ export default function CustomerProfilePage({
         <h2 className="text-xl font-bold">Customer Info</h2>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <input className="rounded-lg border p-3" defaultValue={customer.name} />
-          <input className="rounded-lg border p-3" defaultValue={customer.contact} />
-          <input className="rounded-lg border p-3" defaultValue={customer.phone} />
-          <input className="rounded-lg border p-3" defaultValue={customer.email} />
-          <input className="rounded-lg border p-3 md:col-span-2" defaultValue={customer.address} />
+          <input
+            className="rounded-lg border p-3"
+            defaultValue={customer.name}
+          />
+          <input
+            className="rounded-lg border p-3"
+            defaultValue={customer.contact}
+          />
+          <input
+            className="rounded-lg border p-3"
+            defaultValue={customer.phone}
+          />
+          <input
+            className="rounded-lg border p-3"
+            defaultValue={customer.email}
+          />
+          <input
+            className="rounded-lg border p-3 md:col-span-2"
+            defaultValue={customer.address}
+          />
 
           <textarea
             className="rounded-lg border p-3 md:col-span-2"

@@ -1,37 +1,36 @@
 export const customers = [
   {
-    id: 'C-1001',
-    name: 'Smith Residence',
-    contact: 'John Smith',
-    phone: '555-123-4567',
-    email: 'john@example.com',
-    address: '123 Main St',
-    notes: 'Prefers morning appointments.',
+    id: 'cust-001',
+    name: 'Bayside Apartments',
+    contactName: 'Mark Reynolds',
+    email: 'mark@bayside.com',
+    phone: '555-214-8890',
+    address: '1200 Harbor Ave, Tampa, FL',
+    notes: 'Prefers morning service windows.',
   },
   {
-    id: 'C-1002',
-    name: 'Acme Office',
-    contact: 'Sarah Jones',
-    phone: '555-987-6543',
-    email: 'sarah@acme.com',
-    address: '800 Business Pkwy',
-    notes: 'Coordinate work around office hours.',
+    id: 'cust-002',
+    name: 'Northpoint Plaza',
+    contactName: 'Sarah Miller',
+    email: 'sarah@northpoint.com',
+    phone: '555-907-4412',
+    address: '880 Northpoint Blvd, Orlando, FL',
+    notes: 'Multiple active projects expected this quarter.',
   },
   {
-    id: 'C-1003',
-    name: 'Johnson Home',
-    contact: 'Mark Johnson',
-    phone: '555-222-8899',
-    email: 'mark@example.com',
-    address: '45 Oak Drive',
-    notes: 'Has multiple active home projects.',
+    id: 'cust-003',
+    name: 'Westlake HOA',
+    contactName: 'Daniel Perez',
+    email: 'daniel@westlakehoa.com',
+    phone: '555-661-3009',
+    address: '45 Westlake Dr, Lakeland, FL',
+    notes: 'Board approval needed before new projects begin.',
   },
 ];
 
 export const projects = [
   {
     id: 'P-1001',
-    customerId: 'C-1001',
     customer: 'Smith Residence',
     name: 'Kitchen Remodel',
     status: 'In Progress',
@@ -41,7 +40,6 @@ export const projects = [
   },
   {
     id: 'P-1002',
-    customerId: 'C-1002',
     customer: 'Acme Office',
     name: 'Conference Room Buildout',
     status: 'Scheduled',
@@ -51,7 +49,6 @@ export const projects = [
   },
   {
     id: 'P-1003',
-    customerId: 'C-1003',
     customer: 'Johnson Home',
     name: 'Basement Finish',
     status: 'In Progress',
@@ -83,3 +80,31 @@ export const timeEntries = [
     notes: 'Worked on lateral access and inspection.',
   },
 ];
+
+export const employees = [
+  {
+    id: 'emp-all',
+    name: 'All Techs',
+    role: 'Field Team',
+    active: true,
+  },
+  {
+    id: 'emp-001',
+    name: 'Robert',
+    role: 'Technician',
+    active: true,
+  },
+  {
+    id: 'emp-002',
+    name: 'Tylor',
+    role: 'Technician',
+    active: true,
+  },
+  {
+    id: 'emp-003',
+    name: 'Cameron',
+    role: 'Technician',
+    active: true,
+  },
+];
+

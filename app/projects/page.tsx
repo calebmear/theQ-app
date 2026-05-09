@@ -1,30 +1,45 @@
+import './globals.css';
 import Link from 'next/link';
-import { projects } from '../../lib/mockData';
 
-export default function ProjectsPage() {
+export const metadata = {
+  title: 'THEQ App',
+  description: 'Operations and revenue dashboard',
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <div>
-      <h1 className="text-3xl font-bold">Projects</h1>
-      <p className="mt-2 text-gray-600">
-        Master project list.
-      </p>
+    <html lang="en">
+      <body>
+        <div className="min-h-screen bg-gray-100 text-black md:flex">
+          <aside className="border-r bg-white p-4 md:min-h-screen md:w-64">
+            <h1 className="text-xl font-bold">THEQ</h1>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
-        {projects.map((project) => (
-          <Link
-            key={project.id}
-            href={`/projects/${project.id}`}
-            className="rounded-2xl bg-white p-6 shadow hover:shadow-md"
-          >
-            <p className="text-sm text-gray-500">{project.id}</p>
-            <h2 className="mt-2 text-xl font-bold">{project.name}</h2>
-            <p className="mt-1 text-gray-600">{project.customer}</p>
-            <p className="mt-4 text-sm font-semibold">
-              {project.status} • {project.progress}%
-            </p>
-          </Link>
-        ))}
-      </div>
-    </div>
+            <nav className="mt-6 flex gap-2 md:flex-col">
+              <Link href="/" className="rounded-lg px-3 py-2 hover:bg-gray-100">
+                Dashboard
+              </Link>
+              <Link
+                href="/operations"
+                className="rounded-lg px-3 py-2 hover:bg-gray-100"
+              >
+                Operations
+              </Link>
+              <Link
+                href="/projects"
+                className="rounded-lg px-3 py-2 hover:bg-gray-100"
+              >
+                Projects
+              </Link>
+            </nav>
+          </aside>
+
+          <main className="flex-1 p-4 md:p-8">{children}</main>
+        </div>
+      </body>
+    </html>
   );
 }

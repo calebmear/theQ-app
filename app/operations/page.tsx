@@ -2,10 +2,58 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { customers, projects } from '../../lib/mockData';
+import {
+  customers as mockCustomers,
+  projects as mockProjects,
+  employees,
+} from '../../lib/mockData';
+
+type Customer = {
+  id: string;
+  name: string;
+  contact: string;
+  phone: string;
+  email: string;
+};
+
+type Project = {
+  id: string;
+  name: string;
+  customer: string;
+  assignedTo: string;
+  status: string;
+  progress: number;
+  startdateofservice: string;
+  notes: string;
+};
 
 export default function OperationsPage() {
+  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  const [projects, setProjects] = useState<Project[]>(mockProjects);
   const [customerSearch, setCustomerSearch] = useState('');
+
+  const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const [showProjectForm, setShowProjectForm] = useState(false);
+
+  const [newCustomer, setNewCustomer] = useState({
+    name: '',
+    contact: '',
+    phone: '',
+    email: '',
+  });
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const [newProject, setNewProject] = useState({
+    id: '',
+    name: '',
+    customer: '',
+    assignedTo: '',
+    status: 'Active',
+    progress: 0,
+    startdateofservice: today,
+    notes: '',
+  });
 
   const filteredCustomers = customers.filter((customer) => {
     const search = customerSearch.toLowerCase();
@@ -18,6 +66,57 @@ export default function OperationsPage() {
     );
   });
 
+  function saveCustomer() {
+    if (!newCustomer.name.trim()) return;
+
+    const customer: Customer = {
+      id: `CUST-${customers.length + 1}`,
+      name: newCustomer.name,
+      contact: newCustomer.contact,
+      phone: newCustomer.phone,
+      email: newCustomer.email,
+    };
+
+    setCustomers([...customers, customer]);
+    setNewCustomer({
+      name: '',
+      contact: '',
+      phone: '',
+      email: '',
+    });
+    setShowCustomerForm(false);
+  }
+
+  function saveProject() {
+    if (!newProject.id.trim() || !newProject.customer) {
+      return;
+    }
+
+    const project: Project = {
+      id: newProject.id,
+      name: newProject.id,
+      customer: newProject.customer,
+      assignedTo: newProject.assignedTo,
+      status: newProject.status,
+      progress: Number(newProject.progress),
+      startdateofservice: newProject.startdateofservice,
+      notes: newProject.notes,
+    };
+
+    setProjects([...projects, project]);
+    setNewProject({
+      id: '',
+      name: '',
+      customer: '',
+      assignedTo: '',
+      status: 'Active',
+      progress: 0,
+      startdateofservice: today,
+      notes: '',
+    });
+    setShowProjectForm(false);
+  }
+
   return (
     <div className="space-y-6 text-black">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -29,11 +128,19 @@ export default function OperationsPage() {
         </div>
 
         <div className="flex gap-3">
-          <button className="rounded-lg border bg-white px-4 py-3 font-medium shadow-sm hover:bg-gray-50">
+          <button
+            type="button"
+            onClick={() => setShowCustomerForm(true)}
+            className="rounded-lg border bg-white px-4 py-3 font-medium shadow-sm hover:bg-gray-50"
+          >
             + Add Customer
           </button>
 
-          <button className="rounded-lg bg-black px-4 py-3 font-medium text-white shadow-sm hover:bg-gray-800">
+          <button
+            type="button"
+            onClick={() => setShowProjectForm(true)}
+            className="rounded-lg bg-black px-4 py-3 font-medium text-white shadow-sm hover:bg-gray-800"
+          >
             + Add Project
           </button>
         </div>
@@ -141,6 +248,186 @@ export default function OperationsPage() {
           </table>
         </div>
       </div>
+
+      {showCustomerForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-2xl font-bold">Add Customer</h2>
+
+            <div className="mt-4 grid gap-4">
+              <input
+                type="text"
+                placeholder="Customer name"
+                value={newCustomer.name}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, name: e.target.value })
+                }
+                className="rounded-lg border p-3"
+              />
+
+              <input
+                type="text"
+                placeholder="Contact name"
+                value={newCustomer.contact}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, contact: e.target.value })
+                }
+                className="rounded-lg border p-3"
+              />
+
+              <input
+                type="tel"
+                placeholder="Phone"
+                value={newCustomer.phone}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, phone: e.target.value })
+                }
+                className="rounded-lg border p-3"
+              />
+
+              <input
+                type="email"
+                placeholder="Email"
+                value={newCustomer.email}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, email: e.target.value })
+                }
+                className="rounded-lg border p-3"
+              />
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCustomerForm(false)}
+                className="rounded-lg border px-5 py-3 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={saveCustomer}
+                className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
+              >
+                Save Customer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showProjectForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-2xl font-bold">Add Project</h2>
+
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Customer
+                </label>
+                <select
+                  value={newProject.customer}
+                  onChange={(e) =>
+                    setNewProject({ ...newProject, customer: e.target.value })
+                  }
+                  className="w-full rounded-lg border p-3"
+                >
+                  <option value="">Select customer</option>
+                  {customers.map((customer) => (
+                    <option key={customer.id} value={customer.name}>
+                      {customer.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Project ID / PO Number
+                </label>
+                <input
+                  type="text"
+                  placeholder="Enter project ID or PO number"
+                  value={newProject.id}
+                  onChange={(e) =>
+                    setNewProject({ ...newProject, id: e.target.value })
+                  }
+                  className="w-full rounded-lg border p-3"
+                />
+              </div>
+
+              <select
+                value={newProject.assignedTo}
+                onChange={(e) =>
+                  setNewProject({ ...newProject, assignedTo: e.target.value })
+                }
+                className="w-full rounded-lg border p-3"
+              >
+                <option value="">Select assignment</option>
+                {employees
+                  .filter((employee) => employee.active)
+                  .map((employee) => (
+                    <option key={employee.id} value={employee.name}>
+                      {employee.name}
+                    </option>
+                  ))}
+              </select>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">Status</label>
+                <select
+                  value={newProject.status}
+                  onChange={(e) =>
+                    setNewProject({ ...newProject, status: e.target.value })
+                  }
+                  className="w-full rounded-lg border p-3"
+                >
+                  <option>Active</option>
+                  <option>Scheduled</option>
+                  <option>Completed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Service Start Date
+                </label>
+                <input
+                  type="date"
+                  value={newProject.startdateofservice}
+                  onChange={(e) =>
+                    setNewProject({
+                      ...newProject,
+                      startdateofservice: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-lg border p-3"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowProjectForm(false)}
+                className="rounded-lg border px-5 py-3 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={saveProject}
+                className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
+              >
+                Save Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

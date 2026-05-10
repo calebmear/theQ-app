@@ -66,7 +66,7 @@ export default function CustomerProfilePage({
           {customerProjects.map((project) => (
             <a
               key={project.id}
-              href={`/projects/${project.id}`}
+              href={`/projects/${encodeURIComponent(project.id)}`}
               className="block rounded-xl border p-4 hover:bg-gray-50"
             >
               <p className="text-sm text-gray-500">{project.id}</p>

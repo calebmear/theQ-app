@@ -1,7 +1,9 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../../lib/supabaseClient';
+
 
 type ProjectDetail = {
   id: string;
@@ -9,6 +11,7 @@ type ProjectDetail = {
   status: string;
   progress: number;
   service_start_date: string;
+  project_location: string | null;
   notes: string | null;
   customers: {
     name: string;
@@ -59,6 +62,12 @@ const [timeForm, setTimeForm] = useState<TimeForm>({
   hours: '',
   notes: '',
 });
+const [editingProject, setEditingProject] = useState(false);
+const [projectEditForm, setProjectEditForm] = useState({
+  projectNumber: '',
+  projectLocation: '',
+  serviceStartDate: '',
+});
 const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
   null
 );
@@ -74,6 +83,7 @@ const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
           status,
           progress,
           service_start_date,
+          project_location,
           notes,
           customers (
             name,
@@ -85,7 +95,7 @@ const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
             name
           )
         `)
-        .eq('project_number', params.id)
+        .eq('project_number', decodeURIComponent(params.id))
         .single();
 
       if (error) {
@@ -108,6 +118,7 @@ const employee = Array.isArray(data.employees)
     status: data.status,
     progress: data.progress,
     service_start_date: data.service_start_date,
+    project_location: data.project_location,
     notes: data.notes,
     customers: customer ?? null,
     employees: employee ?? null,
@@ -130,7 +141,10 @@ const employee = Array.isArray(data.employees)
     return <div className="text-black">Project not found.</div>;
   }
 
-  const mapQuery = encodeURIComponent(project.customers?.address ?? '');
+  const mapQuery = encodeURIComponent(
+    project.project_location || project.customers?.address || ''
+  );
+  
 
   const serviceStartDate = project.service_start_date
   ? new Date(`${project.service_start_date}T00:00:00`).toLocaleDateString(
@@ -163,10 +177,32 @@ async function loadTimeEntries(projectId: string) {
   setTimeEntries(data ?? []);
 }
 
+async function updateProjectStatus(status: string) {
+  if (!project) return;
+
+  const { error } = await supabase
+    .from('projects')
+    .update({ status })
+    .eq('id', project.id);
+
+  if (error) {
+    console.error('Error updating project status:', error);
+    return;
+  }
+
+  setProject({
+    ...project,
+    status,
+  });
+}
+
+
 async function submitTimeEntry() {
   if (!project || !timeForm.workDate || !timeForm.hours) {
     return;
   }
+  const isFirstTimeEntry = !editingTimeEntryId && timeEntries.length === 0;
+
 
   if (editingTimeEntryId) {
     const { error } = await supabase
@@ -199,6 +235,30 @@ async function submitTimeEntry() {
       return;
     }
   }
+
+  if (isFirstTimeEntry) {
+    const { error: projectUpdateError } = await supabase
+      .from('projects')
+      .update({
+        status: 'Active',
+        service_start_date: timeForm.workDate,
+      })
+      .eq('id', project.id);
+  
+    if (projectUpdateError) {
+      console.error('Error updating project from first time entry:', projectUpdateError);
+      return;
+    }
+  
+    setProject({
+      ...project,
+      status: 'Active',
+      service_start_date: timeForm.workDate,
+    });
+  } else if (project.status === 'Scheduled') {
+    await updateProjectStatus('Active');
+  }
+  
 
   setTimeForm({
     workDate: today,
@@ -257,41 +317,252 @@ function formatTimestamp(value: string | null) {
 
 function submittedUpdatedLabel(entry: TimeEntry) {
   if (entry.updated_at) {
-    return `Updated: ${formatTimestamp(entry.updated_at)}`;
+    const createdAt = new Date(entry.created_at).getTime();
+    const updatedAt = new Date(entry.updated_at).getTime();
+
+    if (updatedAt - createdAt > 5000) {
+      return `Updated: ${formatTimestamp(entry.updated_at)}`;
+    }
   }
 
   return `Submitted: ${formatTimestamp(entry.created_at)}`;
 }
 
+function formatPhone(value: string | null | undefined) {
+  if (!value) return 'No phone saved';
+
+  const digits = value.replace(/\D/g, '');
+
+  if (digits.length !== 10) {
+    return value;
+  }
+
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function statusBadgeClass(status: string) {
+  if (status === 'Active') {
+    return 'bg-green-100 text-green-700 border-green-200';
+  }
+
+  if (status === 'Completed') {
+    return 'bg-red-100 text-red-700 border-red-200';
+  }
+
+  if (status === 'Scheduled') {
+    return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+  }
+
+  return 'bg-gray-100 text-gray-700 border-gray-200';
+}
+
+function startProjectEdit() {
+  if (!project) return;
+
+  setProjectEditForm({
+    projectNumber: project.project_number,
+    projectLocation: project.project_location ?? '',
+    serviceStartDate: project.service_start_date ?? '',
+  });
+
+  setEditingProject(true);
+}
+
+async function saveProjectEdit() {
+  if (!project || !projectEditForm.projectNumber.trim()) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from('projects')
+    .update({
+      project_number: projectEditForm.projectNumber,
+      project_location: projectEditForm.projectLocation,
+      service_start_date: projectEditForm.serviceStartDate,
+    })
+    .eq('id', project.id);
+
+  if (error) {
+    console.error('Error updating project:', error);
+    return;
+  }
+
+  setProject({
+    ...project,
+    project_number: projectEditForm.projectNumber,
+    project_location: projectEditForm.projectLocation,
+    service_start_date: projectEditForm.serviceStartDate,
+  });
+
+  setEditingProject(false);
+}
+
   return (
     <div className="space-y-6 text-black">
-      <div className="rounded-2xl bg-white p-6 shadow">
-        <p className="text-sm text-gray-500">Project Workspace</p>
-        <h1 className="mt-1 text-3xl font-bold">
-          {project.project_number}
-        </h1>
-        <p className="mt-2 text-gray-600">{project.customers?.name}</p>
+      <div className="text-sm text-gray-500">
+  <Link href="/operations" className="hover:text-black hover:underline">
+    Operations
+  </Link>
+  <span className="mx-2">/</span>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-4">
-          <div>
-            <p className="text-sm text-gray-500">Status</p>
-            <p className="font-semibold">{project.status}</p>
-          </div>
+  <Link href="/projects" className="hover:text-black hover:underline">
+    Projects
+  </Link>
+  <span className="mx-2">/</span>
 
-          <div>
-            <p className="text-sm text-gray-500">Assigned To</p>
-            <p className="font-semibold">{project.employees?.name || 'Unassigned'}</p>
-          </div>
+  <span className="font-medium text-gray-700">
+    {project.project_number}
+  </span>
+</div>
 
-      
+<div className="rounded-2xl bg-white p-6 shadow">
+  {editingProject && (
+    <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm font-medium text-yellow-800">
+      Editing project details
+    </div>
+  )}
 
-          <div>
-            <p className="text-sm text-gray-500">Service Start Date</p>
-            <p className="font-semibold">{serviceStartDate}</p>
+<div className="border-b pb-5">
+  <p className="text-sm text-gray-500">Project ID / PO Number</p>
 
-          </div>
-        </div>
-      </div>
+  <div className="mt-1 flex flex-wrap items-center gap-3">
+    {editingProject ? (
+      <input
+        type="text"
+        value={projectEditForm.projectNumber}
+        onChange={(e) =>
+          setProjectEditForm({
+            ...projectEditForm,
+            projectNumber: e.target.value,
+          })
+        }
+        className="rounded-lg border p-3 text-xl font-bold"
+      />
+    ) : (
+      <p className="text-2xl font-bold">{project.project_number}</p>
+    )}
+
+    <span
+      className={`rounded-full border px-3 py-1 text-sm font-medium ${statusBadgeClass(
+        project.status
+      )}`}
+    >
+      {project.status}
+    </span>
+
+    {!editingProject && (
+      <button
+        type="button"
+        onClick={startProjectEdit}
+        className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+      >
+        Edit Project
+      </button>
+    )}
+
+    {project.status === 'Active' && !editingProject && (
+      <button
+        type="button"
+        onClick={() => {
+          const confirmed = window.confirm(
+            'Are you sure you want to mark this project as completed?'
+          );
+
+          if (confirmed) {
+            updateProjectStatus('Completed');
+          }
+        }}
+        className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+      >
+        Mark Completed
+      </button>
+    )}
+  </div>
+
+  {editingProject ? (
+    <input
+      type="text"
+      value={projectEditForm.projectLocation}
+      onChange={(e) =>
+        setProjectEditForm({
+          ...projectEditForm,
+          projectLocation: e.target.value,
+        })
+      }
+      placeholder="Project location"
+      className="mt-2 w-full rounded-lg border p-3 text-sm"
+    />
+  ) : (
+    <p className="mt-2 text-sm text-gray-600">
+      {project.project_location || 'No project location saved'}
+    </p>
+  )}
+</div>
+
+
+
+<div className="border-b py-5">
+  <p className="text-sm text-gray-500">Customer Info</p>
+  <p className="mt-1 text-lg font-semibold">{project.customers?.name}</p>
+  <p className="mt-1 text-sm text-gray-600">
+    {formatPhone(project.customers?.phone)}
+    {project.customers?.email ? ` • ${project.customers.email}` : ''}
+  </p>
+</div>
+
+<div className="flex flex-col gap-3 pt-5 text-sm md:flex-row md:gap-8">
+  <div>
+    <span className="text-gray-500">Assigned To: </span>
+    <span className="font-semibold">
+      {project.employees?.name || 'Unassigned'}
+    </span>
+  </div>
+
+  <div>
+  <span className="text-gray-500">Service Start Date: </span>
+    {editingProject ? (
+      <input
+        type="date"
+        value={projectEditForm.serviceStartDate}
+        onChange={(e) =>
+          setProjectEditForm({
+            ...projectEditForm,
+            serviceStartDate: e.target.value,
+          })
+        }
+        className="rounded-lg border p-2"
+      />
+    ) : (
+      <span className="font-semibold">
+  {serviceStartDate}
+  {timeEntries.length === 0 ? ' (Est.)' : ''}
+</span>
+    )}
+  </div>
+</div>
+
+{editingProject && (
+  <div className="mt-5 flex gap-3">
+    <button
+      type="button"
+      onClick={saveProjectEdit}
+      className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+    >
+      Save Project
+    </button>
+
+    <button
+      type="button"
+      onClick={() => setEditingProject(false)}
+      className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+    >
+      Cancel
+    </button>
+  </div>
+)}
+</div>
+
+
 
       <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
         <div className="space-y-6">
@@ -394,11 +665,11 @@ function submittedUpdatedLabel(entry: TimeEntry) {
   <table className="w-full text-left text-sm">
     <thead className="bg-gray-50">
       <tr>
-        <th className="p-4">Date</th>
-        <th className="p-4">Hours</th>
-        <th className="p-4">Work Completed</th>
-        <th className="p-4">Vehicle</th>
-        <th className="p-4">Notes</th>
+        <th className="p-4">Service Date</th>
+        <th className="p-4">Service Hours</th>
+        <th className="p-4">Service Type</th>
+        <th className="p-4">Service Vehicle</th>
+        <th className="p-4">Service Notes</th>
         <th className="p-4">Submitted / Updated</th>
 
         <th className="p-4">Actions</th>

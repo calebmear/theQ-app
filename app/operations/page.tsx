@@ -23,8 +23,11 @@ type Project = {
   status: string;
   progress: number;
   startdateofservice: string;
+  projectLocation?: string;
+  latestServiceDate?: string;
   notes?: string;
 };
+
 
 type Employee = {
   id: string;
@@ -37,9 +40,10 @@ type Employee = {
 export default function OperationsPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [completedProjectSearch, setCompletedProjectSearch] = useState('');
+  const [operationsSearch, setOperationsSearch] = useState('');
+const [projectCustomerSearch, setProjectCustomerSearch] = useState('');
+
+const [employees, setEmployees] = useState<Employee[]>([]);
 
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
@@ -63,6 +67,7 @@ export default function OperationsPage() {
     status: 'Active',
     progress: 0,
     startdateofservice: today,
+    projectLocation: '',
     notes: '',
   });
 
@@ -113,37 +118,64 @@ export default function OperationsPage() {
     loadCustomers();
   }, []);
 
+  function formatDate(value: string | undefined) {
+    if (!value) return '';
   
-  const filteredCustomers = customers.filter((customer) => {
-    const search = customerSearch.toLowerCase();
+    return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+    });
+  }
 
-    return (
-      customer.name.toLowerCase().includes(search) ||
-      customer.contactName.toLowerCase().includes(search) ||
-      customer.phone.toLowerCase().includes(search) ||
-      customer.email.toLowerCase().includes(search)
-    );
-  });
+  
+  const operationsSearchValue = operationsSearch.toLowerCase().trim();
 
-  const activeProjects = projects.filter((project) =>
-  ['Active', 'Scheduled'].includes(project.status)
-);
+const filteredCustomers = operationsSearchValue
+  ? customers.filter((customer) => {
+      return (
+        customer.name.toLowerCase().includes(operationsSearchValue) ||
+        customer.contactName.toLowerCase().includes(operationsSearchValue) ||
+        customer.phone.toLowerCase().includes(operationsSearchValue) ||
+        customer.email.toLowerCase().includes(operationsSearchValue) ||
+        (customer.address ?? '').toLowerCase().includes(operationsSearchValue)
+      );
+    })
+  : [];
 
-const completedProjects = projects.filter(
-  (project) => project.status === 'Completed'
-);
-
-const filteredCompletedProjects = completedProjects.filter((project) => {
-  const search = completedProjectSearch.toLowerCase();
+function projectMatchesSearch(project: Project) {
+  if (!operationsSearchValue) return true;
 
   return (
-    project.id.toLowerCase().includes(search) ||
-    project.name.toLowerCase().includes(search) ||
-    project.customer.toLowerCase().includes(search) ||
-    project.assignedTo.toLowerCase().includes(search) ||
-    project.startdateofservice.toLowerCase().includes(search)
+    project.id.toLowerCase().includes(operationsSearchValue) ||
+    project.name.toLowerCase().includes(operationsSearchValue) ||
+    project.customer.toLowerCase().includes(operationsSearchValue) ||
+    project.assignedTo.toLowerCase().includes(operationsSearchValue) ||
+    project.status.toLowerCase().includes(operationsSearchValue) ||
+    project.startdateofservice.toLowerCase().includes(operationsSearchValue) ||
+    (project.projectLocation ?? '').toLowerCase().includes(operationsSearchValue)
+  );
+}
+
+const activeProjects = projects
+  .filter((project) => ['Active', 'Scheduled'].includes(project.status))
+  .filter(projectMatchesSearch);
+
+const completedProjects = projects
+  .filter((project) => project.status === 'Completed')
+  .filter(projectMatchesSearch);
+
+const projectCustomerOptions = customers.filter((customer) => {
+  const search = projectCustomerSearch.toLowerCase();
+
+  return (
+    customer.name.toLowerCase().includes(search) ||
+    customer.contactName.toLowerCase().includes(search) ||
+    customer.phone.toLowerCase().includes(search) ||
+    customer.email.toLowerCase().includes(search)
   );
 });
+
 
   async function saveCustomer() {
     if (!newCustomer.name.trim()) return;
@@ -200,6 +232,7 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
         status: newProject.status,
         progress: Number(newProject.progress),
         service_start_date: newProject.startdateofservice,
+        project_location: newProject.projectLocation,
         pricing_type: newProject.pricingType,
         notes: newProject.notes,
       })
@@ -227,8 +260,10 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
       status: data.status ?? 'Active',
       progress: Number(data.progress ?? 0),
       startdateofservice: data.service_start_date ?? '',
+      projectLocation: data.project_location ?? '',
       notes: data.notes ?? '',
     };
+    
   
     setProjects([...projects, project]);
   
@@ -241,9 +276,11 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
       status: 'Active',
       progress: 0,
       startdateofservice: today,
+      projectLocation: '',
       notes: '',
     });
-  
+
+    setProjectCustomerSearch('');
     setShowProjectForm(false);
   }
 
@@ -257,12 +294,17 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
           status,
           progress,
           service_start_date,
-          notes,
+project_location,
+notes,
           customers (
             name
           ),
           employees (
             name
+          ),
+          time_entries (
+            work_date,
+            deleted_at
           )
         `)
         .order('created_at', { ascending: false });
@@ -276,29 +318,45 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
         const customer = Array.isArray(project.customers)
           ? project.customers[0]
           : project.customers;
-      
+  
         const employee = Array.isArray(project.employees)
           ? project.employees[0]
           : project.employees;
-      
-        return {
-          id: project.project_number,
-          name: project.project_number,
-          customer: customer?.name ?? '',
-          assignedTo: employee?.name ?? '',
-          status: project.status ?? 'Active',
-          progress: Number(project.progress ?? 0),
-          startdateofservice: project.service_start_date ?? '',
-          notes: project.notes ?? '',
-        };
+
+          const timeEntries = Array.isArray(project.time_entries)
+  ? project.time_entries
+  : [];
+
+  const latestServiceDate =
+  timeEntries.length > 0
+    ? timeEntries
+        .filter((entry) => !entry.deleted_at)
+        .map((entry) => entry.work_date)
+        .sort()
+        .reverse()[0] ?? ''
+    : '';
+  
+    return {
+      id: project.project_number,
+      name: project.project_number,
+      customer: customer?.name ?? '',
+      assignedTo: employee?.name ?? '',
+      status: project.status ?? 'Active',
+      progress: Number(project.progress ?? 0),
+      startdateofservice: project.service_start_date ?? '',
+      projectLocation: project.project_location ?? '',
+      latestServiceDate,
+      notes: project.notes ?? '',
+    };
       });
-      
   
       setProjects(formattedProjects);
     }
   
     loadProjects();
   }, []);
+  
+  
   
   return (
     <div className="space-y-6 text-black">
@@ -330,20 +388,20 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
       </div>
 
       <div className="rounded-2xl bg-white p-4 shadow md:p-6">
-        <h2 className="text-xl font-bold">Customer Log</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Search existing customers before creating a new project.
-        </p>
+     
+<p className="mt-0 text-sm text-gray-600">
+  Search customers, projects, addresses, PO numbers, technicians, phone, or email.
+</p>
 
         <input
           type="text"
           placeholder="Search by customer, contact, phone, or email..."
-          value={customerSearch}
-          onChange={(e) => setCustomerSearch(e.target.value)}
+          value={operationsSearch}
+onChange={(e) => setOperationsSearch(e.target.value)}
           className="mt-4 w-full rounded-lg border p-3"
         />
 
-        {customerSearch && (
+{operationsSearch && (
           <div className="mt-4 space-y-3">
             
             {filteredCustomers.length > 0 ? (
@@ -382,32 +440,44 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
         <h2 className="text-xl font-bold">Active Projects</h2>
 
         <div className="mt-4 space-y-3 md:hidden">
-        {activeProjects.map((project) => (
-            <Link
-              key={project.id}
-              href={`/projects/${project.id}`}
-              className="block rounded-xl border p-4"
-            >
-              <p className="text-sm text-gray-500">{project.id}</p>
-              <h3 className="mt-1 font-bold">{project.name}</h3>
-              <p className="text-sm text-gray-600">{project.customer}</p>
-              <div className="mt-3 flex justify-between text-sm">
-                <span>{project.status}</span>
-                <span className="font-semibold">{project.progress}%</span>
-              </div>
-            </Link>
-          ))}
+  {activeProjects.map((project) => (
+    <Link
+      key={project.id}
+      href={`/projects/${encodeURIComponent(project.id)}`}
+      className="block rounded-xl border p-4"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-bold">{project.id}</h3>
+          <p className="mt-1 text-sm font-medium">{project.customer}</p>
         </div>
+
+        <div className="text-right text-xs text-gray-500">
+          <p>Latest service</p>
+          <p className="font-semibold text-gray-700">
+            {project.latestServiceDate
+              ? formatDate(project.latestServiceDate)
+              : 'No service yet'}
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-1 text-sm text-gray-600">
+        {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
+        {project.projectLocation && <p>Location: {project.projectLocation}</p>}
+      </div>
+    </Link>
+  ))}
+</div>
 
         <div className="mt-4 hidden overflow-hidden rounded-xl border md:block">
           <table className="w-full text-left text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="p-4">Project</th>
-                <th className="p-4">Customer</th>
-                <th className="p-4">Assigned</th>
-                <th className="p-4">Status</th>
-                <th className="p-4">Progress</th>
+              <th className="p-4">Project</th>
+<th className="p-4">Customer</th>
+<th className="p-4">Assigned</th>
+<th className="p-4">Latest Service Date</th>
               </tr>
             </thead>
 
@@ -416,16 +486,20 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
                 <tr key={project.id} className="border-t hover:bg-gray-50">
                   <td className="p-4">
                     <Link
-                      href={`/projects/${project.id}`}
+                      href={`/projects/${encodeURIComponent(project.id)}`}
                       className="font-semibold text-blue-600 hover:underline"
                     >
                       {project.id} — {project.name}
                     </Link>
                   </td>
                   <td className="p-4">{project.customer}</td>
-                  <td className="p-4">{project.assignedTo}</td>
-                  <td className="p-4">{project.status}</td>
-                  <td className="p-4">{project.progress}%</td>
+<td className="p-4">{project.assignedTo}</td>
+<td className="p-4">
+  Latest service date:{' '}
+  {project.latestServiceDate
+    ? formatDate(project.latestServiceDate)
+    : 'No service yet'}
+</td>
                 </tr>
               ))}
             </tbody>
@@ -443,19 +517,12 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
     </div>
   </div>
 
-  <input
-    type="text"
-    placeholder="Search completed projects..."
-    value={completedProjectSearch}
-    onChange={(e) => setCompletedProjectSearch(e.target.value)}
-    className="mt-4 w-full rounded-lg border p-3"
-  />
 
   <div className="mt-4 space-y-3 md:hidden">
-    {filteredCompletedProjects.map((project) => (
+    {completedProjects.map((project) => (
       <Link
         key={project.id}
-        href={`/projects/${project.id}`}
+        href={`/projects/${encodeURIComponent(project.id)}`}
         className="block rounded-xl border p-4"
       >
         <p className="text-sm text-gray-500">{project.id}</p>
@@ -468,6 +535,7 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
       </Link>
     ))}
   </div>
+  
 
   <div className="mt-4 hidden overflow-hidden rounded-xl border md:block">
     <table className="w-full text-left text-sm">
@@ -482,14 +550,14 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
       </thead>
 
       <tbody>
-        {filteredCompletedProjects.map((project) => (
+        {completedProjects.map((project) => (
           <tr key={project.id} className="border-t hover:bg-gray-50">
             <td className="p-4">
               <Link
-                href={`/projects/${project.id}`}
+                href={`/projects/${encodeURIComponent(project.id)}`}
                 className="font-semibold text-blue-600 hover:underline"
               >
-                {project.id} — {project.name}
+                {project.id}
               </Link>
             </td>
             <td className="p-4">{project.customer}</td>
@@ -499,7 +567,7 @@ const filteredCompletedProjects = completedProjects.filter((project) => {
           </tr>
         ))}
 
-        {filteredCompletedProjects.length === 0 && (
+        {completedProjects.length === 0 && (
           <tr>
             <td colSpan={5} className="p-4 text-center text-gray-500">
               No completed projects found.
@@ -585,28 +653,54 @@ onChange={(e) =>
             <h2 className="text-2xl font-bold">Add Project</h2>
 
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Customer
-                </label>
-                <select
-  value={newProject.customerId}
-  onChange={(e) =>
-    setNewProject({ ...newProject, customerId: e.target.value })
-  }
-  className="w-full rounded-lg border p-3"
->
-  <option value="" disabled hidden>
-    Select customer
-  </option>
+            
+            <div className="relative">
+  <label className="mb-2 block text-sm font-medium">Customer</label>
 
-  {customers.map((customer) => (
-    <option key={customer.id} value={customer.id}>
-      {customer.name}
-    </option>
-  ))}
-</select>
-              </div>
+  <input
+    type="text"
+    placeholder="Start typing customer"
+    value={
+      newProject.customerId
+        ? customers.find((customer) => customer.id === newProject.customerId)
+            ?.name ?? projectCustomerSearch
+        : projectCustomerSearch
+    }
+    onChange={(e) => {
+      setProjectCustomerSearch(e.target.value);
+      setNewProject({ ...newProject, customerId: '' });
+    }}
+    className="w-full rounded-lg border p-3"
+  />
+
+  {projectCustomerSearch && !newProject.customerId && (
+    <div className="absolute z-50 mt-2 max-h-60 w-full overflow-auto rounded-xl border bg-white shadow-lg">
+      {projectCustomerOptions.length > 0 ? (
+        projectCustomerOptions.map((customer) => (
+          <button
+            key={customer.id}
+            type="button"
+            onClick={() => {
+              setNewProject({ ...newProject, customerId: customer.id });
+              setProjectCustomerSearch(customer.name);
+            }}
+            className="w-full border-b p-3 text-left hover:bg-gray-50"
+          >
+            <p className="font-medium">{customer.name}</p>
+            <p className="text-sm text-gray-500">
+              {customer.contactName} • {customer.phone}
+            </p>
+          </button>
+        ))
+      ) : (
+        <div className="p-3 text-sm text-gray-500">
+          No matching customers found.
+        </div>
+      )}
+    </div>
+  )}
+</div>
+
 
               <div>
                 <label className="mb-2 block text-sm font-medium">
@@ -623,7 +717,22 @@ onChange={(e) =>
                 />
               </div>
 
-              <div>
+            
+
+              <div className="md:col-span-2">
+  <label className="mb-2 block text-sm font-medium">Project Location</label>
+  <input
+    type="text"
+    placeholder="Enter project address or location"
+    value={newProject.projectLocation}
+    onChange={(e) =>
+      setNewProject({ ...newProject, projectLocation: e.target.value })
+    }
+    className="w-full rounded-lg border p-3"
+  />
+</div>
+
+<div>
   <label className="mb-2 block text-sm font-medium">Pricing Model</label>
   <select
     value={newProject.pricingType}
@@ -636,6 +745,7 @@ onChange={(e) =>
     <option>Per Foot / Lateral</option>
   </select>
 </div>
+
 
 <div>
   <label className="mb-2 block text-sm font-medium">Assigned To</label>
@@ -676,7 +786,7 @@ onChange={(e) =>
 
               <div>
                 <label className="mb-2 block text-sm font-medium">
-                  Service Start Date
+                  Service Start Date (Est.)
                 </label>
                 <input
                   type="date"

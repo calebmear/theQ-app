@@ -14,7 +14,7 @@ export default function AppNav() {
     }`;
 
   return (
-    <nav className="mt-6 flex gap-2 md:flex-col">
+    <nav className="mt-6 flex w-full justify-center gap-2 md:flex-col md:justify-start">
       <Link href="/" className={navClass(pathname === '/')}>
         Dashboard
       </Link>

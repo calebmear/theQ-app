@@ -30,12 +30,14 @@ type TimeEntry = {
   work_date: string;
   work_completed: string | null;
   service_vehicle: string | null;
-  hours: number;
+  hours: number | null;
+  feet: number | null;
+  laterals: number | null;
   notes: string | null;
   created_at: string;
   deleted_at?: string | null;
-deleted_reason?: string | null;
-updated_at: string | null;
+  deleted_reason?: string | null;
+  updated_at: string | null;
 };
 
 type TimeForm = {
@@ -43,7 +45,15 @@ type TimeForm = {
   workCompleted: string;
   serviceVehicle: string;
   hours: string;
+  feet: string;
+  laterals: string;
   notes: string;
+};
+
+type ProjectNote = {
+  id: string;
+  note: string;
+  created_at: string;
 };
 
 export default function ProjectDetailPage({
@@ -83,14 +93,29 @@ const [timeForm, setTimeForm] = useState<TimeForm>({
   workCompleted: '',
   serviceVehicle: '',
   hours: '',
+  feet: '',
+  laterals: '',
   notes: '',
 });
+
+const [projectNotes, setProjectNotes] = useState<ProjectNote[]>([]);
+const [newProjectNote, setNewProjectNote] = useState('');
 
 const [showServiceSubmission, setShowServiceSubmission] = useState(false);
 
 const [expandedTimeEntryId, setExpandedTimeEntryId] = useState<string | null>(
   null
 );
+
+const projectNoteHistory = projectNotes.filter(
+  (note) => !note.note.toLowerCase().startsWith('service note:')
+);
+
+const serviceNoteHistory = projectNotes.filter((note) =>
+  note.note.toLowerCase().startsWith('service note:')
+);
+
+const [managingProjectNotes, setManagingProjectNotes] = useState(false);
 
 const [editingProject, setEditingProject] = useState(false);
 const [projectEditForm, setProjectEditForm] = useState({
@@ -103,6 +128,9 @@ const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
   null
 );
 
+const [editingProjectNoteId, setEditingProjectNoteId] = useState<string | null>(null);
+const [projectNoteEditText, setProjectNoteEditText] = useState('');
+
 const [managingTimeEntries, setManagingTimeEntries] = useState(false);
 const [inlineEditingTimeEntryId, setInlineEditingTimeEntryId] = useState<
   string | null
@@ -112,8 +140,13 @@ const [inlineTimeForm, setInlineTimeForm] = useState<TimeForm>({
   workCompleted: '',
   serviceVehicle: '',
   hours: '',
+  feet: '',
+  laterals: '',
   notes: '',
 });
+
+const isHourlyProject = project?.pricing_type === 'Hourly';
+const isFootLateralProject = project?.pricing_type === 'Per Foot / Lateral';
 
 
 
@@ -172,6 +205,7 @@ const employee = Array.isArray(data.employees)
   });
   
   loadTimeEntries(data.id);
+  loadProjectNotes(data.id);
   
   setLoading(false);
   
@@ -204,11 +238,18 @@ const employee = Array.isArray(data.employees)
     )
   : '';
 
+  const showFeetInput =
+  isFootLateralProject &&
+  ['Mainline', 'Jetter'].includes(timeForm.workCompleted);
+
+const showLateralsInput =
+  isFootLateralProject && timeForm.workCompleted === 'Lateral';
+
 async function loadTimeEntries(projectId: string) {
   const { data, error } = await supabase
     .from('time_entries')
     .select(
-      'id, work_date, work_completed, service_vehicle, hours, notes, created_at, updated_at'
+      'id, work_date, work_completed, service_vehicle, hours, feet, laterals, notes, created_at, updated_at'
     )
     
     .eq('project_id', projectId)
@@ -246,42 +287,129 @@ async function updateProjectStatus(status: string) {
   });
 }
 
+async function loadProjectNotes(projectId: string) {
+  const { data, error } = await supabase
+    .from('project_notes')
+    .select('id, note, created_at')
+    .eq('project_id', projectId)
+    .order('created_at', { ascending: false });
 
-async function submitTimeEntry() {
-  if (!project || !timeForm.workDate || !timeForm.hours) {
+  if (error) {
+    console.error('Error loading project notes:', error);
     return;
   }
+
+  setProjectNotes(data ?? []);
+}
+
+async function saveProjectNote() {
+  if (!project || !newProjectNote.trim()) return;
+
+  const { error } = await supabase.from('project_notes').insert({
+    project_id: project.id,
+    note: `Project note: ${newProjectNote.trim()}`,
+  });
+
+  if (error) {
+    console.error('Error saving project note:', error);
+    alert(error.message);
+    return;
+  }
+
+  setNewProjectNote('');
+  loadProjectNotes(project.id);
+}
+
+function startProjectNoteEdit(note: ProjectNote) {
+  setEditingProjectNoteId(note.id);
+  setProjectNoteEditText(note.note);
+}
+
+function cancelProjectNoteEdit() {
+  setEditingProjectNoteId(null);
+  setProjectNoteEditText('');
+}
+
+async function updateProjectNote(noteId: string) {
+  if (!project || !projectNoteEditText.trim()) return;
+
+  const { error } = await supabase
+    .from('project_notes')
+    .update({ note: projectNoteEditText.trim() })
+    .eq('id', noteId);
+
+  if (error) {
+    console.error('Error updating project note:', error);
+    alert(error.message);
+    return;
+  }
+
+  cancelProjectNoteEdit();
+  loadProjectNotes(project.id);
+}
+
+async function deleteProjectNote(noteId: string) {
+  if (!project) return;
+
+  const confirmed = window.confirm('Delete this project note?');
+  if (!confirmed) return;
+
+  const { error } = await supabase
+    .from('project_notes')
+    .delete()
+    .eq('id', noteId);
+
+  if (error) {
+    console.error('Error deleting project note:', error);
+    alert(error.message);
+    return;
+  }
+
+  loadProjectNotes(project.id);
+}
+
+
+async function submitTimeEntry() {
+  if (!project || !timeForm.workDate || !timeForm.workCompleted || !timeForm.serviceVehicle) {
+    return;
+  }
+
+  if (isHourlyProject && !timeForm.hours) return;
+  if (showFeetInput && !timeForm.feet) return;
+  if (showLateralsInput && !timeForm.laterals) return;
+
   const isFirstTimeEntry = !editingTimeEntryId && timeEntries.length === 0;
 
+  const timeEntryValues = {
+    work_date: timeForm.workDate,
+    work_completed: timeForm.workCompleted,
+    service_vehicle: timeForm.serviceVehicle,
+    hours: isHourlyProject ? Number(timeForm.hours) : null,
+    feet: showFeetInput ? Number(timeForm.feet) : null,
+    laterals: showLateralsInput ? Number(timeForm.laterals) : null,
+    notes: timeForm.notes,
+  };
 
   if (editingTimeEntryId) {
     const { error } = await supabase
       .from('time_entries')
-      .update({
-        work_date: timeForm.workDate,
-        work_completed: timeForm.workCompleted,
-        service_vehicle: timeForm.serviceVehicle,
-        hours: Number(timeForm.hours),
-        notes: timeForm.notes,
-      })
+      .update(timeEntryValues)
       .eq('id', editingTimeEntryId);
 
     if (error) {
       console.error('Error updating time entry:', error);
+      alert(error.message);
       return;
     }
   } else {
     const { error } = await supabase.from('time_entries').insert({
       project_id: project.id,
-      work_date: timeForm.workDate,
-      work_completed: timeForm.workCompleted,
-      service_vehicle: timeForm.serviceVehicle,
-      hours: Number(timeForm.hours),
-      notes: timeForm.notes,
+      ...timeEntryValues,
     });
 
     if (error) {
       console.error('Error submitting time entry:', error);
+      alert(error.message);
       return;
     }
   }
@@ -294,12 +422,13 @@ async function submitTimeEntry() {
         service_start_date: timeForm.workDate,
       })
       .eq('id', project.id);
-  
+
     if (projectUpdateError) {
       console.error('Error updating project from first time entry:', projectUpdateError);
+      alert(projectUpdateError.message);
       return;
     }
-  
+
     setProject({
       ...project,
       status: 'Active',
@@ -308,6 +437,21 @@ async function submitTimeEntry() {
   } else if (project.status === 'Scheduled') {
     await updateProjectStatus('Active');
   }
+
+  if (timeForm.notes.trim()) {
+    const { error: noteError } = await supabase.from('project_notes').insert({
+      project_id: project.id,
+      note: `Service note: ${timeForm.notes.trim()}`,
+    });
+  
+    if (noteError) {
+      console.error('Error saving service note to project notes:', noteError);
+      alert(noteError.message);
+      return;
+    }
+  
+    loadProjectNotes(project.id);
+  }
   
 
   setTimeForm({
@@ -315,12 +459,15 @@ async function submitTimeEntry() {
     workCompleted: '',
     serviceVehicle: '',
     hours: '',
+    feet: '',
+    laterals: '',
     notes: '',
   });
 
   setEditingTimeEntryId(null);
   loadTimeEntries(project.id);
 }
+
 
 function editTimeEntry(entry: TimeEntry) {
   setEditingTimeEntryId(entry.id);
@@ -361,11 +508,13 @@ async function saveInlineTimeEntry(entryId: string) {
   const { error } = await supabase
     .from('time_entries')
     .update({
-      work_date: inlineTimeForm.workDate,
-      work_completed: inlineTimeForm.workCompleted,
-      service_vehicle: inlineTimeForm.serviceVehicle,
-      hours: Number(inlineTimeForm.hours),
-      notes: inlineTimeForm.notes,
+      work_date: timeForm.workDate,
+work_completed: timeForm.workCompleted,
+service_vehicle: timeForm.serviceVehicle,
+hours: isHourlyProject ? Number(timeForm.hours) : null,
+feet: showFeetInput ? Number(timeForm.feet) : null,
+laterals: showLateralsInput ? Number(timeForm.laterals) : null,
+notes: timeForm.notes,
     })
     .eq('id', entryId);
 
@@ -732,59 +881,118 @@ async function saveProjectEdit() {
 />
   </div>
 
-  <div>
-    <label className="mb-2 block text-sm font-medium">
-      Type of Service Completed
-    </label>
-    <select
-  className={`w-full rounded-lg border p-3 ${
-    timeForm.workCompleted ? 'text-black' : 'text-gray-400'
-  }`}
-  value={timeForm.workCompleted}
-  onChange={(e) =>
-    setTimeForm({ ...timeForm, workCompleted: e.target.value })
-  }
->
-  <option value="" disabled hidden>
-    Select service type
-  </option>
-  <option>Mainline</option>
-  <option>Lateral</option>
-  <option>Jetter</option>
-  <option>Traffic Control</option>
-</select>
-  </div>
+<div>
+  <label className="mb-2 block text-sm font-medium">Service Vehicle</label>
+  <select
+    className={`block w-full min-w-0 max-w-full rounded-lg border p-3 ${
+      timeForm.serviceVehicle ? 'text-black' : 'text-gray-400'
+    }`}
+    value={timeForm.serviceVehicle}
+    onChange={(e) =>
+      setTimeForm({ ...timeForm, serviceVehicle: e.target.value })
+    }
+  >
+    <option value="" disabled hidden>
+      Select service vehicle
+    </option>
+    <option value="2016 Ford Van" className="text-black">
+      2016 Ford Van
+    </option>
+    <option value="2007 Ford F-150" className="text-black">
+      2007 Ford F-150
+    </option>
+  </select>
+</div>
 
-  <div>
-    <label className="mb-2 block text-sm font-medium">Service Vehicle</label>
-    <select
-  className={`w-full rounded-lg border p-3 ${
-    timeForm.serviceVehicle ? 'text-black' : 'text-gray-400'
-  }`}
-  value={timeForm.serviceVehicle}
-  onChange={(e) =>
-    setTimeForm({ ...timeForm, serviceVehicle: e.target.value })
-  }
->
-  <option value="" disabled hidden>
-    Select service vehicle
-  </option>
-  <option>2016 Ford Van</option>
-  <option>2007 Ford F-150</option>
-</select>
+<div>
+  <label className="mb-2 block text-sm font-medium">
+    Type of Service Completed
+  </label>
+  <select
+    className={`block w-full min-w-0 max-w-full rounded-lg border p-3 ${
+      timeForm.workCompleted ? 'text-black' : 'text-gray-400'
+    }`}
+    value={timeForm.workCompleted}
+    onChange={(e) => {
+      const workCompleted = e.target.value;
 
-  </div>
+      setTimeForm({
+        ...timeForm,
+        workCompleted,
+        feet: ['Mainline', 'Jetter'].includes(workCompleted)
+          ? timeForm.feet
+          : '',
+        laterals: workCompleted === 'Lateral' ? timeForm.laterals : '',
+      });
+    }}
+  >
+    <option value="" disabled hidden>
+      Select service type
+    </option>
+    <option value="Mainline" className="text-black">
+      Mainline
+    </option>
+    <option value="Lateral" className="text-black">
+      Lateral
+    </option>
+    <option value="Jetter" className="text-black">
+      Jetter
+    </option>
+    <option value="Traffic Control" className="text-black">
+      Traffic Control
+    </option>
+  </select>
+</div>
 
+
+  {isHourlyProject && (
   <div>
     <label className="mb-2 block text-sm font-medium">Hours Worked</label>
     <input
-  type="number"
-  placeholder="Enter hours"
-  value={timeForm.hours}
-  onChange={(e) => setTimeForm({ ...timeForm, hours: e.target.value })}
-  className="w-full rounded-lg border p-3"
-/>
+      type="text"
+      inputMode="decimal"
+      pattern="[0-9]*[.]?[0-9]*"
+      placeholder="Enter hours"
+      value={timeForm.hours}
+      onChange={(e) => setTimeForm({ ...timeForm, hours: e.target.value })}
+      className="block w-full min-w-0 max-w-full rounded-lg border p-3"
+    />
   </div>
+)}
+
+{showFeetInput && (
+  <div>
+    <label className="mb-2 block text-sm font-medium">Feet Serviced</label>
+    <input
+      type="text"
+      inputMode="decimal"
+      pattern="[0-9]*[.]?[0-9]*"
+      placeholder="Enter feet"
+      value={timeForm.feet}
+      onChange={(e) => setTimeForm({ ...timeForm, feet: e.target.value })}
+      className="block w-full min-w-0 max-w-full rounded-lg border p-3"
+    />
+  </div>
+)}
+
+{showLateralsInput && (
+  <div>
+    <label className="mb-2 block text-sm font-medium">
+      Laterals Serviced
+    </label>
+    <input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      placeholder="Enter laterals"
+      value={timeForm.laterals}
+      onChange={(e) => setTimeForm({ ...timeForm, laterals: e.target.value })}
+      className="block w-full min-w-0 max-w-full rounded-lg border p-3"
+    />
+  </div>
+)}
+
+
 
   <div className="md:col-span-2">
     <label className="mb-2 block text-sm font-medium">Submission Notes</label>
@@ -826,7 +1034,7 @@ async function saveProjectEdit() {
   </button>
 </div>
 
-<div className="mt-4 space-y-3">
+<div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
   {timeEntries.map((entry) => {
     const isEditing = inlineEditingTimeEntryId === entry.id;
 
@@ -968,8 +1176,19 @@ async function saveProjectEdit() {
   </div>
 
   <div className="text-right">
-    <p className="text-xs font-medium uppercase text-gray-500">Service Hours</p>
-    <p className="mt-1 font-semibold">{entry.hours} hrs</p>
+  <p className="text-xs font-medium uppercase text-gray-500">
+  {isHourlyProject ? 'Service Hours' : 'Serviced'}
+</p>
+<p className="mt-1 font-semibold">
+{isHourlyProject
+  ? `${entry.hours ?? 0} hrs`
+  : entry.feet !== null && entry.feet !== undefined
+    ? `${entry.feet} ft`
+    : entry.laterals !== null && entry.laterals !== undefined
+      ? `${entry.laterals} laterals`
+      : 'No quantity'}
+</p>
+
   </div>
 </button>
 
@@ -1057,17 +1276,197 @@ async function saveProjectEdit() {
           </div>
 
           <div className="rounded-2xl bg-white p-6 shadow">
-            <h2 className="text-xl font-bold">Project Notes</h2>
-            <textarea
-              defaultValue={project.notes ?? ''}
-              placeholder="Add project notes..."
-              className="mt-4 w-full rounded-lg border p-3"
-              rows={5}
-            />
-            <button className="mt-4 rounded-lg border px-5 py-3 hover:bg-gray-50">
-              Save Notes
-            </button>
+          <div className="flex items-center justify-between gap-3">
+  <h2 className="text-xl font-bold">Notes</h2>
+
+  <button
+    type="button"
+    onClick={() => {
+      setManagingProjectNotes(!managingProjectNotes);
+      setEditingProjectNoteId(null);
+    }}
+    className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+  >
+    {managingProjectNotes ? 'Done' : 'Manage Notes'}
+  </button>
+</div>
+
+
+<div className="mt-4 flex gap-2">
+  <input
+    type="text"
+    value={newProjectNote}
+    onChange={(e) => setNewProjectNote(e.target.value)}
+    placeholder="Add project note..."
+    className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
+  />
+
+  <button
+    type="button"
+    onClick={saveProjectNote}
+    className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+  >
+    Save
+  </button>
+</div>
+
+
+  <div className="mt-5 h-[20rem] space-y-5 overflow-y-auto pr-2">
+  <div>
+    <h3 className="text-sm font-bold text-gray-700">Project Notes</h3>
+
+    <div className="mt-3 space-y-3">
+      {projectNoteHistory.map((note) => {
+        const isEditingNote = editingProjectNoteId === note.id;
+
+        return (
+          <div key={note.id} className="rounded-xl border p-4">
+            {isEditingNote ? (
+              <>
+                <textarea
+                  value={projectNoteEditText}
+                  onChange={(e) => setProjectNoteEditText(e.target.value)}
+                  className="w-full rounded-lg border p-3"
+                  rows={3}
+                />
+
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateProjectNote(note.id)}
+                    className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+                  >
+                    Save
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={cancelProjectNoteEdit}
+                    className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-700">{note.note}</p>
+                <p className="mt-2 text-xs text-gray-500">
+                  {formatTimestamp(note.created_at)}
+                </p>
+
+                {managingProjectNotes && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startProjectNoteEdit(note)}
+                      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteProjectNote(note.id)}
+                      className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
           </div>
+        );
+      })}
+
+      {projectNoteHistory.length === 0 && (
+        <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+          No project notes yet.
+        </div>
+      )}
+    </div>
+  </div>
+
+  <div>
+    <h3 className="text-sm font-bold text-gray-700">Service Notes</h3>
+
+    <div className="mt-3 space-y-3">
+      {serviceNoteHistory.map((note) => {
+        const isEditingNote = editingProjectNoteId === note.id;
+
+        return (
+          <div key={note.id} className="rounded-xl border p-4">
+            {isEditingNote ? (
+              <>
+                <textarea
+                  value={projectNoteEditText}
+                  onChange={(e) => setProjectNoteEditText(e.target.value)}
+                  className="w-full rounded-lg border p-3"
+                  rows={3}
+                />
+
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateProjectNote(note.id)}
+                    className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+                  >
+                    Save
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={cancelProjectNoteEdit}
+                    className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-700">{note.note}</p>
+                <p className="mt-2 text-xs text-gray-500">
+                  {formatTimestamp(note.created_at)}
+                </p>
+
+                {managingProjectNotes && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startProjectNoteEdit(note)}
+                      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteProjectNote(note.id)}
+                      className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
+
+      {serviceNoteHistory.length === 0 && (
+        <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+          No service notes yet.
+        </div>
+      )}
+    </div>
+  </div>
+</div>
+
+</div>
+
         </div>
 
         <div className="space-y-6">

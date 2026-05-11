@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import { supabase } from '../../lib/supabaseClient';
 
@@ -38,12 +39,14 @@ type Employee = {
 
 
 export default function OperationsPage() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [operationsSearch, setOperationsSearch] = useState('');
-const [projectCustomerSearch, setProjectCustomerSearch] = useState('');
+  const searchParams = useSearchParams();
+const operationsSearch = searchParams.get('q') ?? '';
 
-const [employees, setEmployees] = useState<Employee[]>([]);
+const [customers, setCustomers] = useState<Customer[]>([]);
+const [projects, setProjects] = useState<Project[]>([]);
+  const [projectCustomerSearch, setProjectCustomerSearch] = useState('');
+
+  const [employees, setEmployees] = useState<Employee[]>([]);
 
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
@@ -55,6 +58,7 @@ const [employees, setEmployees] = useState<Employee[]>([]);
     phone: '',
     email: '',
   });
+
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -164,6 +168,13 @@ const activeProjects = projects
 const completedProjects = projects
   .filter((project) => project.status === 'Completed')
   .filter(projectMatchesSearch);
+
+  const isSearching = Boolean(operationsSearchValue);
+
+  const showCustomerResults = isSearching && filteredCustomers.length > 0;
+  const showActiveProjects = !isSearching || activeProjects.length > 0;
+  const showCompletedProjects = isSearching && completedProjects.length > 0;
+
 
 const projectCustomerOptions = customers.filter((customer) => {
   const search = projectCustomerSearch.toLowerCase();
@@ -360,15 +371,11 @@ notes,
   
   return (
     <div className="space-y-6 text-black">
-      <div className="flex flex-col gap-3 border-b border-gray-200 pb-4 md:flex-row md:items-end md:justify-between">
-  <div>
-    <h1 className="text-2xl font-bold">Operations</h1>
-    <p className="mt-1 text-sm text-gray-600">
-      Active work, customer lookup, and project scheduling.
-    </p>
-  </div>
+      <div className="flex flex-col items-center gap-3 border-b border-gray-200 pb-4 text-center md:flex-row md:items-end md:justify-between md:text-left">
 
-  <div className="flex flex-wrap gap-2">
+ 
+
+  <div className="flex flex-wrap justify-center gap-2 md:justify-start">
     <button
       type="button"
       onClick={() => setShowCustomerForm(true)}
@@ -387,224 +394,210 @@ notes,
   </div>
 </div>
 
+{showCustomerResults && (
+  <div className="rounded-2xl bg-white p-4 shadow md:p-6">
+    <h2 className="text-xl font-bold">Customer Results</h2>
 
-      <div className="rounded-2xl bg-white p-4 shadow md:p-6">
-     
-<p className="mt-0 text-sm text-gray-600">
-  Search customers, projects, addresses, PO numbers, technicians, phone, or email.
-</p>
+    <div className="mt-4 space-y-3">
+      {filteredCustomers.length > 0 ? (
+        filteredCustomers.map((customer) => (
+          <div
+            key={customer.id}
+            className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
+          >
+            <div>
+              <p className="text-sm text-gray-500">{customer.id}</p>
+              <h3 className="font-bold">{customer.name}</h3>
+              <p className="text-sm text-gray-600">
+                {customer.contactName} • {customer.phone}
+              </p>
+              <p className="text-sm text-gray-600">{customer.email}</p>
+            </div>
 
-        <input
-          type="text"
-          placeholder="Search by customer, contact, phone, or email..."
-          value={operationsSearch}
-onChange={(e) => setOperationsSearch(e.target.value)}
-          className="mt-4 w-full rounded-lg border p-3"
-        />
-
-{operationsSearch && (
-          <div className="mt-4 space-y-3">
-            
-            {filteredCustomers.length > 0 ? (
-              filteredCustomers.map((customer) => (
-                <div
-                  key={customer.id}
-                  className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
-                >
-                  <div>
-                    <p className="text-sm text-gray-500">{customer.id}</p>
-                    <h3 className="font-bold">{customer.name}</h3>
-                    <p className="text-sm text-gray-600">
-                    {customer.contactName} • {customer.phone}
-                    </p>
-                    <p className="text-sm text-gray-600">{customer.email}</p>
-                  </div>
-
-                  <Link
-                    href={`/customers/${customer.id}`}
-                    className="rounded-lg border px-4 py-2 text-center text-sm font-medium hover:bg-gray-50"
-                  >
-                    Open Profile
-                  </Link>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-xl border border-dashed p-4 text-sm text-gray-600">
-                No matching customers found. Use + Add Customer to create one.
-              </div>
-            )}
+            <Link
+              href={`/customers/${customer.id}`}
+              className="rounded-lg border px-4 py-2 text-center text-sm font-medium hover:bg-gray-50"
+            >
+              Open Profile
+            </Link>
           </div>
-        )}
-      </div>
-
-      <div className="rounded-2xl bg-white p-4 shadow md:p-6">
-        <h2 className="text-xl font-bold">Active Projects</h2>
-
-        <div className="mt-4 space-y-3 md:hidden">
-  {activeProjects.map((project) => (
-    <Link
-      key={project.id}
-      href={`/projects/${encodeURIComponent(project.id)}`}
-      className="block rounded-xl border p-4"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-bold">{project.id}</h3>
-          <p className="mt-1 text-sm font-medium">{project.customer}</p>
+        ))
+      ) : (
+        <div className="rounded-xl border border-dashed p-4 text-sm text-gray-600">
+          No matching customers found.
         </div>
-
-        <div className="text-right text-xs text-gray-500">
-          <p>Latest service</p>
-          <p className="font-semibold text-gray-700">
-            {project.latestServiceDate
-              ? formatDate(project.latestServiceDate)
-              : 'No service yet'}
-          </p>
-        </div>
-      </div>
-
-      <div className="mt-3 grid gap-1 text-sm text-gray-600">
-        {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
-        {project.projectLocation && <p>Location: {project.projectLocation}</p>}
-      </div>
-    </Link>
-  ))}
-</div>
-
-        <div className="mt-4 hidden overflow-hidden rounded-xl border md:block">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-              <th className="p-4">Project</th>
-<th className="p-4">Customer</th>
-<th className="p-4">Assigned</th>
-<th className="p-4">Latest Service Date</th>
-              </tr>
-            </thead>
-
-            <tbody>
-            {activeProjects.map((project) => (
-                <tr key={project.id} className="border-t hover:bg-gray-50">
-                  <td className="p-4">
-                    <Link
-                      href={`/projects/${encodeURIComponent(project.id)}`}
-                      className="font-semibold text-blue-600 hover:underline"
-                    >
-                      {project.id} — {project.name}
-                    </Link>
-                  </td>
-                  <td className="p-4">{project.customer}</td>
-<td className="p-4">{project.assignedTo}</td>
-<td className="p-4">
-  Latest service date:{' '}
-  {project.latestServiceDate
-    ? formatDate(project.latestServiceDate)
-    : 'No service yet'}
-</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="rounded-2xl bg-white p-4 shadow md:p-6">
-  <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-    <div>
-      <h2 className="text-xl font-bold">Completed Projects</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Search completed work by project, customer, technician, or date.
-      </p>
+      )}
     </div>
   </div>
+)}
 
+      
 
-  <div className="mt-4 space-y-3 md:hidden">
-    {completedProjects.map((project) => (
-      <Link
-        key={project.id}
-        href={`/projects/${encodeURIComponent(project.id)}`}
-        className="block rounded-xl border p-4"
-      >
-        <div className="flex items-start justify-between gap-3">
-  <div>
-    <h3 className="font-bold">{project.id}</h3>
-    <p className="mt-1 text-sm font-medium">{project.customer}</p>
-  </div>
+{showActiveProjects && (
+  <div className="rounded-2xl bg-white p-4 shadow md:p-6">
+    <h2 className="text-xl font-bold">Active Projects</h2>
 
-  <div className="text-right text-xs text-gray-500">
-  <p>Completion date</p>
-    <p className="font-semibold text-gray-700">
-      {project.latestServiceDate
-        ? formatDate(project.latestServiceDate)
-        : 'No service yet'}
-    </p>
-  </div>
-</div>
+    <div className="mt-4 space-y-3 md:hidden">
+      {activeProjects.map((project) => (
+        <Link
+          key={project.id}
+          href={`/projects/${encodeURIComponent(project.id)}`}
+          className="block rounded-xl border p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold">{project.id}</h3>
+              <p className="mt-1 text-sm font-medium">{project.customer}</p>
+            </div>
 
-<div className="mt-3 grid gap-1 text-sm text-gray-600">
-  {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
-  {project.projectLocation && <p>Location: {project.projectLocation}</p>}
-</div>
+            <div className="text-right text-xs text-gray-500">
+              <p>Latest service</p>
+              <p className="font-semibold text-gray-700">
+                {project.latestServiceDate
+                  ? formatDate(project.latestServiceDate)
+                  : 'No service yet'}
+              </p>
+            </div>
+          </div>
 
-      </Link>
-    ))}
-  </div>
-  
+          <div className="mt-3 grid gap-1 text-sm text-gray-600">
+            {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
+            {project.projectLocation && (
+              <p>Location: {project.projectLocation}</p>
+            )}
+          </div>
+        </Link>
+      ))}
+    </div>
 
-  <div className="mt-4 hidden overflow-hidden rounded-xl border md:block">
-    <table className="w-full text-left text-sm">
-      <thead className="bg-gray-50">
-        <tr>
-        <th className="p-4">Project</th>
-<th className="p-4">Customer / Location</th>
-<th className="p-4">Assigned</th>
-<th className="p-4">Completion Date</th>
-
-        </tr>
-      </thead>
-
-      <tbody>
-        {completedProjects.map((project) => (
-          <tr key={project.id} className="border-t hover:bg-gray-50">
-            <td className="p-4">
-  <Link
-    href={`/projects/${encodeURIComponent(project.id)}`}
-    className="font-semibold text-blue-600 hover:underline"
-  >
-    {project.id}
-  </Link>
-</td>
-
-<td className="p-4">
-  <p className="font-medium">{project.customer}</p>
-  {project.projectLocation && (
-    <p className="text-xs text-gray-500">{project.projectLocation}</p>
-  )}
-</td>
-
-<td className="p-4">{project.assignedTo || 'Unassigned'}</td>
-
-<td className="p-4">
-  {project.latestServiceDate
-    ? formatDate(project.latestServiceDate)
-    : 'No service yet'}
-</td>
-
-          </tr>
-        ))}
-
-        {completedProjects.length === 0 && (
+    <div className="mt-4 hidden overflow-hidden rounded-xl border md:block">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-gray-50">
           <tr>
-            <td colSpan={5} className="p-4 text-center text-gray-500">
-              No completed projects found.
-            </td>
+            <th className="p-4">Project</th>
+            <th className="p-4">Customer</th>
+            <th className="p-4">Assigned</th>
+            <th className="p-4">Latest Service Date</th>
           </tr>
-        )}
-      </tbody>
-    </table>
+        </thead>
+
+        <tbody>
+          {activeProjects.map((project) => (
+            <tr key={project.id} className="border-t hover:bg-gray-50">
+              <td className="p-4">
+                <Link
+                  href={`/projects/${encodeURIComponent(project.id)}`}
+                  className="font-semibold text-blue-600 hover:underline"
+                >
+                  {project.id} — {project.name}
+                </Link>
+              </td>
+              <td className="p-4">{project.customer}</td>
+              <td className="p-4">{project.assignedTo}</td>
+              <td className="p-4">
+                Latest service date:{' '}
+                {project.latestServiceDate
+                  ? formatDate(project.latestServiceDate)
+                  : 'No service yet'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
+)}
+
+
+{showCompletedProjects && (
+  <div className="rounded-2xl bg-white p-4 shadow md:p-6">
+    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <div>
+        <h2 className="text-xl font-bold">Completed Projects</h2>
+       
+      </div>
+    </div>
+
+    <div className="mt-4 space-y-3 md:hidden">
+      {completedProjects.map((project) => (
+        <Link
+          key={project.id}
+          href={`/projects/${encodeURIComponent(project.id)}`}
+          className="block rounded-xl border p-4"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold">{project.id}</h3>
+              <p className="mt-1 text-sm font-medium">{project.customer}</p>
+            </div>
+
+            <div className="text-right text-xs text-gray-500">
+              <p>Completion date</p>
+              <p className="font-semibold text-gray-700">
+                {project.latestServiceDate
+                  ? formatDate(project.latestServiceDate)
+                  : 'No service yet'}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-3 grid gap-1 text-sm text-gray-600">
+            {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
+            {project.projectLocation && (
+              <p>Location: {project.projectLocation}</p>
+            )}
+          </div>
+        </Link>
+      ))}
+    </div>
+
+    <div className="mt-4 hidden overflow-hidden rounded-xl border md:block">
+      <table className="w-full text-left text-sm">
+        <thead className="bg-gray-50">
+          <tr>
+            <th className="p-4">Project</th>
+            <th className="p-4">Customer / Location</th>
+            <th className="p-4">Assigned</th>
+            <th className="p-4">Completion Date</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {completedProjects.map((project) => (
+            <tr key={project.id} className="border-t hover:bg-gray-50">
+              <td className="p-4">
+                <Link
+                  href={`/projects/${encodeURIComponent(project.id)}`}
+                  className="font-semibold text-blue-600 hover:underline"
+                >
+                  {project.id}
+                </Link>
+              </td>
+
+              <td className="p-4">
+                <p className="font-medium">{project.customer}</p>
+                {project.projectLocation && (
+                  <p className="text-xs text-gray-500">
+                    {project.projectLocation}
+                  </p>
+                )}
+              </td>
+
+              <td className="p-4">{project.assignedTo || 'Unassigned'}</td>
+
+              <td className="p-4">
+                {project.latestServiceDate
+                  ? formatDate(project.latestServiceDate)
+                  : 'No service yet'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
+
 
       {showCustomerForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

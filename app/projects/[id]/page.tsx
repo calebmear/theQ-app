@@ -12,6 +12,7 @@ type ProjectDetail = {
   progress: number;
   service_start_date: string;
   project_location: string | null;
+  pricing_type: string | null;
   notes: string | null;
   customers: {
     name: string;
@@ -50,7 +51,29 @@ export default function ProjectDetailPage({
 }: {
   params: { id: string };
 }) {
-  const today = new Date().toISOString().split('T')[0];
+  function getLocalDateInputValue() {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  
+    return formatter.format(new Date());
+  }
+
+  function formatDate(value: string | null) {
+    if (!value) return '';
+  
+    return new Date(`${value}T00:00:00`).toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric',
+    });
+  }
+  
+  
+  const today = getLocalDateInputValue();
 
 const [project, setProject] = useState<ProjectDetail | null>(null);
 const [loading, setLoading] = useState(true);
@@ -62,15 +85,36 @@ const [timeForm, setTimeForm] = useState<TimeForm>({
   hours: '',
   notes: '',
 });
+
+const [showServiceSubmission, setShowServiceSubmission] = useState(false);
+
+const [expandedTimeEntryId, setExpandedTimeEntryId] = useState<string | null>(
+  null
+);
+
 const [editingProject, setEditingProject] = useState(false);
 const [projectEditForm, setProjectEditForm] = useState({
   projectNumber: '',
   projectLocation: '',
   serviceStartDate: '',
+  pricingType: '',
 });
 const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
   null
 );
+
+const [managingTimeEntries, setManagingTimeEntries] = useState(false);
+const [inlineEditingTimeEntryId, setInlineEditingTimeEntryId] = useState<
+  string | null
+>(null);
+const [inlineTimeForm, setInlineTimeForm] = useState<TimeForm>({
+  workDate: '',
+  workCompleted: '',
+  serviceVehicle: '',
+  hours: '',
+  notes: '',
+});
+
 
 
   useEffect(() => {
@@ -119,6 +163,7 @@ const employee = Array.isArray(data.employees)
     progress: data.progress,
     service_start_date: data.service_start_date,
     project_location: data.project_location,
+    pricing_type: data.pricing_type,
     notes: data.notes,
     customers: customer ?? null,
     employees: employee ?? null,
@@ -180,19 +225,22 @@ async function loadTimeEntries(projectId: string) {
 async function updateProjectStatus(status: string) {
   if (!project) return;
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('projects')
     .update({ status })
-    .eq('id', project.id);
+    .eq('id', project.id)
+    .select('status')
+    .single();
 
   if (error) {
     console.error('Error updating project status:', error);
+    alert('Project status could not be updated.');
     return;
   }
 
   setProject({
     ...project,
-    status,
+    status: data.status,
   });
 }
 
@@ -283,8 +331,57 @@ function editTimeEntry(entry: TimeEntry) {
   });
 }
 
+function startInlineTimeEdit(entry: TimeEntry) {
+  setInlineEditingTimeEntryId(entry.id);
+  setInlineTimeForm({
+    workDate: entry.work_date,
+    workCompleted: entry.work_completed ?? '',
+    serviceVehicle: entry.service_vehicle ?? '',
+    hours: String(entry.hours),
+    notes: entry.notes ?? '',
+  });
+}
+
+function cancelInlineTimeEdit() {
+  setInlineEditingTimeEntryId(null);
+  setInlineTimeForm({
+    workDate: '',
+    workCompleted: '',
+    serviceVehicle: '',
+    hours: '',
+    notes: '',
+  });
+}
+
+async function saveInlineTimeEntry(entryId: string) {
+  if (!project || !inlineTimeForm.workDate || !inlineTimeForm.hours) return;
+
+  const { error } = await supabase
+    .from('time_entries')
+    .update({
+      work_date: inlineTimeForm.workDate,
+      work_completed: inlineTimeForm.workCompleted,
+      service_vehicle: inlineTimeForm.serviceVehicle,
+      hours: Number(inlineTimeForm.hours),
+      notes: inlineTimeForm.notes,
+    })
+    .eq('id', entryId);
+
+  if (error) {
+    console.error('Error updating time entry:', error);
+    return;
+  }
+
+  cancelInlineTimeEdit();
+  loadTimeEntries(project.id);
+}
+
+
 async function deleteTimeEntry(entryId: string) {
   if (!project) return;
+
+  const confirmed = window.confirm('Are you sure you want to delete this time entry?');
+  if (!confirmed) return;
 
   const { error } = await supabase
     .from('time_entries')
@@ -301,6 +398,7 @@ async function deleteTimeEntry(entryId: string) {
 
   loadTimeEntries(project.id);
 }
+
 
 
 function formatTimestamp(value: string | null) {
@@ -363,6 +461,7 @@ function startProjectEdit() {
     projectNumber: project.project_number,
     projectLocation: project.project_location ?? '',
     serviceStartDate: project.service_start_date ?? '',
+    pricingType: project.pricing_type ?? '',
   });
 
   setEditingProject(true);
@@ -379,6 +478,7 @@ async function saveProjectEdit() {
       project_number: projectEditForm.projectNumber,
       project_location: projectEditForm.projectLocation,
       service_start_date: projectEditForm.serviceStartDate,
+      pricing_type: projectEditForm.pricingType,
     })
     .eq('id', project.id);
 
@@ -392,6 +492,7 @@ async function saveProjectEdit() {
     project_number: projectEditForm.projectNumber,
     project_location: projectEditForm.projectLocation,
     service_start_date: projectEditForm.serviceStartDate,
+    pricing_type: projectEditForm.pricingType,
   });
 
   setEditingProject(false);
@@ -519,6 +620,31 @@ async function saveProjectEdit() {
   </div>
 
   <div>
+  <span className="text-gray-500">Pricing Model: </span>
+  {editingProject ? (
+    <select
+      value={projectEditForm.pricingType}
+      onChange={(e) =>
+        setProjectEditForm({
+          ...projectEditForm,
+          pricingType: e.target.value,
+        })
+      }
+      className="rounded-lg border p-2"
+    >
+      <option value="">Select pricing model</option>
+      <option>Hourly</option>
+      <option>Per Foot / Lateral</option>
+    </select>
+  ) : (
+    <span className="font-semibold">
+      {project.pricing_type || 'No pricing model saved'}
+    </span>
+  )}
+</div>
+
+
+  <div>
   <span className="text-gray-500">Service Start Date: </span>
     {editingProject ? (
       <input
@@ -540,6 +666,8 @@ async function saveProjectEdit() {
     )}
   </div>
 </div>
+
+
 
 {editingProject && (
   <div className="mt-5 flex gap-3">
@@ -564,14 +692,34 @@ async function saveProjectEdit() {
 
 
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
-        <div className="space-y-6">
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <h2 className="text-xl font-bold">Time Submission</h2>
+<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+  <div className="min-w-0 space-y-6">
 
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+  <div className="rounded-2xl bg-white p-6 shadow">
+  <button
+    type="button"
+    onClick={() => setShowServiceSubmission(!showServiceSubmission)}
+    className="flex w-full items-center justify-between gap-4 text-left"
+  >
+    <div>
+      <h2 className="text-xl font-bold">Service Submission</h2>
+      <p className="mt-1 text-sm text-gray-600">
+        Add service date, hours, vehicle, and notes.
+      </p>
+    </div>
+
+    <span className="text-2xl leading-none text-gray-500">
+  {showServiceSubmission ? '⌄' : '›'}
+</span>
+
+  </button>
+
+  {showServiceSubmission && (
+    <>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+
   <div>
-    <label className="mb-2 block text-sm font-medium">Work Date</label>
+    <label className="mb-2 block text-sm font-medium">Service Date</label>
     <input
   type="date"
   value={timeForm.workDate}
@@ -584,7 +732,7 @@ async function saveProjectEdit() {
 
   <div>
     <label className="mb-2 block text-sm font-medium">
-      Type of Work Completed
+      Type of Service Completed
     </label>
     <select
   className={`w-full rounded-lg border p-3 ${
@@ -596,7 +744,7 @@ async function saveProjectEdit() {
   }
 >
   <option value="" disabled hidden>
-    Select work type
+    Select service type
   </option>
   <option>Mainline</option>
   <option>Lateral</option>
@@ -655,42 +803,179 @@ async function saveProjectEdit() {
 >
   {editingTimeEntryId ? 'Update Time' : 'Submit Time'}
 </button>
-
+</>
+  )}
 
           </div>
 
           <div className="rounded-2xl bg-white p-6 shadow">
-            <h2 className="text-xl font-bold">Time Entry History</h2>
-            <div className="mt-4 overflow-hidden rounded-xl border">
-  <table className="w-full text-left text-sm">
-    <thead className="bg-gray-50">
-      <tr>
-        <th className="p-4">Service Date</th>
-        <th className="p-4">Service Hours</th>
-        <th className="p-4">Service Type</th>
-        <th className="p-4">Service Vehicle</th>
-        <th className="p-4">Service Notes</th>
-        <th className="p-4">Submitted / Updated</th>
+          <div className="flex items-center justify-between gap-3">
+  <h2 className="text-xl font-bold">Service Log</h2>
 
-        <th className="p-4">Actions</th>
-      </tr>
-    </thead>
+  <button
+    type="button"
+    onClick={() => {
+      setManagingTimeEntries(!managingTimeEntries);
+      setInlineEditingTimeEntryId(null);
+    }}
+    className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+  >
+    {managingTimeEntries ? 'Done' : 'Manage Entries'}
+  </button>
+</div>
 
-    <tbody>
-      {timeEntries.map((entry) => (
-        <tr key={entry.id} className="border-t">
-          <td className="p-4">{entry.work_date}</td>
-          <td className="p-4">{entry.hours}</td>
-          <td className="p-4">{entry.work_completed}</td>
-          <td className="p-4">{entry.service_vehicle}</td>
-          <td className="p-4">{entry.notes}</td>
-          <td className="p-4">{submittedUpdatedLabel(entry)}</td>
-<td className="p-4">
+<div className="mt-4 space-y-3">
+  {timeEntries.map((entry) => {
+    const isEditing = inlineEditingTimeEntryId === entry.id;
 
-  <div className="flex gap-2">
+    return (
+      <div key={entry.id} className="rounded-xl border p-4">
+        {isEditing ? (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Service Date
+              </label>
+              <input
+                type="date"
+                value={inlineTimeForm.workDate}
+                onChange={(e) =>
+                  setInlineTimeForm({
+                    ...inlineTimeForm,
+                    workDate: e.target.value,
+                  })
+                }
+                className="w-full rounded-lg border p-3"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Hours
+              </label>
+              <input
+                type="number"
+                value={inlineTimeForm.hours}
+                onChange={(e) =>
+                  setInlineTimeForm({
+                    ...inlineTimeForm,
+                    hours: e.target.value,
+                  })
+                }
+                className="w-full rounded-lg border p-3"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Work Type
+              </label>
+              <select
+                value={inlineTimeForm.workCompleted}
+                onChange={(e) =>
+                  setInlineTimeForm({
+                    ...inlineTimeForm,
+                    workCompleted: e.target.value,
+                  })
+                }
+                className="w-full rounded-lg border p-3"
+              >
+                <option value="">Select work type</option>
+                <option>Mainline</option>
+                <option>Lateral</option>
+                <option>Jetter</option>
+                <option>Traffic Control</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Service Vehicle
+              </label>
+              <select
+                value={inlineTimeForm.serviceVehicle}
+                onChange={(e) =>
+                  setInlineTimeForm({
+                    ...inlineTimeForm,
+                    serviceVehicle: e.target.value,
+                  })
+                }
+                className="w-full rounded-lg border p-3"
+              >
+                <option value="">Select service vehicle</option>
+                <option>2016 Ford Van</option>
+                <option>2007 Ford F-150</option>
+              </select>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="mb-2 block text-sm font-medium">
+                Notes
+              </label>
+              <textarea
+                value={inlineTimeForm.notes}
+                onChange={(e) =>
+                  setInlineTimeForm({
+                    ...inlineTimeForm,
+                    notes: e.target.value,
+                  })
+                }
+                className="w-full rounded-lg border p-3"
+                rows={3}
+              />
+            </div>
+
+            <div className="flex gap-2 md:col-span-2">
+              <button
+                type="button"
+                onClick={() => saveInlineTimeEntry(entry.id)}
+                className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+              >
+                Save
+              </button>
+
+              <button
+                type="button"
+                onClick={cancelInlineTimeEdit}
+                className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={() => deleteTimeEntry(entry.id)}
+                className="ml-auto rounded-lg border px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <button
+  type="button"
+  onClick={() =>
+    setExpandedTimeEntryId(expandedTimeEntryId === entry.id ? null : entry.id)
+  }
+  className="flex w-full items-center justify-between gap-4 text-left"
+>
+  <div>
+    <p className="text-xs font-medium uppercase text-gray-500">Service Date</p>
+    <p className="mt-1 font-semibold">{formatDate(entry.work_date)}</p>
+  </div>
+
+  <div className="text-right">
+    <p className="text-xs font-medium uppercase text-gray-500">Service Hours</p>
+    <p className="mt-1 font-semibold">{entry.hours} hrs</p>
+  </div>
+</button>
+
+{managingTimeEntries && (
+  <div className="mt-3 flex gap-2">
     <button
       type="button"
-      onClick={() => editTimeEntry(entry)}
+      onClick={() => startInlineTimeEdit(entry)}
       className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
     >
       Edit
@@ -704,20 +989,68 @@ async function saveProjectEdit() {
       Delete
     </button>
   </div>
-</td>
-        </tr>
-      ))}
+)}
 
-      {timeEntries.length === 0 && (
-        <tr>
-          <td colSpan={7} className="p-4 text-center text-gray-500">
-            No time entries submitted yet.
-          </td>
-        </tr>
-      )}
-    </tbody>
-  </table>
+{expandedTimeEntryId === entry.id && (
+  <div className="mt-4 border-t pt-4">
+    <div className="grid gap-4">
+      <div>
+        <p className="text-xs font-medium uppercase text-gray-500">
+          Service Type
+        </p>
+        <p className="mt-1 text-sm text-gray-700">
+  {entry.work_completed || 'No work type selected'}
+</p>
+
+      </div>
+
+      <div>
+        <p className="text-xs font-medium uppercase text-gray-500">
+          Service Vehicle
+        </p>
+        <p className="mt-1 text-sm text-gray-700">
+  {entry.service_vehicle || 'No vehicle selected'}
+</p>
+
+      </div>
+
+      <div>
+        <p className="text-xs font-medium uppercase text-gray-500">
+          Service Notes
+        </p>
+        <p className="mt-1 text-sm text-gray-700">
+          {entry.notes || 'No notes submitted'}
+        </p>
+      </div>
+
+      <p className="text-xs text-gray-500">
+        {submittedUpdatedLabel(entry)}
+      </p>
+    </div>
+  </div>
+)}
+
+
+
+
+
+
+            
+            
+          </>
+        )}
+      </div>
+    );
+  })}
+
+  {timeEntries.length === 0 && (
+    <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
+      No time entries submitted yet.
+    </div>
+  )}
 </div>
+
+
 
           </div>
 
@@ -736,14 +1069,7 @@ async function saveProjectEdit() {
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <h2 className="text-xl font-bold">Customer Info</h2>
-            <div className="mt-4 space-y-3 text-sm">
-              <p>{project.customers?.address || 'No address saved'}</p>
-              <p>{project.customers?.phone}</p>
-              <p>{project.customers?.email}</p>
-            </div>
-          </div>
+          
 
           <div className="rounded-2xl bg-white p-6 shadow">
             <h2 className="text-xl font-bold">Map</h2>

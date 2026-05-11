@@ -1,5 +1,5 @@
 import './globals.css';
-import Link from 'next/link';
+import AppNav from '../components/AppNav';
 
 export const metadata = {
   title: 'THEQ App',
@@ -15,27 +15,20 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <div className="min-h-screen bg-gray-100 text-black md:flex">
-          <aside className="border-r bg-white p-4 md:min-h-screen md:w-64">
-            <h1 className="text-xl font-bold">THEQ</h1>
+        <aside className="border-r bg-white p-4 md:min-h-screen md:w-64">
+  <div className="flex items-center gap-3 md:block">
+    <h1 className="shrink-0 text-xl font-bold">THEQ</h1>
 
-            <nav className="mt-6 flex gap-2 md:flex-col">
-              <Link href="/" className="rounded-lg px-3 py-2 hover:bg-gray-100">
-                Dashboard
-              </Link>
-              <Link
-                href="/operations"
-                className="rounded-lg px-3 py-2 hover:bg-gray-100"
-              >
-                Operations
-              </Link>
-              <Link
-                href="/projects"
-                className="rounded-lg px-3 py-2 hover:bg-gray-100"
-              >
-                Projects
-              </Link>
-            </nav>
-          </aside>
+    <input
+      type="text"
+      placeholder="Search projects, customers, addresses..."
+      className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm md:mt-4 md:w-full"
+    />
+  </div>
+
+  <AppNav />
+</aside>
+
 
           <main className="flex-1 p-4 md:p-8">{children}</main>
         </div>

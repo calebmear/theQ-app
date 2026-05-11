@@ -64,9 +64,9 @@ const [employees, setEmployees] = useState<Employee[]>([]);
     customerId: '',
     pricingType: 'Hourly',
     assignedToId: '',
-    status: 'Active',
+    status: 'Scheduled',
     progress: 0,
-    startdateofservice: today,
+    startdateofservice: '',
     projectLocation: '',
     notes: '',
   });
@@ -273,9 +273,9 @@ const projectCustomerOptions = customers.filter((customer) => {
       customerId: '',
       pricingType: 'Hourly',
       assignedToId: '',
-      status: 'Active',
+      status: 'Scheduled',
       progress: 0,
-      startdateofservice: today,
+      startdateofservice: '',
       projectLocation: '',
       notes: '',
     });
@@ -360,32 +360,33 @@ notes,
   
   return (
     <div className="space-y-6 text-black">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Operations</h1>
-          <p className="mt-2 text-gray-600">
-            Manage customers, projects, and active work.
-          </p>
-        </div>
+      <div className="flex flex-col gap-3 border-b border-gray-200 pb-4 md:flex-row md:items-end md:justify-between">
+  <div>
+    <h1 className="text-2xl font-bold">Operations</h1>
+    <p className="mt-1 text-sm text-gray-600">
+      Active work, customer lookup, and project scheduling.
+    </p>
+  </div>
 
-        <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={() => setShowCustomerForm(true)}
-            className="rounded-lg border bg-white px-4 py-3 font-medium shadow-sm hover:bg-gray-50"
-          >
-            + Add Customer
-          </button>
+  <div className="flex flex-wrap gap-2">
+    <button
+      type="button"
+      onClick={() => setShowCustomerForm(true)}
+      className="rounded-lg border bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50"
+    >
+      + Add Customer
+    </button>
 
-          <button
-            type="button"
-            onClick={() => setShowProjectForm(true)}
-            className="rounded-lg bg-black px-4 py-3 font-medium text-white shadow-sm hover:bg-gray-800"
-          >
-            + Add Project
-          </button>
-        </div>
-      </div>
+    <button
+      type="button"
+      onClick={() => setShowProjectForm(true)}
+      className="rounded-lg bg-black px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
+    >
+      + Add Project
+    </button>
+  </div>
+</div>
+
 
       <div className="rounded-2xl bg-white p-4 shadow md:p-6">
      
@@ -525,13 +526,27 @@ onChange={(e) => setOperationsSearch(e.target.value)}
         href={`/projects/${encodeURIComponent(project.id)}`}
         className="block rounded-xl border p-4"
       >
-        <p className="text-sm text-gray-500">{project.id}</p>
-        <h3 className="mt-1 font-bold">{project.name}</h3>
-        <p className="text-sm text-gray-600">{project.customer}</p>
-        <div className="mt-3 flex justify-between text-sm">
-          <span>{project.assignedTo}</span>
-          <span className="font-semibold">{project.startdateofservice}</span>
-        </div>
+        <div className="flex items-start justify-between gap-3">
+  <div>
+    <h3 className="font-bold">{project.id}</h3>
+    <p className="mt-1 text-sm font-medium">{project.customer}</p>
+  </div>
+
+  <div className="text-right text-xs text-gray-500">
+  <p>Completion date</p>
+    <p className="font-semibold text-gray-700">
+      {project.latestServiceDate
+        ? formatDate(project.latestServiceDate)
+        : 'No service yet'}
+    </p>
+  </div>
+</div>
+
+<div className="mt-3 grid gap-1 text-sm text-gray-600">
+  {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
+  {project.projectLocation && <p>Location: {project.projectLocation}</p>}
+</div>
+
       </Link>
     ))}
   </div>
@@ -541,11 +556,11 @@ onChange={(e) => setOperationsSearch(e.target.value)}
     <table className="w-full text-left text-sm">
       <thead className="bg-gray-50">
         <tr>
-          <th className="p-4">Project</th>
-          <th className="p-4">Customer</th>
-          <th className="p-4">Assigned</th>
-          <th className="p-4">Service Start Date</th>
-          <th className="p-4">Status</th>
+        <th className="p-4">Project</th>
+<th className="p-4">Customer / Location</th>
+<th className="p-4">Assigned</th>
+<th className="p-4">Completion Date</th>
+
         </tr>
       </thead>
 
@@ -553,17 +568,29 @@ onChange={(e) => setOperationsSearch(e.target.value)}
         {completedProjects.map((project) => (
           <tr key={project.id} className="border-t hover:bg-gray-50">
             <td className="p-4">
-              <Link
-                href={`/projects/${encodeURIComponent(project.id)}`}
-                className="font-semibold text-blue-600 hover:underline"
-              >
-                {project.id}
-              </Link>
-            </td>
-            <td className="p-4">{project.customer}</td>
-            <td className="p-4">{project.assignedTo}</td>
-            <td className="p-4">{project.startdateofservice}</td>
-            <td className="p-4">{project.status}</td>
+  <Link
+    href={`/projects/${encodeURIComponent(project.id)}`}
+    className="font-semibold text-blue-600 hover:underline"
+  >
+    {project.id}
+  </Link>
+</td>
+
+<td className="p-4">
+  <p className="font-medium">{project.customer}</p>
+  {project.projectLocation && (
+    <p className="text-xs text-gray-500">{project.projectLocation}</p>
+  )}
+</td>
+
+<td className="p-4">{project.assignedTo || 'Unassigned'}</td>
+
+<td className="p-4">
+  {project.latestServiceDate
+    ? formatDate(project.latestServiceDate)
+    : 'No service yet'}
+</td>
+
           </tr>
         ))}
 
@@ -768,37 +795,32 @@ onChange={(e) =>
   </select>
 </div>
 
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">Status</label>
-                <select
-                  value={newProject.status}
-                  onChange={(e) =>
-                    setNewProject({ ...newProject, status: e.target.value })
-                  }
-                  className="w-full rounded-lg border p-3"
-                >
-                  <option>Active</option>
-                  <option>Scheduled</option>
-                  <option>Completed</option>
-                </select>
-              </div>
+  
 
               <div>
                 <label className="mb-2 block text-sm font-medium">
                   Service Start Date (Est.)
                 </label>
                 <input
-                  type="date"
-                  value={newProject.startdateofservice}
-                  onChange={(e) =>
-                    setNewProject({
-                      ...newProject,
-                      startdateofservice: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-lg border p-3"
-                />
+  type={newProject.startdateofservice ? 'date' : 'text'}
+  placeholder="Enter scheduled service start date"
+  value={newProject.startdateofservice}
+  onFocus={(e) => {
+    e.currentTarget.type = 'date';
+  }}
+  onBlur={(e) => {
+    if (!newProject.startdateofservice) {
+      e.currentTarget.type = 'text';
+    }
+  }}
+  onChange={(e) =>
+    setNewProject({
+      ...newProject,
+      startdateofservice: e.target.value,
+    })
+  }
+  className="w-full rounded-lg border p-3"
+/>
               </div>
             </div>
 

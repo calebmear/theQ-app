@@ -475,7 +475,9 @@ function editTimeEntry(entry: TimeEntry) {
     workDate: entry.work_date,
     workCompleted: entry.work_completed ?? '',
     serviceVehicle: entry.service_vehicle ?? '',
-    hours: String(entry.hours),
+    hours: entry.hours === null ? '' : String(entry.hours),
+    feet: entry.feet === null ? '' : String(entry.feet),
+    laterals: entry.laterals === null ? '' : String(entry.laterals),
     notes: entry.notes ?? '',
   });
 }
@@ -486,7 +488,9 @@ function startInlineTimeEdit(entry: TimeEntry) {
     workDate: entry.work_date,
     workCompleted: entry.work_completed ?? '',
     serviceVehicle: entry.service_vehicle ?? '',
-    hours: String(entry.hours),
+    hours: entry.hours === null ? '' : String(entry.hours),
+    feet: entry.feet === null ? '' : String(entry.feet),
+    laterals: entry.laterals === null ? '' : String(entry.laterals),
     notes: entry.notes ?? '',
   });
 }
@@ -498,6 +502,8 @@ function cancelInlineTimeEdit() {
     workCompleted: '',
     serviceVehicle: '',
     hours: '',
+    feet: '',
+    laterals: '',
     notes: '',
   });
 }

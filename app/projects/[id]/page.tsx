@@ -122,14 +122,16 @@ const [inlineTimeForm, setInlineTimeForm] = useState<TimeForm>({
       const { data, error } = await supabase
         .from('projects')
         .select(`
-          id,
-          project_number,
-          status,
-          progress,
-          service_start_date,
-          project_location,
-          notes,
-          customers (
+  id,
+  project_number,
+  status,
+  progress,
+  service_start_date,
+  project_location,
+  pricing_type,
+  notes,
+  customers (
+
             name,
             address,
             phone,

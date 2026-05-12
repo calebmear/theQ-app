@@ -75,6 +75,10 @@ const [projects, setProjects] = useState<Project[]>([]);
     notes: '',
   });
 
+  const [operationsView, setOperationsView] = useState<
+  'projects' | 'customers' | null
+>(null);
+
   useEffect(() => {
     async function loadEmployees() {
       const { data, error } = await supabase
@@ -371,11 +375,37 @@ notes,
   
   return (
     <div className="space-y-6 text-black">
-      <div className="flex flex-col items-center gap-3 border-b border-gray-200 pb-4 text-center md:flex-row md:items-end md:justify-between md:text-left">
+      <div className="border-b border-gray-200 pb-4">
+  <div className="flex justify-center md:justify-start">
+    <div className="inline-flex rounded-lg border bg-white p-1 shadow-sm">
+      <button
+        type="button"
+        onClick={() => setOperationsView('projects')}
+        className={`rounded-md px-4 py-2 text-sm font-medium ${
+          operationsView === 'projects'
+            ? 'bg-black text-white'
+            : 'text-gray-600 hover:bg-gray-50'
+        }`}
+      >
+        Projects
+      </button>
 
- 
+      <button
+        type="button"
+        onClick={() => setOperationsView('customers')}
+        className={`rounded-md px-4 py-2 text-sm font-medium ${
+          operationsView === 'customers'
+            ? 'bg-black text-white'
+            : 'text-gray-600 hover:bg-gray-50'
+        }`}
+      >
+        Customers
+      </button>
+    </div>
+  </div>
 
-  <div className="flex flex-wrap justify-center gap-2 md:justify-start">
+  <div className="mt-4 flex flex-wrap justify-center gap-2 md:justify-start">
+  {operationsView === 'customers' && (
     <button
       type="button"
       onClick={() => setShowCustomerForm(true)}
@@ -383,7 +413,9 @@ notes,
     >
       + Add Customer
     </button>
+  )}
 
+  {operationsView === 'projects' && (
     <button
       type="button"
       onClick={() => setShowProjectForm(true)}
@@ -391,8 +423,10 @@ notes,
     >
       + Add Project
     </button>
-  </div>
+  )}
 </div>
+</div>
+
 
 {showCustomerResults && (
   <div className="rounded-2xl bg-white p-4 shadow md:p-6">
@@ -432,7 +466,8 @@ notes,
 )}
 
       
-
+{operationsView === 'projects' && (
+  <>
 {showActiveProjects && (
   <div className="rounded-2xl bg-white p-4 shadow md:p-6">
     <h2 className="text-xl font-bold">Active Projects</h2>
@@ -597,7 +632,44 @@ notes,
     </div>
   </div>
 )}
+</>
+)}
 
+{operationsView === 'customers' && (
+  <div className="rounded-2xl bg-white p-4 shadow md:p-6">
+    <h2 className="text-xl font-bold">Customers</h2>
+
+    <div className="mt-4 space-y-3">
+      {customers.map((customer) => (
+        <div
+          key={customer.id}
+          className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
+        >
+          <div>
+            <h3 className="font-bold">{customer.name}</h3>
+            <p className="text-sm text-gray-600">
+              {customer.contactName} • {customer.phone}
+            </p>
+            <p className="text-sm text-gray-600">{customer.email}</p>
+          </div>
+
+          <Link
+            href={`/customers/${customer.id}`}
+            className="rounded-lg border px-4 py-2 text-center text-sm font-medium hover:bg-gray-50"
+          >
+            Open Profile
+          </Link>
+        </div>
+      ))}
+
+      {customers.length === 0 && (
+        <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+          No customers found.
+        </div>
+      )}
+    </div>
+  </div>
+)}
 
       {showCustomerForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

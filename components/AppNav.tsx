@@ -7,29 +7,37 @@ export default function AppNav() {
   const pathname = usePathname();
 
   const navClass = (active: boolean) =>
-  `border-l-4 px-3 py-2 font-medium ${
+  `relative flex h-10 items-center justify-center whitespace-nowrap rounded-t-lg border-l-4 px-2 text-sm font-medium md:justify-start md:rounded-none md:px-3 ${
     active
-      ? 'relative top-px rounded-b-none rounded-t-lg border-[#009be5] bg-gray-100 font-bold text-[#009be5] shadow-none md:top-0 md:-mr-4 md:rounded-none'
-      : 'rounded-lg border-transparent text-gray-700 hover:bg-gray-100'
+      ? 'border-[#009be5] bg-[#eaf7fe] font-bold text-[#009be5] after:absolute after:bottom-[-16px] after:left-0 after:right-0 after:h-4after:bg-[#eaf7fe] md:bg-gray-100 md:after:hidden'
+      : 'border-transparent text-gray-700 hover:bg-gray-100'
   }`;
 
   return (
-    <nav className="-mb-4 mt-6 flex w-full justify-center gap-2 border-b border-gray-100 md:mb-0 md:flex-col md:justify-start md:border-b-0">
-
+<nav className="mt-2 grid grid-cols-4 gap-1 md:mt-3 md:-mr-4 md:flex md:flex-col md:gap-0">
 
       <Link href="/" className={navClass(pathname === '/')}>
         Dashboard
       </Link>
 
-      <Link href="/mywork" className={navClass(pathname.startsWith('/mywork'))}>
-        MyWork
+      <Link
+        href="/dashboard"
+        className={navClass(pathname.startsWith('/dashboard'))}
+      >
+        Active Work
       </Link>
 
-      <Link href="/projects" className={navClass(pathname.startsWith('/projects'))}>
+      <Link
+        href="/projects"
+        className={navClass(pathname.startsWith('/projects'))}
+      >
         Projects
       </Link>
 
-      <Link href="/customers" className={navClass(pathname.startsWith('/customers'))}>
+      <Link
+        href="/customers"
+        className={navClass(pathname.startsWith('/customers'))}
+      >
         Customers
       </Link>
     </nav>

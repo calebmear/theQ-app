@@ -33,6 +33,7 @@ export default function CustomerDetailPage({
 }) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectView, setProjectView] = useState<'active' | 'completed'>('active');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -108,6 +109,18 @@ export default function CustomerDetailPage({
     return <div className="text-black">Loading customer...</div>;
   }
 
+  const activeProjects = projects.filter((project) =>
+  ['Active', 'Scheduled'].includes(project.status)
+);
+
+const completedProjects = projects.filter(
+  (project) => project.status === 'Completed'
+);
+
+const visibleProjects =
+  projectView === 'active' ? activeProjects : completedProjects;
+
+
   if (!customer) {
     return <div className="text-black">Customer not found.</div>;
   }
@@ -151,31 +164,40 @@ export default function CustomerDetailPage({
       </div>
     </div>
 
-<div className="border-t pt-3 text-sm md:border-t-0 md:border-l md:pl-4 md:pt-0">
-  <p className="text-xs font-medium uppercase text-gray-500">Pricing Models</p>
+    <div className="space-y-4 border-t pt-4 text-sm md:border-l md:border-t-0 md:pl-4 md:pt-0">
+    <div>
+      <p className="text-xs font-medium uppercase text-gray-500">
+        Pricing Models
+      </p>
 
-
-      <div className="mt-2 space-y-1">
       <div className="mt-2 grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
-  <span className="font-semibold">MAIN</span>
-  <span className="text-gray-600">
-    {customer.mainPricingType || 'Not set'}
-  </span>
+        <span className="font-semibold">MAIN</span>
+        <span className="text-gray-600">
+          {customer.mainPricingType || 'Not set'}
+        </span>
 
-  <span className="font-semibold">LAT</span>
-  <span className="text-gray-600">
-    {customer.lateralPricingType || 'Not set'}
-  </span>
+        <span className="font-semibold">LAT</span>
+        <span className="text-gray-600">
+          {customer.lateralPricingType || 'Not set'}
+        </span>
 
-  <span className="font-semibold">JET</span>
-  <span className="text-gray-600">
-    {customer.jetPricingType || 'Not set'}
-  </span>
-</div>
-</div>
+        <span className="font-semibold">JET</span>
+        <span className="text-gray-600">
+          {customer.jetPricingType || 'Not set'}
+        </span>
+      </div>
+    </div>
 
+    <div className="border-t pt-4">
+      <p className="text-xs font-medium uppercase text-gray-500">
+        Customer Notes
+      </p>
+      <p className="mt-1 text-sm text-gray-700">
+        {customer.notes || 'No notes saved'}
+      </p>
     </div>
   </div>
+</div>
 
   {customer.notes && (
     <div className="border-t pt-4">
@@ -190,42 +212,77 @@ export default function CustomerDetailPage({
 
 
 
-      <div className="rounded-2xl bg-white p-6 shadow">
-        <h2 className="text-xl font-bold">Customer Projects</h2>
+<div className="rounded-2xl bg-white p-6 shadow">
+<div>
+  <h2 className="text-xl font-bold">Customer Project History</h2>
 
-        <div className="mt-4 space-y-3">
-          {projects.map((project) => (
-            <Link
-              key={project.id}
-              href={`/projects/${encodeURIComponent(project.project_number)}`}
-              className="block rounded-xl border p-4 hover:bg-gray-50"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold">{project.project_number}</p>
-                  <p className="mt-1 text-sm text-gray-600">
-                    {project.project_location || 'No project location saved'}
-                  </p>
-                </div>
+  <div className="mt-3 flex justify-center">
+    <div className="inline-flex w-fit rounded-lg border bg-white p-1 shadow-sm">
 
-                <span className="rounded-full border px-2 py-1 text-xs font-medium text-gray-600">
-                  {project.status}
-                </span>
-              </div>
+      <button
+        type="button"
+        onClick={() => setProjectView('active')}
+        className={`w-28 rounded-md px-4 py-2 text-sm font-medium ${
+          projectView === 'active'
+            ? 'bg-black text-white'
+            : 'text-gray-600 hover:bg-gray-50'
+        }`}
+      >
+        Active
+      </button>
 
-              <p className="mt-3 text-sm text-gray-600">
-                Service start: {formatDate(project.service_start_date)}
-              </p>
-            </Link>
-          ))}
+      <button
+        type="button"
+        onClick={() => setProjectView('completed')}
+        className={`rounded-md px-4 py-2 text-sm font-medium ${
+          projectView === 'completed'
+            ? 'bg-black text-white'
+            : 'text-gray-600 hover:bg-gray-50'
+        }`}
+      >
+        Completed
+      </button>
+    </div>
+  </div>
+  </div>
 
-          {projects.length === 0 && (
-            <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-              No projects found for this customer.
-            </div>
-          )}
+  <div className="mt-4 space-y-3">
+    {visibleProjects.map((project) => (
+      <Link
+        key={project.id}
+        href={`/projects/${encodeURIComponent(project.project_number)}`}
+        className="block rounded-xl border p-4 hover:bg-gray-50"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold">{project.project_number}</p>
+            <p className="mt-1 text-sm text-gray-600">
+              {project.project_location || 'No project location saved'}
+            </p>
+          </div>
+
+          <span className="rounded-full border px-2 py-1 text-xs font-medium text-gray-600">
+            {project.status}
+          </span>
         </div>
+
+        <p className="mt-3 text-sm text-gray-600">
+  {projectView === 'active' ? 'Last service' : 'Service completed'}:{' '}
+  {formatDate(project.service_start_date)}
+</p>
+      </Link>
+    ))}
+
+    {visibleProjects.length === 0 && (
+      <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
+        {projectView === 'active'
+          ? 'No active projects found for this customer.'
+          : 'No completed projects found for this customer.'}
       </div>
+    )}
+  </div>
+</div>
+
     </div>
   );
 }

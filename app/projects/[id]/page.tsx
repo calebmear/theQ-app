@@ -658,6 +658,11 @@ async function saveProjectEdit() {
   return (
     <div className="space-y-6 text-black">
       <div className="text-sm text-gray-500">
+  <Link href="/operations" className="hover:text-black hover:underline">
+    Operations
+  </Link>
+  <span className="mx-2">/</span>
+
   <Link href="/projects" className="hover:text-black hover:underline">
     Projects
   </Link>

@@ -1,11 +1,11 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { supabase } from '../lib/supabaseClient';
 
-type CustomerResult = {
+type SearchCustomer = {
   id: string;
   name: string;
   contact_name: string | null;
@@ -14,220 +14,171 @@ type CustomerResult = {
   address: string | null;
 };
 
-type ProjectResult = {
+type SearchProject = {
   id: string;
   project_number: string;
   status: string | null;
   project_location: string | null;
-  pricing_type: string | null;
-  customer_id: string | null;
-  customers:
-    | {
-        name: string | null;
-      }
-    | {
-        name: string | null;
-      }[]
-    | null;
+  customers: { name: string } | { name: string }[] | null;
 };
 
 export default function AppSearch() {
-  const router = useRouter();
-
-  const [search, setSearch] = useState('');
-  const [showResults, setShowResults] = useState(false);
-  const [customers, setCustomers] = useState<CustomerResult[]>([]);
-  const [projects, setProjects] = useState<ProjectResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [searchValue, setSearchValue] = useState('');
+  const [searchCustomers, setSearchCustomers] = useState<SearchCustomer[]>([]);
+  const [searchProjects, setSearchProjects] = useState<SearchProject[]>([]);
+  const [showSearchModal, setShowSearchModal] = useState(false);
 
   useEffect(() => {
-    async function loadResults() {
-      const term = search.trim();
+    async function runSearch() {
+      const value = searchValue.trim();
 
-      if (term.length < 2) {
-        setCustomers([]);
-        setProjects([]);
-        setSearching(false);
+      if (value.length < 2) {
+        setSearchCustomers([]);
+        setSearchProjects([]);
+        setShowSearchModal(false);
         return;
       }
 
-      setSearching(true);
-
-      const customerSearch = supabase
-        .from('customers')
-        .select('id, name, contact_name, phone, email, address')
-        .or(
-          `name.ilike.%${term}%,contact_name.ilike.%${term}%,phone.ilike.%${term}%,email.ilike.%${term}%,address.ilike.%${term}%`
-        )
-        .limit(6);
-
-      const projectSearch = supabase
-        .from('projects')
-        .select(
-          `
-          id,
-          project_number,
-          status,
-          project_location,
-          pricing_type,
-          customer_id,
-          customers (
-            name
+      const [customerResult, projectResult] = await Promise.all([
+        supabase
+          .from('customers')
+          .select('id, name, contact_name, phone, email, address')
+          .or(
+            `name.ilike.%${value}%,contact_name.ilike.%${value}%,phone.ilike.%${value}%,email.ilike.%${value}%,address.ilike.%${value}%`
           )
-        `
-        )
-        .or(
-          `project_number.ilike.%${term}%,project_location.ilike.%${term}%,status.ilike.%${term}%,pricing_type.ilike.%${term}%`
-        )
-        .limit(8);
+          .limit(5),
 
-      const [customerResponse, projectResponse] = await Promise.all([
-        customerSearch,
-        projectSearch,
+        supabase
+          .from('projects')
+          .select(`
+            id,
+            project_number,
+            status,
+            project_location,
+            customers (
+              name
+            )
+          `)
+          .or(
+            `project_number.ilike.%${value}%,status.ilike.%${value}%,project_location.ilike.%${value}%`
+          )
+          .limit(5),
       ]);
 
-      if (customerResponse.error) {
-        console.error('Error searching customers:', customerResponse.error);
+      if (customerResult.error) {
+        console.error('Customer search error:', customerResult.error);
       }
 
-      if (projectResponse.error) {
-        console.error('Error searching projects:', projectResponse.error);
+      if (projectResult.error) {
+        console.error('Project search error:', projectResult.error);
       }
 
-      const customerMatches = customerResponse.data ?? [];
-      let projectMatches = projectResponse.data ?? [];
-
-      
-
-      setCustomers(customerMatches);
-      setProjects(projectMatches);
-      setSearching(false);
+      setSearchCustomers(customerResult.data ?? []);
+      setSearchProjects(projectResult.data ?? []);
+      setShowSearchModal(true);
     }
 
-    const timeout = window.setTimeout(loadResults, 250);
+    const timeout = window.setTimeout(runSearch, 250);
 
     return () => window.clearTimeout(timeout);
-  }, [search]);
+  }, [searchValue]);
 
-  function openProject(projectNumber: string) {
-    setSearch('');
-    setShowResults(false);
-    router.push(`/projects/${encodeURIComponent(projectNumber)}`);
+  function closeSearch() {
+    setShowSearchModal(false);
+    setSearchValue('');
   }
-
-  function openCustomer(customerId: string) {
-    setSearch('');
-    setShowResults(false);
-    router.push(`/customers/${customerId}`);
-  }
-
-  function customerNameForProject(project: ProjectResult) {
-    const customer = Array.isArray(project.customers)
-      ? project.customers[0]
-      : project.customers;
-
-    return customer?.name ?? 'No customer saved';
-  }
-
-  const hasResults = customers.length > 0 || projects.length > 0;
 
   return (
     <div className="relative min-w-0 flex-1 md:mt-4 md:w-full">
       <input
         type="text"
-        placeholder="Search THEQ..."
-        value={search}
-        onChange={(e) => {
-          setSearch(e.target.value);
-          setShowResults(true);
+        placeholder="Search projects, customers, addresses..."
+        value={searchValue}
+        onChange={(e) => setSearchValue(e.target.value)}
+        onFocus={() => {
+          if (searchValue.trim().length >= 2) {
+            setShowSearchModal(true);
+          }
         }}
-        onFocus={() => setShowResults(true)}
         className="w-full rounded-lg border px-3 py-2 text-sm"
       />
 
-      {showResults && search.trim().length >= 2 && (
-        <div className="absolute left-0 right-0 z-50 mt-2 max-h-[70vh] overflow-auto rounded-xl border bg-white shadow-xl">
-          <div className="border-b px-4 py-3">
-            <p className="text-sm font-semibold">Search Results</p>
-            <p className="text-xs text-gray-500">
-              Projects and customers matching "{search.trim()}"
-            </p>
-          </div>
+{showSearchModal && (
+  <div className="absolute left-0 right-0 top-full z-50 mt-2 rounded-xl border bg-white p-3 text-black shadow-xl">
+    <div className="space-y-4">
+      {searchProjects.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase text-gray-500">
+            Projects
+          </p>
 
-          {searching && (
-            <div className="px-4 py-3 text-sm text-gray-500">Searching...</div>
-          )}
+          <div className="mt-2 space-y-1">
+            {searchProjects.map((project) => {
+              const customer = Array.isArray(project.customers)
+                ? project.customers[0]
+                : project.customers;
 
-          {!searching && !hasResults && (
-            <div className="px-4 py-3 text-sm text-gray-500">
-              No results found.
-            </div>
-          )}
-
-          {!searching && projects.length > 0 && (
-            <div className="py-2">
-              <p className="px-4 py-2 text-xs font-semibold uppercase text-gray-500">
-                Projects
-              </p>
-
-              {projects.map((project) => (
-                <button
+              return (
+                <Link
                   key={project.id}
-                  type="button"
-                  onClick={() => openProject(project.project_number)}
-                  className="w-full border-t px-4 py-3 text-left hover:bg-gray-50"
+                  href={`/projects/${encodeURIComponent(
+                    project.project_number
+                  )}`}
+                  onClick={closeSearch}
+                  className="block rounded-lg p-2 hover:bg-gray-50"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold">{project.project_number}</p>
-                      <p className="text-sm text-gray-600">
-                        {customerNameForProject(project)}
-                      </p>
-                      {project.project_location && (
-                        <p className="text-xs text-gray-500">
-                          {project.project_location}
-                        </p>
-                      )}
-                    </div>
+                  <p className="font-semibold">{project.project_number}</p>
 
-                    {project.status && (
-                      <span className="rounded-full border px-2 py-1 text-xs font-medium text-gray-600">
-                        {project.status}
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
-
-          {!searching && customers.length > 0 && (
-            <div className="border-t py-2">
-              <p className="px-4 py-2 text-xs font-semibold uppercase text-gray-500">
-                Customers
-              </p>
-
-              {customers.map((customer) => (
-                <button
-                  key={customer.id}
-                  type="button"
-                  onClick={() => openCustomer(customer.id)}
-                  className="w-full border-t px-4 py-3 text-left hover:bg-gray-50"
-                >
-                  <p className="font-semibold">{customer.name}</p>
-                  <p className="text-sm text-gray-600">
-                    {customer.contact_name || 'No contact saved'}
-                    {customer.phone ? ` • ${customer.phone}` : ''}
-                  </p>
-                  {customer.email && (
-                    <p className="text-xs text-gray-500">{customer.email}</p>
+                  {(customer?.name || project.status) && (
+                    <p className="text-xs text-gray-500">
+                      {[customer?.name, project.status]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
                   )}
-                </button>
-              ))}
-            </div>
-          )}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       )}
+
+      {searchCustomers.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase text-gray-500">
+            Customers
+          </p>
+
+          <div className="mt-2 space-y-1">
+            {searchCustomers.map((customer) => (
+              <Link
+                key={customer.id}
+                href={`/customers/${customer.id}`}
+                onClick={closeSearch}
+                className="block rounded-lg p-2 hover:bg-gray-50"
+              >
+                <p className="font-semibold">{customer.name}</p>
+
+                {(customer.contact_name || customer.phone) && (
+                  <p className="text-xs text-gray-500">
+                    {[customer.contact_name, customer.phone]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                )}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {searchProjects.length === 0 && searchCustomers.length === 0 && (
+        <p className="p-2 text-sm text-gray-500">No results found.</p>
+      )}
+    </div>
+  </div>
+)}
+
     </div>
   );
 }

@@ -80,8 +80,10 @@ export default function CustomersPage() {
   async function loadCustomers() {
     const { data, error } = await supabase
       .from('customers')
-      .select('id, name, contact_name, phone, email, address, pricing_models, notes')
-      .order('name');
+      .select(
+        'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type'
+      )
+            .order('name');
 
     if (error) {
       console.error('Error loading customers:', error);
@@ -98,9 +100,11 @@ export default function CustomersPage() {
       address: customer.address ?? '',
       notes: customer.notes ?? '',
       pricingModels: {
-        ...emptyPricingModels,
-        ...(customer.pricing_models ?? {}),
+        MAIN: customer.main_pricing_type ?? '',
+        LAT: customer.lateral_pricing_type ?? '',
+        JET: customer.jet_pricing_type ?? '',
       },
+      
     }));
 
     setCustomers(formattedCustomers);
@@ -136,7 +140,9 @@ export default function CustomersPage() {
         email: newCustomer.email,
         address: newCustomer.address,
         notes: newCustomer.notes,
-        pricing_models: newCustomer.pricingModels,
+        main_pricing_type: newCustomer.pricingModels.MAIN,
+lateral_pricing_type: newCustomer.pricingModels.LAT,
+jet_pricing_type: newCustomer.pricingModels.JET,
       })
       .select()
       .single();
@@ -156,8 +162,9 @@ export default function CustomersPage() {
       address: data.address ?? '',
       notes: data.notes ?? '',
       pricingModels: {
-        ...emptyPricingModels,
-        ...(data.pricing_models ?? {}),
+        MAIN: data.main_pricing_type ?? '',
+        LAT: data.lateral_pricing_type ?? '',
+        JET: data.jet_pricing_type ?? '',
       },
     };
 
@@ -227,11 +234,12 @@ export default function CustomersPage() {
       </div>
 
       {showCustomerForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
+        <div className="flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
+      
             <h2 className="text-2xl font-bold">Add Customer</h2>
 
-            <div className="mt-4 grid gap-4">
+            <div className="mt-4 grid flex-1 gap-4 overflow-y-auto pr-1">
               <input
                 type="text"
                 placeholder="Customer name"

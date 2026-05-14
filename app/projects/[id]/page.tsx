@@ -681,7 +681,12 @@ async function saveProjectEdit() {
     .update({
       project_number: projectEditForm.projectNumber,
       project_location: projectEditForm.projectLocation,
-      service_start_date: projectEditForm.serviceStartDate,
+      ...(timeEntries.length === 0 && {
+        service_start_date:
+  timeEntries.length === 0
+    ? projectEditForm.serviceStartDate
+    : project.service_start_date,
+      }),
       pricing_type: projectEditForm.pricingType,
       assigned_to: projectEditForm.assignedToId || null,
     })
@@ -866,24 +871,25 @@ async function saveProjectEdit() {
     <div>
       <p className="text-sm text-gray-500">Service Start Date</p>
 
-      {editingProject ? (
-        <input
-          type="date"
-          value={projectEditForm.serviceStartDate}
-          onChange={(e) =>
-            setProjectEditForm({
-              ...projectEditForm,
-              serviceStartDate: e.target.value,
-            })
-          }
-          className="mt-1 w-full rounded-lg border p-2"
-        />
-      ) : (
-        <p className="mt-1 font-semibold">
-          {serviceStartDate}
-          {timeEntries.length === 0 ? ' (Est.)' : ''}
-        </p>
-      )}
+      {editingProject && timeEntries.length === 0 ? (
+  <input
+    type="date"
+    value={projectEditForm.serviceStartDate}
+    onChange={(e) =>
+      setProjectEditForm({
+        ...projectEditForm,
+        serviceStartDate: e.target.value,
+      })
+    }
+    className="mt-1 w-full rounded-lg border p-2"
+  />
+) : (
+  <p className="mt-1 font-semibold">
+    {serviceStartDate || 'No date saved'}
+    {timeEntries.length === 0 ? ' (Est.)' : ''}
+  </p>
+)}
+
     </div>
 
     <div className="flex justify-end">

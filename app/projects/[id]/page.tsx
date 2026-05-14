@@ -24,6 +24,9 @@ type ProjectDetail = {
     main_pricing_type: string | null;
     lateral_pricing_type: string | null;
     jet_pricing_type: string | null;
+    dye_pricing_type: string | null;
+    smoke_pricing_type: string | null;
+    traffic_control_pricing_type: string | null;
   } | null;
   employees: {
   
@@ -114,6 +117,10 @@ const [projectNotes, setProjectNotes] = useState<ProjectNote[]>([]);
 const [newProjectNote, setNewProjectNote] = useState('');
 
 const [showServiceSubmission, setShowServiceSubmission] = useState(false);
+const [showServiceLog, setShowServiceLog] = useState(true);
+const [showNotes, setShowNotes] = useState(true);
+
+
 
 const [expandedTimeEntryId, setExpandedTimeEntryId] = useState<string | null>(
   null
@@ -185,8 +192,11 @@ const isFootLateralProject = project?.pricing_type === 'Per Foot / Lateral';
     phone,
     email,
     main_pricing_type,
-  lateral_pricing_type,
-  jet_pricing_type
+    lateral_pricing_type,
+    jet_pricing_type,
+    dye_pricing_type,
+    smoke_pricing_type,
+    traffic_control_pricing_type
   ),
           employees (
             name
@@ -682,10 +692,7 @@ async function saveProjectEdit() {
       project_number: projectEditForm.projectNumber,
       project_location: projectEditForm.projectLocation,
       ...(timeEntries.length === 0 && {
-        service_start_date:
-  timeEntries.length === 0
-    ? projectEditForm.serviceStartDate
-    : project.service_start_date,
+        service_start_date: projectEditForm.serviceStartDate,
       }),
       pricing_type: projectEditForm.pricingType,
       assigned_to: projectEditForm.assignedToId || null,
@@ -701,7 +708,10 @@ async function saveProjectEdit() {
     ...project,
     project_number: projectEditForm.projectNumber,
     project_location: projectEditForm.projectLocation,
-    service_start_date: projectEditForm.serviceStartDate,
+    service_start_date:
+  timeEntries.length === 0
+    ? projectEditForm.serviceStartDate
+    : project.service_start_date,
     pricing_type: projectEditForm.pricingType,
     assigned_to: projectEditForm.assignedToId || null,
     employees: assignedEmployee ? { name: assignedEmployee.name } : null,
@@ -739,7 +749,8 @@ async function saveProjectEdit() {
 <div className="border-b pb-3">
 <div className="flex items-start justify-between gap-3">
   <div className="min-w-0">
-    <p className="text-sm text-gray-500">Project ID / PO Number</p>
+  <p className="text-xs font-medium uppercase text-gray-500">Project ID / PO Number</p>
+
 
     {editingProject ? (
       <input
@@ -816,7 +827,7 @@ async function saveProjectEdit() {
  
 <div className="my-4 border-t" />
 <div className="mt-3">
-  <p className="text-sm text-gray-500">Location</p>
+<p className="text-xs font-medium uppercase text-gray-500">Location</p>
 
   {editingProject ? (
     <input
@@ -839,7 +850,7 @@ async function saveProjectEdit() {
 </div>
 <div className="mt-4 grid gap-3 text-sm">
   <div>
-    <p className="text-sm text-gray-500">Assigned To</p>
+  <p className="text-xs font-medium uppercase text-gray-500">Assigned To</p>
 
     {editingProject ? (
       <select
@@ -869,7 +880,7 @@ async function saveProjectEdit() {
 
   <div className="grid grid-cols-2 gap-3">
     <div>
-      <p className="text-sm text-gray-500">Service Start Date</p>
+    <p className="text-xs font-medium uppercase text-gray-500">Service Start Date</p>
 
       {editingProject && timeEntries.length === 0 ? (
   <input
@@ -894,7 +905,7 @@ async function saveProjectEdit() {
 
     <div className="flex justify-end">
   <div className="text-left">
-  <p className="text-sm text-gray-500">
+  <p className="text-xs font-medium uppercase text-gray-500">
   {project.status === 'Completed' ? 'Completion Date' : 'Latest Service Date'}
 </p>
     <p className="mt-1 font-semibold">
@@ -924,7 +935,7 @@ async function saveProjectEdit() {
 
 
 <div className="py-3">
-  <p className="text-sm text-gray-500">Customer Info</p>
+<p className="text-xs font-medium uppercase text-gray-500">Customer Info</p>
 
   {project.customers?.id ? (
     <Link
@@ -943,25 +954,45 @@ async function saveProjectEdit() {
   </p>
 
   <div className="mt-4 border-t pt-4">
-  <p className="text-sm text-gray-500">Customer Pricing Models</p>
+  <p className="text-xs font-medium uppercase text-gray-500">Customer Billing Methods</p>
 
 
-    <div className="mt-2 grid grid-cols-[56px_1fr] gap-x-4 gap-y-1 text-sm">
-      <span className="font-semibold">MAIN</span>
-      <span className="text-gray-600">
+  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+  <div className="grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
+    <span className="font-semibold">MAIN</span>
+    <span className="text-gray-600">
       {project.customers?.main_pricing_type || 'Not set'}
-      </span>
+    </span>
 
-      <span className="font-semibold">LAT</span>
-      <span className="text-gray-600">
+    <span className="font-semibold">LAT</span>
+    <span className="text-gray-600">
       {project.customers?.lateral_pricing_type || 'Not set'}
-      </span>
+    </span>
 
-      <span className="font-semibold">JET</span>
-      <span className="text-gray-600">
+    <span className="font-semibold">JET</span>
+    <span className="text-gray-600">
       {project.customers?.jet_pricing_type || 'Not set'}
-      </span>
-    </div>
+    </span>
+  </div>
+
+  <div className="grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
+    <span className="font-semibold">DYE</span>
+    <span className="text-gray-600">
+      {project.customers?.dye_pricing_type || 'Not set'}
+    </span>
+
+    <span className="font-semibold">SMK</span>
+    <span className="text-gray-600">
+      {project.customers?.smoke_pricing_type || 'Not set'}
+    </span>
+
+    <span className="font-semibold">TRFC</span>
+    <span className="text-gray-600">
+      {project.customers?.traffic_control_pricing_type || 'Not set'}
+    </span>
+  </div>
+</div>
+
   </div>
 </div>
 
@@ -1169,22 +1200,40 @@ async function saveProjectEdit() {
           </div>
 
           <div className="rounded-2xl bg-white p-6 shadow">
-          <div className="flex items-center justify-between gap-3">
-  <h2 className="text-xl font-bold">Service Log</h2>
-
   <button
     type="button"
-    onClick={() => {
-      setManagingTimeEntries(!managingTimeEntries);
-      setInlineEditingTimeEntryId(null);
-    }}
-    className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+    onClick={() => setShowServiceLog(!showServiceLog)}
+    className="flex w-full items-center justify-between gap-4 text-left"
   >
-    {managingTimeEntries ? 'Done' : 'Manage Entries'}
-  </button>
-</div>
+    <div>
+      <h2 className="text-xl font-bold">Service Log</h2>
+      <p className="mt-1 text-sm text-gray-600">
+        View submitted service entries.
+      </p>
+    </div>
 
-<div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
+    <span className="text-2xl leading-none text-gray-500">
+      {showServiceLog ? '⌄' : '›'}
+    </span>
+  </button>
+
+  {showServiceLog && (
+    <>
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setManagingTimeEntries(!managingTimeEntries);
+            setInlineEditingTimeEntryId(null);
+          }}
+          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+        >
+          {managingTimeEntries ? 'Done' : 'Manage Entries'}
+        </button>
+      </div>
+
+      <div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
+
   {timeEntries.map((entry) => {
     const isEditing = inlineEditingTimeEntryId === entry.id;
 
@@ -1414,35 +1463,55 @@ async function saveProjectEdit() {
     );
   })}
 
-  {timeEntries.length === 0 && (
+{timeEntries.length === 0 && (
     <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
       No time entries submitted yet.
     </div>
+  )}
+      </div>
+    </>
   )}
 </div>
 
 
 
-          </div>
+    
 
-          <div className="rounded-2xl bg-white p-6 shadow">
-          <div className="flex items-center justify-between gap-3">
-  <h2 className="text-xl font-bold">Notes</h2>
-
+<div className="rounded-2xl bg-white p-6 shadow">
   <button
     type="button"
-    onClick={() => {
-      setManagingProjectNotes(!managingProjectNotes);
-      setEditingProjectNoteId(null);
-    }}
-    className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+    onClick={() => setShowNotes(!showNotes)}
+    className="flex w-full items-center justify-between gap-4 text-left"
   >
-    {managingProjectNotes ? 'Done' : 'Manage Notes'}
+    <div>
+      <h2 className="text-xl font-bold">Notes</h2>
+      <p className="mt-1 text-sm text-gray-600">
+        View project and service notes.
+      </p>
+    </div>
+
+    <span className="text-2xl leading-none text-gray-500">
+      {showNotes ? '⌄' : '›'}
+    </span>
   </button>
-</div>
 
+  {showNotes && (
+    <>
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setManagingProjectNotes(!managingProjectNotes);
+            setEditingProjectNoteId(null);
+          }}
+          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+        >
+          {managingProjectNotes ? 'Done' : 'Manage Notes'}
+        </button>
+      </div>
 
-<div className="mt-4 flex gap-2">
+      <div className="mt-4 flex gap-2">
+
   <input
     type="text"
     value={newProjectNote}
@@ -1613,8 +1682,9 @@ async function saveProjectEdit() {
       )}
     </div>
   </div>
-</div>
-
+  </div>
+    </>
+  )}
 </div>
 
         </div>

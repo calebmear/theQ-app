@@ -284,7 +284,7 @@ jet_pricing_type: newCustomer.pricingModels.JET,
               />
 
               <div className="rounded-lg border p-3">
-                <p className="text-sm font-medium">Pricing Models</p>
+                <p className="text-sm font-medium">Billing Methods</p>
 
                 <div className="mt-3 grid gap-3">
                   {pricingModelOptions.map((option) => (

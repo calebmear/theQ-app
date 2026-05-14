@@ -16,6 +16,10 @@ type Customer = {
   mainPricingType: string;
   lateralPricingType: string;
   jetPricingType: string;
+  dyePricingType: string;
+smokePricingType: string;
+trafficControlPricingType: string;
+
 };
 
 type Project = {
@@ -30,6 +34,10 @@ const pricingOptions = {
   mainPricingType: ['Per Hour', 'Per Foot'],
   lateralPricingType: ['Per Hour', 'Per Lateral'],
   jetPricingType: ['Per Hour', 'Per Foot'],
+  dyePricingType: ['Per Hour'],
+  smokePricingType: ['Per Hour', 'Per Mainline Test','Per Residence'],
+  trafficControlPricingType: ['Flat Rate'],
+
 };
 
 export default function CustomerDetailPage({
@@ -51,6 +59,10 @@ export default function CustomerDetailPage({
     mainPricingType: '',
     lateralPricingType: '',
     jetPricingType: '',
+    dyePricingType: '',
+    smokePricingType: '',
+    trafficControlPricingType: '',
+
   });
 
   useEffect(() => {
@@ -58,8 +70,9 @@ export default function CustomerDetailPage({
       const { data, error } = await supabase
         .from('customers')
         .select(
-          'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type'
-        )
+          'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, dye_pricing_type, smoke_pricing_type, traffic_control_pricing_type'
+
+          )
         
         .eq('id', params.id)
         .single();
@@ -81,6 +94,11 @@ export default function CustomerDetailPage({
         mainPricingType: data.main_pricing_type ?? '',
 lateralPricingType: data.lateral_pricing_type ?? '',
 jetPricingType: data.jet_pricing_type ?? '',
+dyePricingType: data.dye_pricing_type ?? '',
+smokePricingType: data.smoke_pricing_type ?? '',
+trafficControlPricingType: data.traffic_control_pricing_type ?? '',
+
+
 
       });
 
@@ -135,6 +153,11 @@ jetPricingType: data.jet_pricing_type ?? '',
       mainPricingType: customer.mainPricingType,
       lateralPricingType: customer.lateralPricingType,
       jetPricingType: customer.jetPricingType,
+      dyePricingType: customer.dyePricingType,
+smokePricingType: customer.smokePricingType,
+trafficControlPricingType: customer.trafficControlPricingType,
+
+
     });
 
     setEditingCustomer(true);
@@ -150,7 +173,11 @@ jetPricingType: data.jet_pricing_type ?? '',
     const pricingChanged =
   customerEditForm.mainPricingType !== customer.mainPricingType ||
   customerEditForm.lateralPricingType !== customer.lateralPricingType ||
-  customerEditForm.jetPricingType !== customer.jetPricingType;
+  customerEditForm.jetPricingType !== customer.jetPricingType ||
+  customerEditForm.dyePricingType !== customer.dyePricingType ||
+  customerEditForm.smokePricingType !== customer.smokePricingType ||
+  customerEditForm.trafficControlPricingType !==
+    customer.trafficControlPricingType;
 
     const { error } = await supabase
       .from('customers')
@@ -163,6 +190,11 @@ jetPricingType: data.jet_pricing_type ?? '',
         main_pricing_type: customerEditForm.mainPricingType,
         lateral_pricing_type: customerEditForm.lateralPricingType,
         jet_pricing_type: customerEditForm.jetPricingType,
+        dye_pricing_type: customerEditForm.dyePricingType,
+smoke_pricing_type: customerEditForm.smokePricingType,
+traffic_control_pricing_type: customerEditForm.trafficControlPricingType,
+
+
         ...(pricingChanged && {
           pricing_updated_at: new Date().toISOString(),
         }),
@@ -186,6 +218,11 @@ jetPricingType: data.jet_pricing_type ?? '',
       mainPricingType: customerEditForm.mainPricingType,
       lateralPricingType: customerEditForm.lateralPricingType,
       jetPricingType: customerEditForm.jetPricingType,
+      dyePricingType: customerEditForm.dyePricingType,
+smokePricingType: customerEditForm.smokePricingType,
+trafficControlPricingType: customerEditForm.trafficControlPricingType,
+
+
     });
 
     setEditingCustomer(false);
@@ -238,7 +275,7 @@ jetPricingType: data.jet_pricing_type ?? '',
           )}
         </div>
 
-        <div className="grid gap-3 py-3 md:grid-cols-[1fr_220px] md:gap-4 md:py-4">
+        <div className="grid gap-3 py-3 md:grid-cols-[1fr_420px] md:gap-4 md:py-4">
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm md:gap-x-4 md:gap-y-3">
             <EditableText
               label="Contact"
@@ -284,53 +321,102 @@ jetPricingType: data.jet_pricing_type ?? '',
           <div className="space-y-4 border-t pt-4 text-sm md:border-l md:border-t-0 md:pl-4 md:pt-0">
             <div>
               <p className="text-xs font-medium uppercase text-gray-500">
-                Pricing Models
+                Billing Methods
               </p>
 
-              <div className="mt-2 grid gap-2">
-                <PricingSelect
-                  code="MAIN"
-                  editing={editingCustomer}
-                  value={customerEditForm.mainPricingType}
-                  displayValue={customer.mainPricingType || 'Not set'}
-                  choices={pricingOptions.mainPricingType}
-                  onChange={(value) =>
-                    setCustomerEditForm({
-                      ...customerEditForm,
-                      mainPricingType: value,
-                    })
-                  }
-                />
+              <div
+  className={`mt-2 grid gap-2 ${
+    editingCustomer ? 'grid-cols-1' : 'grid-cols-2 gap-x-4'
+  }`}
+>
+  <PricingSelect
+    code="MAIN"
+    editing={editingCustomer}
+    value={customerEditForm.mainPricingType}
+    displayValue={customer.mainPricingType || 'Not set'}
+    choices={pricingOptions.mainPricingType}
+    onChange={(value) =>
+      setCustomerEditForm({
+        ...customerEditForm,
+        mainPricingType: value,
+      })
+    }
+  />
 
-                <PricingSelect
-                  code="LAT"
-                  editing={editingCustomer}
-                  value={customerEditForm.lateralPricingType}
-                  displayValue={customer.lateralPricingType || 'Not set'}
-                  choices={pricingOptions.lateralPricingType}
-                  onChange={(value) =>
-                    setCustomerEditForm({
-                      ...customerEditForm,
-                      lateralPricingType: value,
-                    })
-                  }
-                />
+  <PricingSelect
+    code="DYE"
+    editing={editingCustomer}
+    value={customerEditForm.dyePricingType}
+    displayValue={customer.dyePricingType || 'Not set'}
+    choices={pricingOptions.dyePricingType}
+    onChange={(value) =>
+      setCustomerEditForm({
+        ...customerEditForm,
+        dyePricingType: value,
+      })
+    }
+  />
 
-                <PricingSelect
-                  code="JET"
-                  editing={editingCustomer}
-                  value={customerEditForm.jetPricingType}
-                  displayValue={customer.jetPricingType || 'Not set'}
-                  choices={pricingOptions.jetPricingType}
-                  onChange={(value) =>
-                    setCustomerEditForm({
-                      ...customerEditForm,
-                      jetPricingType: value,
-                    })
-                  }
-                />
-              </div>
-            </div>
+  <PricingSelect
+    code="LAT"
+    editing={editingCustomer}
+    value={customerEditForm.lateralPricingType}
+    displayValue={customer.lateralPricingType || 'Not set'}
+    choices={pricingOptions.lateralPricingType}
+    onChange={(value) =>
+      setCustomerEditForm({
+        ...customerEditForm,
+        lateralPricingType: value,
+      })
+    }
+  />
+
+  <PricingSelect
+    code="SMK"
+    editing={editingCustomer}
+    value={customerEditForm.smokePricingType}
+    displayValue={customer.smokePricingType || 'Not set'}
+    choices={pricingOptions.smokePricingType}
+    onChange={(value) =>
+      setCustomerEditForm({
+        ...customerEditForm,
+        smokePricingType: value,
+      })
+    }
+  />
+
+  <PricingSelect
+    code="JET"
+    editing={editingCustomer}
+    value={customerEditForm.jetPricingType}
+    displayValue={customer.jetPricingType || 'Not set'}
+    choices={pricingOptions.jetPricingType}
+    onChange={(value) =>
+      setCustomerEditForm({
+        ...customerEditForm,
+        jetPricingType: value,
+      })
+    }
+  />
+
+
+<PricingSelect
+  code="TRFC"
+  editing={editingCustomer}
+  value={customerEditForm.trafficControlPricingType}
+  displayValue={customer.trafficControlPricingType || 'Not set'}
+  choices={pricingOptions.trafficControlPricingType}
+  onChange={(value) =>
+    setCustomerEditForm({
+      ...customerEditForm,
+      trafficControlPricingType: value,
+    })
+  }
+/>
+
+</div>
+</div>
+
 
             <div className="border-t pt-4">
   <p className="text-xs font-medium uppercase text-gray-500">
@@ -503,14 +589,14 @@ function PricingSelect({
   onChange: (value: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-[56px_1fr] items-center gap-x-4">
+<div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[40px_minmax(0,1fr)] sm:items-center sm:gap-x-2">
       <span className="font-semibold">{code}</span>
 
       {editing ? (
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={`rounded-lg border p-2 ${
+          className={`min-w-0 w-full rounded-lg border p-2 text-sm ${
             value ? 'text-black' : 'text-gray-400'
           }`}
         >

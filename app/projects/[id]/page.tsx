@@ -21,13 +21,12 @@ type ProjectDetail = {
     address: string | null;
     phone: string | null;
     email: string | null;
-    pricing_models: {
-      MAIN?: string;
-      LAT?: string;
-      JET?: string;
-    } | null;
+    main_pricing_type: string | null;
+    lateral_pricing_type: string | null;
+    jet_pricing_type: string | null;
   } | null;
   employees: {
+  
     name: string;
   } | null;
 };
@@ -185,7 +184,9 @@ const isFootLateralProject = project?.pricing_type === 'Per Foot / Lateral';
     address,
     phone,
     email,
-    pricing_models
+    main_pricing_type,
+  lateral_pricing_type,
+  jet_pricing_type
   ),
           employees (
             name
@@ -936,24 +937,23 @@ async function saveProjectEdit() {
   </p>
 
   <div className="mt-4 border-t pt-4">
-    <p className="text-xs font-medium uppercase text-gray-500">
-      Customer Pricing Models
-    </p>
+  <p className="text-sm text-gray-500">Customer Pricing Models</p>
+
 
     <div className="mt-2 grid grid-cols-[56px_1fr] gap-x-4 gap-y-1 text-sm">
       <span className="font-semibold">MAIN</span>
       <span className="text-gray-600">
-        {project.customers?.pricing_models?.MAIN || 'Not set'}
+      {project.customers?.main_pricing_type || 'Not set'}
       </span>
 
       <span className="font-semibold">LAT</span>
       <span className="text-gray-600">
-        {project.customers?.pricing_models?.LAT || 'Not set'}
+      {project.customers?.lateral_pricing_type || 'Not set'}
       </span>
 
       <span className="font-semibold">JET</span>
       <span className="text-gray-600">
-        {project.customers?.pricing_models?.JET || 'Not set'}
+      {project.customers?.jet_pricing_type || 'Not set'}
       </span>
     </div>
   </div>

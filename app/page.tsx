@@ -256,7 +256,9 @@ export default function DashboardPage() {
         contact_name: newCustomer.contactName,
         phone: newCustomer.phone,
         email: newCustomer.email,
-        pricing_models: newCustomer.pricingModels,
+        main_pricing_type: newCustomer.pricingModels.MAIN,
+lateral_pricing_type: newCustomer.pricingModels.LAT,
+jet_pricing_type: newCustomer.pricingModels.JET,
       })
       .select()
       .single();

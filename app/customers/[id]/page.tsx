@@ -26,6 +26,12 @@ type Project = {
   project_location: string | null;
 };
 
+const pricingOptions = {
+  mainPricingType: ['Per Hour', 'Per Foot'],
+  lateralPricingType: ['Per Hour', 'Per Lateral'],
+  jetPricingType: ['Per Hour', 'Per Foot'],
+};
+
 export default function CustomerDetailPage({
   params,
 }: {
@@ -35,6 +41,17 @@ export default function CustomerDetailPage({
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectView, setProjectView] = useState<'active' | 'completed'>('active');
   const [loading, setLoading] = useState(true);
+  const [editingCustomer, setEditingCustomer] = useState(false);
+  const [customerEditForm, setCustomerEditForm] = useState({
+    contactName: '',
+    phone: '',
+    email: '',
+    address: '',
+    notes: '',
+    mainPricingType: '',
+    lateralPricingType: '',
+    jetPricingType: '',
+  });
 
   useEffect(() => {
     async function loadCustomer() {
@@ -43,7 +60,8 @@ export default function CustomerDetailPage({
         .select(
           'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type'
         )
-                .eq('id', params.id)
+        
+        .eq('id', params.id)
         .single();
 
       if (error) {
@@ -61,10 +79,10 @@ export default function CustomerDetailPage({
         address: data.address ?? '',
         notes: data.notes ?? '',
         mainPricingType: data.main_pricing_type ?? '',
-        lateralPricingType: data.lateral_pricing_type ?? '',
-        jetPricingType: data.jet_pricing_type ?? '',
+lateralPricingType: data.lateral_pricing_type ?? '',
+jetPricingType: data.jet_pricing_type ?? '',
+
       });
-      
 
       const { data: projectData, error: projectError } = await supabase
         .from('projects')
@@ -105,21 +123,88 @@ export default function CustomerDetailPage({
     });
   }
 
+  function startCustomerEdit() {
+    if (!customer) return;
+
+    setCustomerEditForm({
+      contactName: customer.contactName,
+      phone: customer.phone,
+      email: customer.email,
+      address: customer.address,
+      notes: customer.notes,
+      mainPricingType: customer.mainPricingType,
+      lateralPricingType: customer.lateralPricingType,
+      jetPricingType: customer.jetPricingType,
+    });
+
+    setEditingCustomer(true);
+  }
+
+  function cancelCustomerEdit() {
+    setEditingCustomer(false);
+  }
+
+  async function saveCustomerEdit() {
+    if (!customer) return;
+
+    const pricingChanged =
+  customerEditForm.mainPricingType !== customer.mainPricingType ||
+  customerEditForm.lateralPricingType !== customer.lateralPricingType ||
+  customerEditForm.jetPricingType !== customer.jetPricingType;
+
+    const { error } = await supabase
+      .from('customers')
+      .update({
+        contact_name: customerEditForm.contactName,
+        phone: customerEditForm.phone,
+        email: customerEditForm.email,
+        address: customerEditForm.address,
+        notes: customerEditForm.notes,
+        main_pricing_type: customerEditForm.mainPricingType,
+        lateral_pricing_type: customerEditForm.lateralPricingType,
+        jet_pricing_type: customerEditForm.jetPricingType,
+        ...(pricingChanged && {
+          pricing_updated_at: new Date().toISOString(),
+        }),
+      })
+      
+      .eq('id', customer.id);
+
+    if (error) {
+      console.error('Error updating customer:', error);
+      alert(error.message);
+      return;
+    }
+
+    setCustomer({
+      ...customer,
+      contactName: customerEditForm.contactName,
+      phone: customerEditForm.phone,
+      email: customerEditForm.email,
+      address: customerEditForm.address,
+      notes: customerEditForm.notes,
+      mainPricingType: customerEditForm.mainPricingType,
+      lateralPricingType: customerEditForm.lateralPricingType,
+      jetPricingType: customerEditForm.jetPricingType,
+    });
+
+    setEditingCustomer(false);
+  }
+
   if (loading) {
     return <div className="text-black">Loading customer...</div>;
   }
 
   const activeProjects = projects.filter((project) =>
-  ['Active', 'Scheduled'].includes(project.status)
-);
+    ['Active', 'Scheduled'].includes(project.status)
+  );
 
-const completedProjects = projects.filter(
-  (project) => project.status === 'Completed'
-);
+  const completedProjects = projects.filter(
+    (project) => project.status === 'Completed'
+  );
 
-const visibleProjects =
-  projectView === 'active' ? activeProjects : completedProjects;
-
+  const visibleProjects =
+    projectView === 'active' ? activeProjects : completedProjects;
 
   if (!customer) {
     return <div className="text-black">Customer not found.</div>;
@@ -136,154 +221,312 @@ const visibleProjects =
       </div>
 
       <div className="rounded-2xl bg-white p-4 shadow md:p-6">
-  <div className="border-b pb-3">
-    <p className="text-xs font-medium uppercase text-gray-500">Customer</p>
-    <h1 className="mt-1 text-xl font-bold">{customer.name}</h1>
-  </div>
+        <div className="flex items-start justify-between gap-4 border-b pb-3">
+          <div>
+            <p className="text-xs font-medium uppercase text-gray-500">Customer</p>
+            <h1 className="mt-1 text-xl font-bold">{customer.name}</h1>
+          </div>
 
-  <div className="grid gap-3 py-3 md:grid-cols-[1fr_220px] md:gap-4 md:py-4">
-  <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm md:gap-x-4 md:gap-y-3">
-      <div>
-        <p className="text-xs font-medium uppercase text-gray-500">Contact</p>
-        <p className="mt-1 font-semibold">{customer.contactName || 'No contact saved'}</p>
-      </div>
+          {!editingCustomer && (
+            <button
+              type="button"
+              onClick={startCustomerEdit}
+              className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+            >
+              Edit Customer
+            </button>
+          )}
+        </div>
 
-      <div>
-        <p className="text-xs font-medium uppercase text-gray-500">Phone</p>
-        <p className="mt-1 font-semibold">{formatPhone(customer.phone)}</p>
-      </div>
+        <div className="grid gap-3 py-3 md:grid-cols-[1fr_220px] md:gap-4 md:py-4">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm md:gap-x-4 md:gap-y-3">
+            <EditableText
+              label="Contact"
+              editing={editingCustomer}
+              value={customerEditForm.contactName}
+              displayValue={customer.contactName || 'No contact saved'}
+              onChange={(value) =>
+                setCustomerEditForm({ ...customerEditForm, contactName: value })
+              }
+            />
 
-      <div>
-        <p className="text-xs font-medium uppercase text-gray-500">Address</p>
-        <p className="mt-1 font-semibold">{customer.address || 'No address saved'}</p>
-      </div>
+            <EditableText
+              label="Phone"
+              editing={editingCustomer}
+              value={customerEditForm.phone}
+              displayValue={formatPhone(customer.phone)}
+              onChange={(value) =>
+                setCustomerEditForm({ ...customerEditForm, phone: value })
+              }
+            />
 
-      <div>
-        <p className="text-xs font-medium uppercase text-gray-500">Email</p>
-        <p className="mt-1 font-semibold break-words">{customer.email || 'No email saved'}</p>
-      </div>
-    </div>
+            <EditableText
+              label="Address"
+              editing={editingCustomer}
+              value={customerEditForm.address}
+              displayValue={customer.address || 'No address saved'}
+              onChange={(value) =>
+                setCustomerEditForm({ ...customerEditForm, address: value })
+              }
+            />
 
-    <div className="space-y-4 border-t pt-4 text-sm md:border-l md:border-t-0 md:pl-4 md:pt-0">
-    <div>
-      <p className="text-xs font-medium uppercase text-gray-500">
-        Pricing Models
-      </p>
+            <EditableText
+              label="Email"
+              editing={editingCustomer}
+              value={customerEditForm.email}
+              displayValue={customer.email || 'No email saved'}
+              onChange={(value) =>
+                setCustomerEditForm({ ...customerEditForm, email: value })
+              }
+            />
+          </div>
 
-      <div className="mt-2 grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
-        <span className="font-semibold">MAIN</span>
-        <span className="text-gray-600">
-          {customer.mainPricingType || 'Not set'}
-        </span>
+          <div className="space-y-4 border-t pt-4 text-sm md:border-l md:border-t-0 md:pl-4 md:pt-0">
+            <div>
+              <p className="text-xs font-medium uppercase text-gray-500">
+                Pricing Models
+              </p>
 
-        <span className="font-semibold">LAT</span>
-        <span className="text-gray-600">
-          {customer.lateralPricingType || 'Not set'}
-        </span>
+              <div className="mt-2 grid gap-2">
+                <PricingSelect
+                  code="MAIN"
+                  editing={editingCustomer}
+                  value={customerEditForm.mainPricingType}
+                  displayValue={customer.mainPricingType || 'Not set'}
+                  choices={pricingOptions.mainPricingType}
+                  onChange={(value) =>
+                    setCustomerEditForm({
+                      ...customerEditForm,
+                      mainPricingType: value,
+                    })
+                  }
+                />
 
-        <span className="font-semibold">JET</span>
-        <span className="text-gray-600">
-          {customer.jetPricingType || 'Not set'}
-        </span>
-      </div>
-    </div>
+                <PricingSelect
+                  code="LAT"
+                  editing={editingCustomer}
+                  value={customerEditForm.lateralPricingType}
+                  displayValue={customer.lateralPricingType || 'Not set'}
+                  choices={pricingOptions.lateralPricingType}
+                  onChange={(value) =>
+                    setCustomerEditForm({
+                      ...customerEditForm,
+                      lateralPricingType: value,
+                    })
+                  }
+                />
 
-    <div className="border-t pt-4">
-      <p className="text-xs font-medium uppercase text-gray-500">
-        Customer Notes
-      </p>
-      <p className="mt-1 text-sm text-gray-700">
-        {customer.notes || 'No notes saved'}
-      </p>
-    </div>
-  </div>
-</div>
+                <PricingSelect
+                  code="JET"
+                  editing={editingCustomer}
+                  value={customerEditForm.jetPricingType}
+                  displayValue={customer.jetPricingType || 'Not set'}
+                  choices={pricingOptions.jetPricingType}
+                  onChange={(value) =>
+                    setCustomerEditForm({
+                      ...customerEditForm,
+                      jetPricingType: value,
+                    })
+                  }
+                />
+              </div>
+            </div>
 
-  {customer.notes && (
-    <div className="border-t pt-4">
-      <p className="text-xs font-medium uppercase text-gray-500">Notes</p>
-      <p className="mt-1 text-sm text-gray-700">{customer.notes}</p>
-    </div>
+            <div className="border-t pt-4">
+  <p className="text-xs font-medium uppercase text-gray-500">
+    Customer Notes
+  </p>
+
+  {editingCustomer ? (
+    <textarea
+      placeholder="Add customer notes..."
+      value={customerEditForm.notes}
+      onChange={(e) =>
+        setCustomerEditForm({
+          ...customerEditForm,
+          notes: e.target.value,
+        })
+      }
+      className="mt-1 block min-h-28 w-full resize-y rounded-lg border p-2 text-sm text-black"
+      rows={4}
+    />
+  ) : (
+    <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+      {customer.notes || 'No notes saved'}
+    </p>
   )}
 </div>
 
 
 
-
-
-
-<div className="rounded-2xl bg-white p-6 shadow">
-<div>
-  <h2 className="text-xl font-bold">Customer Project History</h2>
-
-  <div className="mt-3 w-full">
-  <div className="grid w-full grid-cols-2 rounded-lg border bg-white p-1 shadow-sm">
-
-
-      <button
-        type="button"
-        onClick={() => setProjectView('active')}
-        className={`w-full rounded-md px-4 py-2 text-sm font-medium ${
-          projectView === 'active'
-            ? 'bg-black text-white'
-            : 'text-gray-600 hover:bg-gray-50'
-        }`}
-      >
-        Active
-      </button>
-
-      <button
-        type="button"
-        onClick={() => setProjectView('completed')}
-        className={`w-full rounded-md px-4 py-2 text-sm font-medium ${
-          projectView === 'completed'
-            ? 'bg-black text-white'
-            : 'text-gray-600 hover:bg-gray-50'
-        }`}
-      >
-        Completed
-      </button>
-    </div>
-  </div>
-  </div>
-
-  <div className="mt-4 space-y-3">
-    {visibleProjects.map((project) => (
-      <Link
-        key={project.id}
-        href={`/projects/${encodeURIComponent(project.project_number)}`}
-        className="block rounded-xl border p-4 hover:bg-gray-50"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-semibold">{project.project_number}</p>
-            <p className="mt-1 text-sm text-gray-600">
-              {project.project_location || 'No project location saved'}
-            </p>
           </div>
-
-          <span className="rounded-full border px-2 py-1 text-xs font-medium text-gray-600">
-            {project.status}
-          </span>
         </div>
 
-        <p className="mt-3 text-sm text-gray-600">
-  {projectView === 'active' ? 'Last service' : 'Service completed'}:{' '}
-  {formatDate(project.service_start_date)}
-</p>
-      </Link>
-    ))}
+        {editingCustomer && (
+          <div className="flex justify-end gap-3 border-t pt-4">
+            <button
+              type="button"
+              onClick={cancelCustomerEdit}
+              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+            >
+              Cancel
+            </button>
 
-    {visibleProjects.length === 0 && (
-      <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-        {projectView === 'active'
-          ? 'No active projects found for this customer.'
-          : 'No completed projects found for this customer.'}
+            <button
+              type="button"
+              onClick={saveCustomerEdit}
+              className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+            >
+              Save Customer
+            </button>
+          </div>
+        )}
       </div>
-    )}
-  </div>
-</div>
 
+      <div className="rounded-2xl bg-white p-6 shadow">
+        <div>
+          <h2 className="text-xl font-bold">Customer Project History</h2>
+
+          <div className="mt-3 w-full">
+            <div className="grid w-full grid-cols-2 rounded-lg border bg-white p-1 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setProjectView('active')}
+                className={`w-full rounded-md px-4 py-2 text-sm font-medium ${
+                  projectView === 'active'
+                    ? 'bg-black text-white'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Active
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setProjectView('completed')}
+                className={`w-full rounded-md px-4 py-2 text-sm font-medium ${
+                  projectView === 'completed'
+                    ? 'bg-black text-white'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Completed
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {visibleProjects.map((project) => (
+            <Link
+              key={project.id}
+              href={`/projects/${encodeURIComponent(project.project_number)}`}
+              className="block rounded-xl border p-4 hover:bg-gray-50"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{project.project_number}</p>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {project.project_location || 'No project location saved'}
+                  </p>
+                </div>
+
+                <span className="rounded-full border px-2 py-1 text-xs font-medium text-gray-600">
+                  {project.status}
+                </span>
+              </div>
+
+              <p className="mt-3 text-sm text-gray-600">
+                {projectView === 'active' ? 'Last service' : 'Service completed'}:{' '}
+                {formatDate(project.service_start_date)}
+              </p>
+            </Link>
+          ))}
+
+          {visibleProjects.length === 0 && (
+            <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
+              {projectView === 'active'
+                ? 'No active projects found for this customer.'
+                : 'No completed projects found for this customer.'}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EditableText({
+  label,
+  editing,
+  value,
+  displayValue,
+  onChange,
+}: {
+  label: string;
+  editing: boolean;
+  value: string;
+  displayValue: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium uppercase text-gray-500">{label}</p>
+
+      {editing ? (
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="mt-1 w-full rounded-lg border p-2"
+        />
+      ) : (
+        <p className="mt-1 break-words font-semibold">{displayValue}</p>
+      )}
+    </div>
+  );
+}
+
+function PricingSelect({
+  code,
+  editing,
+  value,
+  displayValue,
+  choices,
+  onChange,
+}: {
+  code: string;
+  editing: boolean;
+  value: string;
+  displayValue: string;
+  choices: string[];
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-[56px_1fr] items-center gap-x-4">
+      <span className="font-semibold">{code}</span>
+
+      {editing ? (
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`rounded-lg border p-2 ${
+            value ? 'text-black' : 'text-gray-400'
+          }`}
+        >
+          <option value="" disabled hidden>
+            Select
+          </option>
+
+          {choices.map((choice) => (
+            <option key={choice} value={choice} className="text-black">
+              {choice}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="text-gray-600">{displayValue}</span>
+      )}
     </div>
   );
 }

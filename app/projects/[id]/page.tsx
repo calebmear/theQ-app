@@ -13,17 +13,25 @@ type ProjectDetail = {
   service_start_date: string;
   project_location: string | null;
   pricing_type: string | null;
+  assigned_to: string | null;
   notes: string | null;
   customers: {
+    id: string;
     name: string;
     address: string | null;
     phone: string | null;
     email: string | null;
+    pricing_models: {
+      MAIN?: string;
+      LAT?: string;
+      JET?: string;
+    } | null;
   } | null;
   employees: {
     name: string;
   } | null;
 };
+
 
 type TimeEntry = {
   id: string;
@@ -54,6 +62,11 @@ type ProjectNote = {
   id: string;
   note: string;
   created_at: string;
+};
+
+type Employee = {
+  id: string;
+  name: string;
 };
 
 export default function ProjectDetailPage({
@@ -106,6 +119,7 @@ const [showServiceSubmission, setShowServiceSubmission] = useState(false);
 const [expandedTimeEntryId, setExpandedTimeEntryId] = useState<string | null>(
   null
 );
+const [employees, setEmployees] = useState<Employee[]>([]);
 
 const projectNoteHistory = projectNotes.filter(
   (note) => !note.note.toLowerCase().startsWith('service note:')
@@ -123,6 +137,7 @@ const [projectEditForm, setProjectEditForm] = useState({
   projectLocation: '',
   serviceStartDate: '',
   pricingType: '',
+  assignedToId: '',
 });
 const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
   null
@@ -162,14 +177,16 @@ const isFootLateralProject = project?.pricing_type === 'Per Foot / Lateral';
   service_start_date,
   project_location,
   pricing_type,
+  assigned_to,
   notes,
   customers (
-
-            name,
-            address,
-            phone,
-            email
-          ),
+    id,
+    name,
+    address,
+    phone,
+    email,
+    pricing_models
+  ),
           employees (
             name
           )
@@ -199,6 +216,7 @@ const employee = Array.isArray(data.employees)
     service_start_date: data.service_start_date,
     project_location: data.project_location,
     pricing_type: data.pricing_type,
+    assigned_to: data.assigned_to,
     notes: data.notes,
     customers: customer ?? null,
     employees: employee ?? null,
@@ -212,6 +230,8 @@ const employee = Array.isArray(data.employees)
     }
 
     loadProject();
+    loadEmployees();
+
   }, [params.id]);
 
   if (loading) {
@@ -556,6 +576,23 @@ async function deleteTimeEntry(entryId: string) {
   loadTimeEntries(project.id);
 }
 
+async function loadEmployees() {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('id, name')
+    .order('name');
+
+  console.log('Employee load result:', { data, error });
+
+  if (error) {
+    console.error('Error loading employees:', error);
+    alert(error.message);
+    return;
+  }
+
+  setEmployees(data ?? []);
+}
+
 
 
 function formatTimestamp(value: string | null) {
@@ -619,6 +656,7 @@ function startProjectEdit() {
     projectLocation: project.project_location ?? '',
     serviceStartDate: project.service_start_date ?? '',
     pricingType: project.pricing_type ?? '',
+    assignedToId: project.assigned_to ?? '',
   });
 
   setEditingProject(true);
@@ -629,6 +667,10 @@ async function saveProjectEdit() {
     return;
   }
 
+  const assignedEmployee =
+    employees.find((employee) => employee.id === projectEditForm.assignedToId) ??
+    null;
+
   const { error } = await supabase
     .from('projects')
     .update({
@@ -636,6 +678,7 @@ async function saveProjectEdit() {
       project_location: projectEditForm.projectLocation,
       service_start_date: projectEditForm.serviceStartDate,
       pricing_type: projectEditForm.pricingType,
+      assigned_to: projectEditForm.assignedToId || null,
     })
     .eq('id', project.id);
 
@@ -650,10 +693,13 @@ async function saveProjectEdit() {
     project_location: projectEditForm.projectLocation,
     service_start_date: projectEditForm.serviceStartDate,
     pricing_type: projectEditForm.pricingType,
+    assigned_to: projectEditForm.assignedToId || null,
+    employees: assignedEmployee ? { name: assignedEmployee.name } : null,
   });
 
   setEditingProject(false);
 }
+
 
   return (
     <div className="space-y-6 text-black">
@@ -680,10 +726,11 @@ async function saveProjectEdit() {
     </div>
   )}
 
-<div className="border-b pb-5">
-  <p className="text-sm text-gray-500">Project ID / PO Number</p>
+<div className="border-b pb-3">
+<div className="flex items-start justify-between gap-3">
+  <div className="min-w-0">
+    <p className="text-sm text-gray-500">Project ID / PO Number</p>
 
-  <div className="mt-1 flex flex-wrap items-center gap-3">
     {editingProject ? (
       <input
         type="text"
@@ -694,48 +741,53 @@ async function saveProjectEdit() {
             projectNumber: e.target.value,
           })
         }
-        className="rounded-lg border p-3 text-xl font-bold"
+        className="mt-1 w-full rounded-lg border p-3 text-xl font-bold"
       />
     ) : (
-      <p className="text-2xl font-bold">{project.project_number}</p>
-    )}
-
-    <span
-      className={`rounded-full border px-3 py-1 text-sm font-medium ${statusBadgeClass(
-        project.status
-      )}`}
-    >
-      {project.status}
-    </span>
-
-    {!editingProject && (
-      <button
-        type="button"
-        onClick={startProjectEdit}
-        className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-      >
-        Edit Project
-      </button>
-    )}
-
-    {project.status === 'Active' && !editingProject && (
-      <button
-        type="button"
-        onClick={() => {
-          const confirmed = window.confirm(
-            'Are you sure you want to mark this project as completed?'
-          );
-
-          if (confirmed) {
-            updateProjectStatus('Completed');
-          }
-        }}
-        className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-      >
-        Mark Completed
-      </button>
+      <p className="mt-1 truncate text-2xl font-bold">
+        {project.project_number}
+      </p>
     )}
   </div>
+
+  <div className="shrink-0 text-right">
+  {!editingProject && project.status === 'Active' && (
+    <button
+      type="button"
+      onClick={() => {
+        const confirmed = window.confirm(
+          'Are you sure you want to mark this project as completed?'
+        );
+
+        if (confirmed) {
+          updateProjectStatus('Completed');
+        }
+      }}
+      className="mb-1 block w-full text-xs font-medium text-gray-500 hover:text-black hover:underline"
+    >
+      Mark completed
+    </button>
+  )}
+
+  <span
+    className={`inline-block min-w-[96px] rounded-full border px-4 py-1 text-center text-sm font-medium ${statusBadgeClass(
+      project.status
+    )}`}
+  >
+    {project.status}
+  </span>
+</div>
+
+
+</div>
+
+
+  
+
+ 
+<div className="my-4 border-t" />
+<div className="mt-3">
+  <p className="text-sm text-gray-500">Location</p>
 
   {editingProject ? (
     <input
@@ -748,61 +800,48 @@ async function saveProjectEdit() {
         })
       }
       placeholder="Project location"
-      className="mt-2 w-full rounded-lg border p-3 text-sm"
+      className="mt-1 w-full rounded-lg border p-3 text-sm"
     />
   ) : (
-    <p className="mt-2 text-sm text-gray-600">
-      {project.project_location || 'No project location saved'}
+    <p className="mt-1 text-sm font-semibold text-gray-700">
+  {project.project_location || 'No project location saved'}
+</p>
+  )}
+</div>
+<div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+<div>
+  <p className="text-sm text-gray-500">Assigned To</p>
+
+  {editingProject ? (
+    <select
+      value={projectEditForm.assignedToId}
+      onChange={(e) =>
+        setProjectEditForm({
+          ...projectEditForm,
+          assignedToId: e.target.value,
+        })
+      }
+      className="mt-1 w-full rounded-lg border p-2"
+    >
+      <option value="">Unassigned</option>
+
+      {employees.map((employee) => (
+        <option key={employee.id} value={employee.id}>
+          {employee.name}
+        </option>
+      ))}
+    </select>
+  ) : (
+    <p className="mt-1 font-semibold">
+      {project.employees?.name || 'Unassigned'}
     </p>
   )}
 </div>
 
 
-
-<div className="border-b py-5">
-  <p className="text-sm text-gray-500">Customer Info</p>
-  <p className="mt-1 text-lg font-semibold">{project.customers?.name}</p>
-  <p className="mt-1 text-sm text-gray-600">
-    {formatPhone(project.customers?.phone)}
-    {project.customers?.email ? ` • ${project.customers.email}` : ''}
-  </p>
-</div>
-
-<div className="flex flex-col gap-3 pt-5 text-sm md:flex-row md:gap-8">
   <div>
-    <span className="text-gray-500">Assigned To: </span>
-    <span className="font-semibold">
-      {project.employees?.name || 'Unassigned'}
-    </span>
-  </div>
+    <p className="text-sm text-gray-500">Service Start Date</p>
 
-  <div>
-  <span className="text-gray-500">Pricing Model: </span>
-  {editingProject ? (
-    <select
-      value={projectEditForm.pricingType}
-      onChange={(e) =>
-        setProjectEditForm({
-          ...projectEditForm,
-          pricingType: e.target.value,
-        })
-      }
-      className="rounded-lg border p-2"
-    >
-      <option value="">Select pricing model</option>
-      <option>Hourly</option>
-      <option>Per Foot / Lateral</option>
-    </select>
-  ) : (
-    <span className="font-semibold">
-      {project.pricing_type || 'No pricing model saved'}
-    </span>
-  )}
-</div>
-
-
-  <div>
-  <span className="text-gray-500">Service Start Date: </span>
     {editingProject ? (
       <input
         type="date"
@@ -813,16 +852,77 @@ async function saveProjectEdit() {
             serviceStartDate: e.target.value,
           })
         }
-        className="rounded-lg border p-2"
+        className="mt-1 w-full rounded-lg border p-2"
       />
     ) : (
-      <span className="font-semibold">
-  {serviceStartDate}
-  {timeEntries.length === 0 ? ' (Est.)' : ''}
-</span>
+      <p className="mt-1 font-semibold">
+        {serviceStartDate}
+        {timeEntries.length === 0 ? ' (Est.)' : ''}
+      </p>
     )}
   </div>
+
+  {!editingProject && (
+  <button
+    type="button"
+    onClick={startProjectEdit}
+    className="text-sm font-medium text-gray-500 hover:text-black hover:underline"
+    >
+    Edit project details
+  </button>
+)}
 </div>
+
+</div>
+
+
+
+
+
+<div className="py-3">
+  <p className="text-sm text-gray-500">Customer Info</p>
+
+  {project.customers?.id ? (
+    <Link
+      href={`/customers/${project.customers.id}`}
+      className="mt-1 inline-block text-lg font-semibold hover:underline"
+    >
+      {project.customers.name}
+    </Link>
+  ) : (
+    <p className="mt-1 text-lg font-semibold">No customer saved</p>
+  )}
+
+  <p className="mt-1 text-sm text-gray-600">
+    {formatPhone(project.customers?.phone)}
+    {project.customers?.email ? ` • ${project.customers.email}` : ''}
+  </p>
+
+  <div className="mt-4 border-t pt-4">
+    <p className="text-xs font-medium uppercase text-gray-500">
+      Customer Pricing Models
+    </p>
+
+    <div className="mt-2 grid grid-cols-[56px_1fr] gap-x-4 gap-y-1 text-sm">
+      <span className="font-semibold">MAIN</span>
+      <span className="text-gray-600">
+        {project.customers?.pricing_models?.MAIN || 'Not set'}
+      </span>
+
+      <span className="font-semibold">LAT</span>
+      <span className="text-gray-600">
+        {project.customers?.pricing_models?.LAT || 'Not set'}
+      </span>
+
+      <span className="font-semibold">JET</span>
+      <span className="text-gray-600">
+        {project.customers?.pricing_models?.JET || 'Not set'}
+      </span>
+    </div>
+  </div>
+</div>
+
+
 
 
 

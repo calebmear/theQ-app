@@ -216,13 +216,14 @@ const visibleProjects =
 <div>
   <h2 className="text-xl font-bold">Customer Project History</h2>
 
-  <div className="mt-3 flex justify-center">
-    <div className="inline-flex w-fit rounded-lg border bg-white p-1 shadow-sm">
+  <div className="mt-3 w-full">
+  <div className="grid w-full grid-cols-2 rounded-lg border bg-white p-1 shadow-sm">
+
 
       <button
         type="button"
         onClick={() => setProjectView('active')}
-        className={`w-28 rounded-md px-4 py-2 text-sm font-medium ${
+        className={`w-full rounded-md px-4 py-2 text-sm font-medium ${
           projectView === 'active'
             ? 'bg-black text-white'
             : 'text-gray-600 hover:bg-gray-50'
@@ -234,7 +235,7 @@ const visibleProjects =
       <button
         type="button"
         onClick={() => setProjectView('completed')}
-        className={`rounded-md px-4 py-2 text-sm font-medium ${
+        className={`w-full rounded-md px-4 py-2 text-sm font-medium ${
           projectView === 'completed'
             ? 'bg-black text-white'
             : 'text-gray-600 hover:bg-gray-50'

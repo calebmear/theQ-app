@@ -258,6 +258,10 @@ const employee = Array.isArray(data.employees)
     )
   : '';
 
+  const latestServiceDate =
+  timeEntries.length > 0 ? formatDate(timeEntries[0].work_date) : null;
+
+
   const showFeetInput =
   isFootLateralProject &&
   ['Mainline', 'Jetter'].includes(timeForm.workCompleted);
@@ -752,22 +756,41 @@ async function saveProjectEdit() {
 
   <div className="shrink-0 text-right">
   {!editingProject && project.status === 'Active' && (
-    <button
-      type="button"
-      onClick={() => {
-        const confirmed = window.confirm(
-          'Are you sure you want to mark this project as completed?'
-        );
+  <button
+    type="button"
+    onClick={() => {
+      const confirmed = window.confirm(
+        'Are you sure you want to mark this project as completed?'
+      );
 
-        if (confirmed) {
-          updateProjectStatus('Completed');
-        }
-      }}
-      className="mb-1 block w-full text-xs font-medium text-gray-500 hover:text-black hover:underline"
-    >
-      Mark completed
-    </button>
-  )}
+      if (confirmed) {
+        updateProjectStatus('Completed');
+      }
+    }}
+    className="mb-1 block w-full text-xs font-medium text-gray-500 hover:text-black hover:underline"
+  >
+    Mark completed
+  </button>
+)}
+
+{!editingProject && project.status === 'Completed' && (
+  <button
+    type="button"
+    onClick={() => {
+      const confirmed = window.confirm(
+        'Reopen this project and mark it active?'
+      );
+
+      if (confirmed) {
+        updateProjectStatus('Active');
+      }
+    }}
+    className="mb-1 block w-full text-xs font-medium text-gray-500 hover:text-black hover:underline"
+  >
+    Reopen project
+  </button>
+)}
+
 
   <span
     className={`inline-block min-w-[96px] rounded-full border px-4 py-1 text-center text-sm font-medium ${statusBadgeClass(
@@ -808,70 +831,84 @@ async function saveProjectEdit() {
 </p>
   )}
 </div>
-<div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-<div>
-  <p className="text-sm text-gray-500">Assigned To</p>
-
-  {editingProject ? (
-    <select
-      value={projectEditForm.assignedToId}
-      onChange={(e) =>
-        setProjectEditForm({
-          ...projectEditForm,
-          assignedToId: e.target.value,
-        })
-      }
-      className="mt-1 w-full rounded-lg border p-2"
-    >
-      <option value="">Unassigned</option>
-
-      {employees.map((employee) => (
-        <option key={employee.id} value={employee.id}>
-          {employee.name}
-        </option>
-      ))}
-    </select>
-  ) : (
-    <p className="mt-1 font-semibold">
-      {project.employees?.name || 'Unassigned'}
-    </p>
-  )}
-</div>
-
-
+<div className="mt-4 grid gap-3 text-sm">
   <div>
-    <p className="text-sm text-gray-500">Service Start Date</p>
+    <p className="text-sm text-gray-500">Assigned To</p>
 
     {editingProject ? (
-      <input
-        type="date"
-        value={projectEditForm.serviceStartDate}
+      <select
+        value={projectEditForm.assignedToId}
         onChange={(e) =>
           setProjectEditForm({
             ...projectEditForm,
-            serviceStartDate: e.target.value,
+            assignedToId: e.target.value,
           })
         }
         className="mt-1 w-full rounded-lg border p-2"
-      />
+      >
+        <option value="">Unassigned</option>
+
+        {employees.map((employee) => (
+          <option key={employee.id} value={employee.id}>
+            {employee.name}
+          </option>
+        ))}
+      </select>
     ) : (
       <p className="mt-1 font-semibold">
-        {serviceStartDate}
-        {timeEntries.length === 0 ? ' (Est.)' : ''}
+        {project.employees?.name || 'Unassigned'}
       </p>
     )}
   </div>
 
-  {!editingProject && (
-  <button
-    type="button"
-    onClick={startProjectEdit}
-    className="text-sm font-medium text-gray-500 hover:text-black hover:underline"
-    >
-    Edit project details
-  </button>
-)}
+  <div className="grid grid-cols-2 gap-3">
+    <div>
+      <p className="text-sm text-gray-500">Service Start Date</p>
+
+      {editingProject ? (
+        <input
+          type="date"
+          value={projectEditForm.serviceStartDate}
+          onChange={(e) =>
+            setProjectEditForm({
+              ...projectEditForm,
+              serviceStartDate: e.target.value,
+            })
+          }
+          className="mt-1 w-full rounded-lg border p-2"
+        />
+      ) : (
+        <p className="mt-1 font-semibold">
+          {serviceStartDate}
+          {timeEntries.length === 0 ? ' (Est.)' : ''}
+        </p>
+      )}
+    </div>
+
+    <div className="flex justify-end">
+  <div className="text-left">
+  <p className="text-sm text-gray-500">
+  {project.status === 'Completed' ? 'Completion Date' : 'Latest Service Date'}
+</p>
+    <p className="mt-1 font-semibold">
+      {latestServiceDate || 'No service submitted'}
+    </p>
+  </div>
 </div>
+
+  </div>
+
+  {!editingProject && (
+    <button
+      type="button"
+      onClick={startProjectEdit}
+      className="text-center text-sm font-medium text-gray-500 hover:text-black hover:underline"
+      >
+      Edit project details
+    </button>
+  )}
+</div>
+
 
 </div>
 

@@ -1010,20 +1010,20 @@ async function saveProjectEdit() {
 
   {showServiceSubmission && (
     <>
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
+<div className="mt-4 grid min-w-0 gap-4 md:grid-cols-2">
 
       <div className="min-w-0">
   <label className="mb-2 block text-sm font-medium">Service Date</label>
-
-    <input
-  type="date"
-  value={timeForm.workDate}
-  onChange={(e) =>
-    setTimeForm({ ...timeForm, workDate: e.target.value })
-  }
-  className="block w-full min-w-0 max-w-full rounded-lg border border-black p-3 text-sm"
+  <input
+    type="date"
+    value={timeForm.workDate}
+    onChange={(e) =>
+      setTimeForm({ ...timeForm, workDate: e.target.value })
+    }
+    className="block w-full min-w-0 max-w-full appearance-none rounded-lg border border-black p-3 text-sm"
   />
-  </div>
+</div>
+
 
 <div>
   <label className="mb-2 block text-sm font-medium">Service Vehicle</label>

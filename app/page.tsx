@@ -193,7 +193,7 @@ export default function DashboardPage() {
     async function loadCustomers() {
       const { data, error } = await supabase
         .from('customers')
-        .select('id, name, contact_name, phone, email, address, pricing_models, notes')
+        .select('id, name, contact_name, phone, email, address, main_pricing_type, lateral_pricing_type, jet_pricing_type, notes')
         .order('name');
 
       if (error) {
@@ -208,7 +208,11 @@ export default function DashboardPage() {
         phone: customer.phone ?? '',
         email: customer.email ?? '',
         address: customer.address ?? '',
-        pricingModels: customer.pricing_models ?? {},
+        pricingModels: {
+          MAIN: customer.main_pricing_type ?? '',
+          LAT: customer.lateral_pricing_type ?? '',
+          JET: customer.jet_pricing_type ?? '',
+        },
         notes: customer.notes ?? '',
       }));
 
@@ -259,6 +263,7 @@ export default function DashboardPage() {
         main_pricing_type: newCustomer.pricingModels.MAIN,
 lateral_pricing_type: newCustomer.pricingModels.LAT,
 jet_pricing_type: newCustomer.pricingModels.JET,
+
       })
       .select()
       .single();
@@ -276,7 +281,11 @@ jet_pricing_type: newCustomer.pricingModels.JET,
       phone: data.phone ?? '',
       email: data.email ?? '',
       address: data.address ?? '',
-      pricingModels: data.pricing_models ?? {},
+      pricingModels: {
+        MAIN: data.main_pricing_type ?? '',
+        LAT: data.lateral_pricing_type ?? '',
+        JET: data.jet_pricing_type ?? '',
+      },
       notes: data.notes ?? '',
     };
 
@@ -376,132 +385,129 @@ jet_pricing_type: newCustomer.pricingModels.JET,
       </div>
 
       {showCustomerForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-<div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-bold">Add Customer</h2>
+  <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
+    <div className="flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
+      <h2 className="text-2xl font-bold">Add Customer</h2>
 
-            <div className="mt-4 grid gap-4">
-              <input
-                type="text"
-                placeholder="Customer name"
-                value={newCustomer.name}
-                onChange={(e) =>
-                  setNewCustomer({ ...newCustomer, name: e.target.value })
-                }
-                className="rounded-lg border p-3"
-              />
+      <div className="mt-4 grid flex-1 gap-4 overflow-y-auto pr-1">
+        <input
+          type="text"
+          placeholder="Customer name"
+          value={newCustomer.name}
+          onChange={(e) =>
+            setNewCustomer({ ...newCustomer, name: e.target.value })
+          }
+          className="rounded-lg border p-3"
+        />
 
-              <input
-                type="text"
-                placeholder="Contact name"
-                value={newCustomer.contactName}
-                onChange={(e) =>
-                  setNewCustomer({
-                    ...newCustomer,
-                    contactName: e.target.value,
-                  })
-                }
-                className="rounded-lg border p-3"
-              />
+        <input
+          type="text"
+          placeholder="Contact name"
+          value={newCustomer.contactName}
+          onChange={(e) =>
+            setNewCustomer({
+              ...newCustomer,
+              contactName: e.target.value,
+            })
+          }
+          className="rounded-lg border p-3"
+        />
 
-              <input
-                type="tel"
-                placeholder="Phone"
-                value={newCustomer.phone}
-                onChange={(e) =>
-                  setNewCustomer({ ...newCustomer, phone: e.target.value })
-                }
-                className="rounded-lg border p-3"
-              />
+        <input
+          type="tel"
+          placeholder="Phone"
+          value={newCustomer.phone}
+          onChange={(e) =>
+            setNewCustomer({ ...newCustomer, phone: e.target.value })
+          }
+          className="rounded-lg border p-3"
+        />
 
-              <input
-                type="email"
-                placeholder="Email"
-                value={newCustomer.email}
-                onChange={(e) =>
-                  setNewCustomer({ ...newCustomer, email: e.target.value })
-                }
-                className="rounded-lg border p-3"
-              />
+        <input
+          type="email"
+          placeholder="Email"
+          value={newCustomer.email}
+          onChange={(e) =>
+            setNewCustomer({ ...newCustomer, email: e.target.value })
+          }
+          className="rounded-lg border p-3"
+        />
 
-              <div className="rounded-lg border p-3">
-                <p className="text-sm font-medium">Pricing Models</p>
+        <div className="rounded-lg border p-3">
+          <p className="text-sm font-medium">Pricing Models</p>
 
-                <div className="mt-3 grid gap-3">
-                  {pricingModelOptions.map((option) => (
-                    <div
-                      key={option.code}
-                      className="grid gap-2 md:grid-cols-[120px_1fr]"
-                    >
-                      <div>
-                        <p className="font-medium">{option.label}</p>
-                        <p className="text-xs text-gray-500">{option.code}</p>
-                      </div>
-
-                      <select
-                        value={newCustomer.pricingModels[option.code]}
-                        onChange={(e) =>
-                          setNewCustomer({
-                            ...newCustomer,
-                            pricingModels: {
-                              ...newCustomer.pricingModels,
-                              [option.code]: e.target.value,
-                            },
-                          })
-                        }
-                        className={`rounded-lg border p-3 ${
-                          newCustomer.pricingModels[option.code]
-                            ? 'text-black'
-                            : 'text-gray-400'
-                        }`}
-                      >
-                        <option value="" disabled hidden>
-                          Select pricing
-                        </option>
-
-                        {option.choices.map((choice) => (
-                          <option
-                            key={choice}
-                            value={choice}
-                            className="text-black"
-                          >
-                            {choice}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
+          <div className="mt-3 grid gap-3">
+            {pricingModelOptions.map((option) => (
+              <div
+                key={option.code}
+                className="grid gap-2 md:grid-cols-[120px_1fr]"
+              >
+                <div>
+                  <p className="font-medium">{option.label}</p>
+                  <p className="text-xs text-gray-500">{option.code}</p>
                 </div>
+
+                <select
+                  value={newCustomer.pricingModels[option.code]}
+                  onChange={(e) =>
+                    setNewCustomer({
+                      ...newCustomer,
+                      pricingModels: {
+                        ...newCustomer.pricingModels,
+                        [option.code]: e.target.value,
+                      },
+                    })
+                  }
+                  className={`rounded-lg border p-3 ${
+                    newCustomer.pricingModels[option.code]
+                      ? 'text-black'
+                      : 'text-gray-400'
+                  }`}
+                >
+                  <option value="" disabled hidden>
+                    Select pricing
+                  </option>
+
+                  {option.choices.map((choice) => (
+                    <option key={choice} value={choice} className="text-black">
+                      {choice}
+                    </option>
+                  ))}
+                </select>
               </div>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowCustomerForm(false)}
-                className="rounded-lg border px-5 py-3 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="button"
-                onClick={saveCustomer}
-                className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
-              >
-                Save Customer
-              </button>
-            </div>
+            ))}
           </div>
         </div>
-      )}
+      </div>
+
+      <div className="mt-6 flex justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => setShowCustomerForm(false)}
+          className="rounded-lg border px-5 py-3 hover:bg-gray-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          onClick={saveCustomer}
+          className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
+        >
+          Save Customer
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 
       {showProjectForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-2xl font-bold">Add Project</h2>
-
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
+        <div className="flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
+          <h2 className="text-2xl font-bold">Add Project</h2>
+    
+          <div className="mt-4 grid flex-1 gap-4 overflow-y-auto pr-1 md:grid-cols-2">
               <div className="relative">
                 <label className="mb-2 block text-sm font-medium">
                   Customer

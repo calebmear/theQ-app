@@ -4,13 +4,16 @@ import AppSearch from '../components/AppSearch';
 
 export const metadata = {
   title: 'THEQ App',
+  applicationName: 'THEQ',
   description: 'Operations and revenue dashboard',
+  manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
     title: 'THEQ',
     statusBarStyle: 'black-translucent',
   },
 };
+
 
 export const viewport = {
   themeColor: '#f3f4f6',

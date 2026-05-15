@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { supabase } from '../lib/supabaseClient';
+import SplashScreen from '../components/SplashScreen';
+
 
 type BillingMethodCodes = {
   MAIN?: string;
@@ -22,16 +24,10 @@ type Customer = {
   phone: string;
   email: string;
   address?: string;
-  pricingModels?: {
-    MAIN?: string;
-    LAT?: string;
-    JET?: string;
-    DYE: string;
-  SMK: string;
-  TRFC: string;
-  };
+  pricingModels: BillingMethodCodes;
   notes?: string;
 };
+
 
 type Employee = {
   id: string;
@@ -432,7 +428,11 @@ traffic_control_pricing_type:
   }
 
   return (
-    <div className="space-y-6 text-black">
+    <>
+      <SplashScreen />
+  
+      <div className="space-y-6 text-black">
+  
       <div className="space-y-3">
         <div className="text-center">
           <p className="text-sm text-gray-600">
@@ -831,10 +831,12 @@ onClick={() => {
                   {choice}
                 </option>
               ))}
-            </select>
+                                    </select>
           </div>
         );
       })}
+
+
     </div>
   </div>
 )}
@@ -861,9 +863,10 @@ onClick={() => {
           </div>
         </div>
       )}
-    </div>
-  );
-}
+      </div>
+    </>
+    );
+  }
 
 function ProjectTable({
   title,

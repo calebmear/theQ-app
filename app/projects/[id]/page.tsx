@@ -1566,29 +1566,42 @@ traffic_control_pricing_type:
 )}
 
 
-  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-    <div className="grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
-      <span className="font-semibold">MAIN</span>
-      <span className="text-gray-600">{billingMethods.main}</span>
+<div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+  <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+    <span className="font-semibold">MAIN</span>
+    <span className="min-w-0 break-words text-gray-600">
+      {billingMethods.main}
+    </span>
 
-      <span className="font-semibold">LAT</span>
-      <span className="text-gray-600">{billingMethods.lateral}</span>
+    <span className="font-semibold">LAT</span>
+    <span className="min-w-0 break-words text-gray-600">
+      {billingMethods.lateral}
+    </span>
 
-      <span className="font-semibold">JET</span>
-      <span className="text-gray-600">{billingMethods.jet}</span>
-    </div>
-
-    <div className="grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
-      <span className="font-semibold">DYE</span>
-      <span className="text-gray-600">{billingMethods.dye}</span>
-
-      <span className="font-semibold">SMK</span>
-      <span className="text-gray-600">{billingMethods.smoke}</span>
-
-      <span className="font-semibold">TRFC</span>
-      <span className="text-gray-600">{billingMethods.trafficControl}</span>
-    </div>
+    <span className="font-semibold">JET</span>
+    <span className="min-w-0 break-words text-gray-600">
+      {billingMethods.jet}
+    </span>
   </div>
+
+  <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
+    <span className="font-semibold">DYE</span>
+    <span className="min-w-0 break-words text-gray-600">
+      {billingMethods.dye}
+    </span>
+
+    <span className="font-semibold">SMK</span>
+    <span className="min-w-0 break-words text-gray-600">
+      {billingMethods.smoke}
+    </span>
+
+    <span className="font-semibold">TRFC</span>
+    <span className="min-w-0 break-words text-gray-600">
+      {billingMethods.trafficControl}
+    </span>
+  </div>
+</div>
+
 </div>
 </div>
 
@@ -1772,21 +1785,22 @@ traffic_control_pricing_type:
   </div>
 )}
 
-<div className="flex flex-wrap items-center gap-3 md:col-span-2">
+<div className="md:col-span-2">
   <button
     type="button"
     onClick={addSelectedServicesToSubmission}
-    className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+    className="w-full rounded-lg border border-[#009be5] bg-[#eaf7fe] px-5 py-3 text-sm font-semibold text-[#007bb8] shadow-sm hover:bg-[#d8f0fc]"
   >
-    Add to Submission
+    Add Service
   </button>
 
   {serviceSubmissionError && (
-    <p className="text-sm font-medium text-red-600">
+    <p className="mt-2 text-sm font-medium text-red-600">
       {serviceSubmissionError}
     </p>
   )}
 </div>
+
 
 {pendingServiceItems.length > 0 && (
   <div className="md:col-span-2 rounded-xl border p-4">
@@ -1834,22 +1848,22 @@ traffic_control_pricing_type:
   </div>
 </div>
 
-<div className="mt-4 flex flex-wrap gap-3">
+<div className="mt-4 grid gap-3">
   <button
     type="button"
     onClick={submitTimeEntry}
-    className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
-  >
+    className="w-full rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+    >
     {editingTimeEntryId ? 'Update Time' : 'Submit All'}
   </button>
 
   <button
-    type="button"
-    onClick={clearServiceSubmissionForm}
-    className="rounded-lg border px-5 py-3 text-sm font-medium hover:bg-gray-50"
-  >
-    Clear
-  </button>
+  type="button"
+  onClick={clearServiceSubmissionForm}
+  className="w-full rounded-lg border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-100"
+>
+  Clear
+</button>
 </div>
 
 </>

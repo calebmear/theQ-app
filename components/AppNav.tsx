@@ -15,13 +15,18 @@ export default function AppNav() {
 
   return (
     <nav className="mt-3 -mx-4 grid grid-cols-4 bg-white md:mx-0 md:mt-6 md:flex md:flex-col">
-      <Link href="/" className={navClass(pathname === '/')}>
-        Dashboard
-      </Link>
+      <Link
+  href="/dashboard"
+  className={navClass(pathname.startsWith('/dashboard'))}
+>
+  Dashboard
+</Link>
+
+
 
       <Link
-        href="/dashboard"
-        className={navClass(pathname.startsWith('/dashboard'))}
+        href="/activework"
+        className={navClass(pathname.startsWith('/activework'))}
       >
         Active Work
       </Link>

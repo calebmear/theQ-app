@@ -1,19 +1,31 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function SplashScreen() {
-  const [showSplash, setShowSplash] = useState(true);
+  const router = useRouter();
+  const [showLogo, setShowLogo] = useState(false);
 
   useEffect(() => {
+    const alreadySeen = sessionStorage.getItem('qpiSplashSeen');
+
+    if (alreadySeen) {
+      router.replace('/dashboard');
+      return;
+    }
+
+    sessionStorage.setItem('qpiSplashSeen', 'true');
+    setShowLogo(true);
+
     const timer = window.setTimeout(() => {
-      setShowSplash(false);
-    }, 2200);
+      router.replace('/dashboard');
+    }, 2400);
 
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [router]);
 
-  if (!showSplash) return null;
+  if (!showLogo) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white">

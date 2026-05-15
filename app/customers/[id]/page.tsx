@@ -505,10 +505,13 @@ trafficControlPricingType: customerEditForm.trafficControlPricingType,
         <div className="mt-4 space-y-3">
           {visibleProjects.map((project) => (
             <Link
-              key={project.id}
-              href={`/projects/${encodeURIComponent(project.project_number)}`}
-              className="block rounded-xl border p-4 hover:bg-gray-50"
-            >
+            key={project.id}
+            href={`/projects/${encodeURIComponent(
+              project.project_number
+            )}?from=/customers/${customer.id}&fromLabel=${encodeURIComponent(customer.name)}`}
+            className="block rounded-xl border p-4 hover:bg-gray-50"
+          >
+          
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold">{project.project_number}</p>

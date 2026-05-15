@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Copy } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
+import { useSearchParams } from 'next/navigation';
 
 
 type ProjectDetail = {
@@ -134,6 +135,10 @@ const [timeForm, setTimeForm] = useState<TimeForm>({
   laterals: '',
   notes: '',
 });
+
+const searchParams = useSearchParams();
+const from = searchParams.get('from') ?? '/projects';
+const fromLabel = searchParams.get('fromLabel') ?? 'Projects';
 
 const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([]);
 const [serviceQuantities, setServiceQuantities] = useState<
@@ -1249,20 +1254,17 @@ traffic_control_pricing_type:
   return (
     <div className="space-y-6 text-black">
       <div className="text-sm text-gray-500">
-  <Link href="/operations" className="hover:text-black hover:underline">
-    Operations
+  <Link href={from} className="hover:text-black hover:underline">
+    {fromLabel}
   </Link>
-  <span className="mx-2">/</span>
 
-  <Link href="/projects" className="hover:text-black hover:underline">
-    Projects
-  </Link>
   <span className="mx-2">/</span>
 
   <span className="font-medium text-gray-700">
     {project.project_number}
   </span>
 </div>
+
 
 <div className="rounded-2xl bg-white p-6 shadow">
   {editingProject && (

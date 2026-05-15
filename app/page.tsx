@@ -5,6 +5,16 @@ import { useEffect, useState } from 'react';
 
 import { supabase } from '../lib/supabaseClient';
 
+type BillingMethodCodes = {
+  MAIN?: string;
+  LAT?: string;
+  JET?: string;
+  DYE?: string;
+  SMK?: string;
+  TRFC?: string;
+};
+
+
 type Customer = {
   id: string;
   name: string;
@@ -16,6 +26,9 @@ type Customer = {
     MAIN?: string;
     LAT?: string;
     JET?: string;
+    DYE: string;
+  SMK: string;
+  TRFC: string;
   };
   notes?: string;
 };

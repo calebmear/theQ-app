@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { Copy } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 
 
@@ -13,6 +14,15 @@ type ProjectDetail = {
   service_start_date: string;
   project_location: string | null;
   pricing_type: string | null;
+  billing_method_source: string | null;
+  main_pricing_type: string | null;
+  lateral_pricing_type: string | null;
+  jet_pricing_type: string | null;
+  dye_pricing_type: string | null;
+  smoke_pricing_type: string | null;
+  traffic_control_pricing_type: string | null;
+  billing_methods_updated_at: string | null;
+
   assigned_to: string | null;
   notes: string | null;
   customers: {
@@ -27,9 +37,9 @@ type ProjectDetail = {
     dye_pricing_type: string | null;
     smoke_pricing_type: string | null;
     traffic_control_pricing_type: string | null;
+
   } | null;
   employees: {
-  
     name: string;
   } | null;
 };
@@ -43,6 +53,9 @@ type TimeEntry = {
   hours: number | null;
   feet: number | null;
   laterals: number | null;
+  residences: number | null;
+mainline_tests: number | null;
+flat_rate: boolean | null;
   notes: string | null;
   created_at: string;
   deleted_at?: string | null;
@@ -70,6 +83,15 @@ type Employee = {
   id: string;
   name: string;
 };
+
+type PendingServiceItem = {
+  id: string;
+  serviceType: string;
+  billingMethod: string;
+  quantity: string;
+  serviceVehicle: string;
+};
+
 
 export default function ProjectDetailPage({
   params,
@@ -113,6 +135,18 @@ const [timeForm, setTimeForm] = useState<TimeForm>({
   notes: '',
 });
 
+const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([]);
+const [serviceQuantities, setServiceQuantities] = useState<
+  Record<string, string>
+>({});
+
+const [pendingServiceItems, setPendingServiceItems] = useState<
+  PendingServiceItem[]
+>([]);
+
+const [serviceSubmissionError, setServiceSubmissionError] = useState('');
+
+
 const [projectNotes, setProjectNotes] = useState<ProjectNote[]>([]);
 const [newProjectNote, setNewProjectNote] = useState('');
 
@@ -125,6 +159,8 @@ const [showNotes, setShowNotes] = useState(true);
 const [expandedTimeEntryId, setExpandedTimeEntryId] = useState<string | null>(
   null
 );
+const [expandedServiceDates, setExpandedServiceDates] = useState<string[]>([]);
+
 const [employees, setEmployees] = useState<Employee[]>([]);
 
 const projectNoteHistory = projectNotes.filter(
@@ -144,6 +180,13 @@ const [projectEditForm, setProjectEditForm] = useState({
   serviceStartDate: '',
   pricingType: '',
   assignedToId: '',
+  billingMethodSource: 'customer',
+  mainPricingType: '',
+  lateralPricingType: '',
+  jetPricingType: '',
+  dyePricingType: '',
+  smokePricingType: '',
+  trafficControlPricingType: '',
 });
 const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
   null
@@ -166,8 +209,294 @@ const [inlineTimeForm, setInlineTimeForm] = useState<TimeForm>({
   notes: '',
 });
 
-const isHourlyProject = project?.pricing_type === 'Hourly';
-const isFootLateralProject = project?.pricing_type === 'Per Foot / Lateral';
+
+const standardBillingMethods = {
+  main: 'Per Foot',
+  lateral: 'Per Lateral',
+  jet: 'Per Foot',
+  dye: 'Per Hour',
+  smoke: 'Per Residence',
+  trafficControl: 'Flat Rate',
+};
+
+const billingTypeOptions = [
+  {
+    code: 'MAIN',
+    label: 'Mainline',
+    field: 'mainPricingType',
+    choices: ['Per Hour', 'Per Foot'],
+  },
+  {
+    code: 'LAT',
+    label: 'Lateral',
+    field: 'lateralPricingType',
+    choices: ['Per Hour', 'Per Lateral'],
+  },
+  {
+    code: 'JET',
+    label: 'Jetter',
+    field: 'jetPricingType',
+    choices: ['Per Hour', 'Per Foot'],
+  },
+  {
+    code: 'DYE',
+    label: 'Dye',
+    field: 'dyePricingType',
+    choices: ['Per Hour'],
+  },
+  {
+    code: 'SMK',
+    label: 'Smoke',
+    field: 'smokePricingType',
+    choices: ['Per Hour', 'Per Mainline Test', 'Per Residence'],
+  },
+  {
+    code: 'TRFC',
+    label: 'Traffic Control',
+    field: 'trafficControlPricingType',
+    choices: ['Flat Rate'],
+  },
+] as const;
+
+function getProjectBillingMethods() {
+  if (!project) return standardBillingMethods;
+
+  if (project.billing_method_source === 'project') {
+    return {
+      main: project.main_pricing_type || standardBillingMethods.main,
+      lateral: project.lateral_pricing_type || standardBillingMethods.lateral,
+      jet: project.jet_pricing_type || standardBillingMethods.jet,
+      dye: project.dye_pricing_type || standardBillingMethods.dye,
+      smoke: project.smoke_pricing_type || standardBillingMethods.smoke,
+      trafficControl:
+        project.traffic_control_pricing_type ||
+        standardBillingMethods.trafficControl,
+    };
+  }
+
+  if (project.billing_method_source === 'standard') {
+    return standardBillingMethods;
+  }
+
+  return {
+    main: project.customers?.main_pricing_type || standardBillingMethods.main,
+    lateral:
+      project.customers?.lateral_pricing_type || standardBillingMethods.lateral,
+    jet: project.customers?.jet_pricing_type || standardBillingMethods.jet,
+    dye: project.customers?.dye_pricing_type || standardBillingMethods.dye,
+    smoke: project.customers?.smoke_pricing_type || standardBillingMethods.smoke,
+    trafficControl:
+      project.customers?.traffic_control_pricing_type ||
+      standardBillingMethods.trafficControl,
+  };
+}
+
+const billingMethods = getProjectBillingMethods();
+
+function billingMethodForService(serviceType: string) {
+  if (serviceType === 'Mainline') return billingMethods.main;
+  if (serviceType === 'Lateral') return billingMethods.lateral;
+  if (serviceType === 'Jetter') return billingMethods.jet;
+  if (serviceType === 'Dye') return billingMethods.dye;
+  if (serviceType === 'Smoke') return billingMethods.smoke;
+  if (serviceType === 'Traffic Control') return billingMethods.trafficControl;
+
+  return '';
+}
+
+function billingMethodForEntry(entry: TimeEntry) {
+  return billingMethodForService(entry.work_completed ?? '');
+}
+
+function entryQuantityDetails(entry: TimeEntry) {
+  const details = [];
+
+  if (entry.hours !== null && entry.hours !== undefined) {
+    details.push({ label: 'Hours', value: entry.hours });
+  }
+
+  if (entry.feet !== null && entry.feet !== undefined) {
+    details.push({ label: 'Feet', value: entry.feet });
+  }
+
+  if (entry.laterals !== null && entry.laterals !== undefined) {
+    details.push({ label: 'Laterals', value: entry.laterals });
+  }
+
+  if (entry.residences !== null && entry.residences !== undefined) {
+    details.push({ label: 'Residences', value: entry.residences });
+  }
+
+  if (entry.mainline_tests !== null && entry.mainline_tests !== undefined) {
+    details.push({ label: 'Mainline Tests', value: entry.mainline_tests });
+  }
+
+  if (entry.flat_rate) {
+    details.push({ label: 'Flat Rate', value: 'Yes' });
+  }
+
+  return details;
+}
+
+
+
+function quantityLabelForEntry(entry: TimeEntry) {
+  const entryBillingMethod = billingMethodForEntry(entry);
+
+  if (entryBillingMethod === 'Per Hour') {
+    return `${entry.hours ?? 0} hrs`;
+  }
+
+  if (entryBillingMethod === 'Per Foot') {
+    return entry.feet !== null && entry.feet !== undefined
+      ? `${entry.feet} ft`
+      : 'No quantity';
+  }
+
+  if (entryBillingMethod === 'Per Lateral') {
+    return entry.laterals !== null && entry.laterals !== undefined
+      ? `${entry.laterals} laterals`
+      : 'No quantity';
+  }
+
+  if (entryBillingMethod === 'Per Residence') {
+    return entry.residences !== null && entry.residences !== undefined
+      ? `${entry.residences} residences`
+      : 'No quantity';
+  }
+  
+  if (entryBillingMethod === 'Per Mainline Test') {
+    return entry.mainline_tests !== null && entry.mainline_tests !== undefined
+      ? `${entry.mainline_tests} tests`
+      : 'No quantity';
+  }
+  
+
+  if (entryBillingMethod === 'Flat Rate' || entry.flat_rate) {
+    return 'Flat rate';
+  }
+
+  return 'No quantity';
+}
+
+
+const serviceTypeOptions = [
+  'Mainline',
+  'Lateral',
+  'Jetter',
+  'Dye',
+  'Smoke',
+  'Traffic Control',
+] as const;
+
+function serviceNeedsQuantity(serviceType: string) {
+  return billingMethodForService(serviceType) !== 'Flat Rate';
+}
+
+function quantityLabelForService(serviceType: string) {
+  const billingMethod = billingMethodForService(serviceType);
+
+  if (billingMethod === 'Per Hour') return 'Hours Worked';
+  if (billingMethod === 'Per Foot') return 'Feet Serviced';
+  if (billingMethod === 'Per Lateral') return 'Laterals Serviced';
+  if (billingMethod === 'Per Residence') return 'Residences Tested';
+  if (billingMethod === 'Per Mainline Test') return 'Mainline Tests';
+
+  return '';
+}
+
+function quantityPlaceholderForService(serviceType: string) {
+  const billingMethod = billingMethodForService(serviceType);
+
+  if (billingMethod === 'Per Hour') return 'Enter hours';
+  if (billingMethod === 'Per Foot') return 'Enter feet';
+  if (billingMethod === 'Per Lateral') return 'Enter laterals';
+  if (billingMethod === 'Per Residence') return 'Enter residences';
+  if (billingMethod === 'Per Mainline Test') return 'Enter tests';
+
+  return '';
+}
+
+function clearServiceSubmissionForm() {
+  setTimeForm({
+    workDate: today,
+    workCompleted: '',
+    serviceVehicle: '',
+    hours: '',
+    feet: '',
+    laterals: '',
+    notes: '',
+  });
+
+  setSelectedServiceTypes([]);
+  setServiceQuantities({});
+  setPendingServiceItems([]);
+  setEditingTimeEntryId(null);
+  setServiceSubmissionError('');
+
+}
+
+function addSelectedServicesToSubmission() {
+  if (!timeForm.serviceVehicle) {
+    setServiceSubmissionError('Select a service vehicle.');
+    return;
+  }
+
+  if (selectedServiceTypes.length === 0) {
+    setServiceSubmissionError('Select at least one service.');
+    return;
+  }
+
+  const missingQuantity = selectedServiceTypes.some(
+    (serviceType) =>
+      serviceNeedsQuantity(serviceType) && !serviceQuantities[serviceType]
+  );
+
+  if (missingQuantity) {
+    setServiceSubmissionError('Enter the required quantity.');
+    return;
+  }
+
+  setServiceSubmissionError('');
+
+  const newItems = selectedServiceTypes.map((serviceType) => {
+    const billingMethod = billingMethodForService(serviceType);
+
+    return {
+      id: crypto.randomUUID(),
+      serviceType,
+      billingMethod,
+      quantity: serviceQuantities[serviceType] ?? '',
+      serviceVehicle: timeForm.serviceVehicle,
+    };
+  });
+
+  setPendingServiceItems([...pendingServiceItems, ...newItems]);
+  setSelectedServiceTypes([]);
+  setServiceQuantities({});
+  setTimeForm({
+    ...timeForm,
+    serviceVehicle: '',
+  });
+}
+
+
+function removePendingServiceItem(itemId: string) {
+  setPendingServiceItems(
+    pendingServiceItems.filter((item) => item.id !== itemId)
+  );
+}
+
+function quantityLabelForPendingItem(item: PendingServiceItem) {
+  if (item.billingMethod === 'Per Hour') return `${item.quantity} hrs`;
+  if (item.billingMethod === 'Per Foot') return `${item.quantity} ft`;
+  if (item.billingMethod === 'Per Lateral') return `${item.quantity} laterals`;
+  if (item.billingMethod === 'Per Residence') return `${item.quantity} residences`;
+  if (item.billingMethod === 'Per Mainline Test') return `${item.quantity} tests`;
+  if (item.billingMethod === 'Flat Rate') return 'Flat rate';
+
+  return 'No quantity';
+}
 
 
 
@@ -183,21 +512,29 @@ const isFootLateralProject = project?.pricing_type === 'Per Foot / Lateral';
   service_start_date,
   project_location,
   pricing_type,
-  assigned_to,
-  notes,
-  customers (
-    id,
-    name,
-    address,
-    phone,
-    email,
-    main_pricing_type,
-    lateral_pricing_type,
-    jet_pricing_type,
-    dye_pricing_type,
-    smoke_pricing_type,
-    traffic_control_pricing_type
-  ),
+billing_method_source,
+main_pricing_type,
+lateral_pricing_type,
+jet_pricing_type,
+dye_pricing_type,
+smoke_pricing_type,
+traffic_control_pricing_type,
+billing_methods_updated_at,
+assigned_to,
+notes,
+customers (
+  id,
+  name,
+  address,
+  phone,
+  email,
+  main_pricing_type,
+  lateral_pricing_type,
+  jet_pricing_type,
+  dye_pricing_type,
+  smoke_pricing_type,
+  traffic_control_pricing_type
+),
           employees (
             name
           )
@@ -227,6 +564,15 @@ const employee = Array.isArray(data.employees)
     service_start_date: data.service_start_date,
     project_location: data.project_location,
     pricing_type: data.pricing_type,
+    billing_method_source: data.billing_method_source ?? 'customer',
+main_pricing_type: data.main_pricing_type,
+lateral_pricing_type: data.lateral_pricing_type,
+jet_pricing_type: data.jet_pricing_type,
+dye_pricing_type: data.dye_pricing_type,
+smoke_pricing_type: data.smoke_pricing_type,
+traffic_control_pricing_type: data.traffic_control_pricing_type,
+billing_methods_updated_at: data.billing_methods_updated_at,
+
     assigned_to: data.assigned_to,
     notes: data.notes,
     customers: customer ?? null,
@@ -272,20 +618,109 @@ const employee = Array.isArray(data.employees)
   const latestServiceDate =
   timeEntries.length > 0 ? formatDate(timeEntries[0].work_date) : null;
 
+  function serviceDateSummary(entries: TimeEntry[]) {
+    const vehicles = Array.from(
+      new Set(
+        entries
+          .map((entry) => entry.service_vehicle)
+          .filter((vehicle): vehicle is string => Boolean(vehicle))
+      )
+    );
+  
+    const serviceTotals = entries.reduce<
+  Record<
+    string,
+    {
+      hours: number;
+      feet: number;
+      laterals: number;
+      residences: number;
+      mainlineTests: number;
+      flatRates: number;
+    }
+  >
+>((summary, entry) => {
+      const serviceType = entry.work_completed || 'Unknown Service';
+      const billingMethod = billingMethodForEntry(entry);
+  
+      if (!summary[serviceType]) {
+        summary[serviceType] = {
+          hours: 0,
+          feet: 0,
+          laterals: 0,
+          residences: 0,
+          mainlineTests: 0,
+          flatRates: 0,
+        };
+      }
+  
+      if (billingMethod === 'Per Hour') {
+        summary[serviceType].hours += entry.hours ?? 0;
+      }
+  
+      if (billingMethod === 'Per Foot') {
+        summary[serviceType].feet += entry.feet ?? 0;
+      }
+  
+      if (billingMethod === 'Per Lateral') {
+        summary[serviceType].laterals += entry.laterals ?? 0;
+      }
 
-  const showFeetInput =
-  isFootLateralProject &&
-  ['Mainline', 'Jetter'].includes(timeForm.workCompleted);
+      if (billingMethod === 'Per Residence') {
+        summary[serviceType].residences += entry.residences ?? 0;
+      }
+      
+      if (billingMethod === 'Per Mainline Test') {
+        summary[serviceType].mainlineTests += entry.mainline_tests ?? 0;
+      }
+      
+      if (billingMethod === 'Flat Rate' || entry.flat_rate) {
+        summary[serviceType].flatRates += 1;
+      }
+  
+      return summary;
+    }, {});
+  
+    const services = Object.entries(serviceTotals).map(([serviceType, totals]) => {
+      const quantities = [];
+  
+      if (totals.hours > 0) quantities.push(`${totals.hours} hrs`);
+      if (totals.feet > 0) quantities.push(`${totals.feet} ft`);
+      if (totals.laterals > 0) quantities.push(`${totals.laterals} laterals`);
+      if (totals.residences > 0) quantities.push(`${totals.residences} residences`);
+      if (totals.mainlineTests > 0) quantities.push(`${totals.mainlineTests} tests`);
 
-const showLateralsInput =
-  isFootLateralProject && timeForm.workCompleted === 'Lateral';
+      if (totals.flatRates > 0) quantities.push('Flat rate');
+  
+      return `${serviceType}: ${quantities.join(' • ') || 'No quantity'}`;
+    });
+  
+    return {
+      vehicles: vehicles.length > 0 ? vehicles.join(', ') : 'No vehicle listed',
+      services,
+    };
+  }
+  
+  
+
+  const groupedTimeEntries = Object.entries(
+    timeEntries.reduce<Record<string, TimeEntry[]>>((groups, entry) => {
+      if (!groups[entry.work_date]) {
+        groups[entry.work_date] = [];
+      }
+  
+      groups[entry.work_date].push(entry);
+      return groups;
+    }, {})
+  );
 
 async function loadTimeEntries(projectId: string) {
   const { data, error } = await supabase
     .from('time_entries')
     .select(
-      'id, work_date, work_completed, service_vehicle, hours, feet, laterals, notes, created_at, updated_at'
-    )
+      'id, work_date, work_completed, service_vehicle, hours, feet, laterals, residences, mainline_tests, flat_rate, notes, created_at, updated_at'
+      )
+    
     
     .eq('project_id', projectId)
 .is('deleted_at', null)
@@ -405,48 +840,36 @@ async function deleteProjectNote(noteId: string) {
 
 
 async function submitTimeEntry() {
-  if (!project || !timeForm.workDate || !timeForm.workCompleted || !timeForm.serviceVehicle) {
+  if (!project || !timeForm.workDate) {
     return;
   }
 
-  if (isHourlyProject && !timeForm.hours) return;
-  if (showFeetInput && !timeForm.feet) return;
-  if (showLateralsInput && !timeForm.laterals) return;
+  if (pendingServiceItems.length === 0) return;
 
   const isFirstTimeEntry = !editingTimeEntryId && timeEntries.length === 0;
 
-  const timeEntryValues = {
+  const timeEntryValues = pendingServiceItems.map((item) => ({
+    project_id: project.id,
     work_date: timeForm.workDate,
-    work_completed: timeForm.workCompleted,
-    service_vehicle: timeForm.serviceVehicle,
-    hours: isHourlyProject ? Number(timeForm.hours) : null,
-    feet: showFeetInput ? Number(timeForm.feet) : null,
-    laterals: showLateralsInput ? Number(timeForm.laterals) : null,
-    notes: timeForm.notes,
-  };
+    work_completed: item.serviceType,
+    service_vehicle: item.serviceVehicle,
+    hours: item.billingMethod === 'Per Hour' ? Number(item.quantity) : null,
+feet: item.billingMethod === 'Per Foot' ? Number(item.quantity) : null,
+laterals: item.billingMethod === 'Per Lateral' ? Number(item.quantity) : null,
+residences:
+  item.billingMethod === 'Per Residence' ? Number(item.quantity) : null,
+mainline_tests:
+  item.billingMethod === 'Per Mainline Test' ? Number(item.quantity) : null,
+flat_rate: item.billingMethod === 'Flat Rate',
+notes: timeForm.notes,
+  }));
 
-  if (editingTimeEntryId) {
-    const { error } = await supabase
-      .from('time_entries')
-      .update(timeEntryValues)
-      .eq('id', editingTimeEntryId);
+  const { error } = await supabase.from('time_entries').insert(timeEntryValues);
 
-    if (error) {
-      console.error('Error updating time entry:', error);
-      alert(error.message);
-      return;
-    }
-  } else {
-    const { error } = await supabase.from('time_entries').insert({
-      project_id: project.id,
-      ...timeEntryValues,
-    });
-
-    if (error) {
-      console.error('Error submitting time entry:', error);
-      alert(error.message);
-      return;
-    }
+  if (error) {
+    console.error('Error submitting time entry:', error);
+    alert(error.message);
+    return;
   }
 
   if (isFirstTimeEntry) {
@@ -478,16 +901,15 @@ async function submitTimeEntry() {
       project_id: project.id,
       note: `Service note: ${timeForm.notes.trim()}`,
     });
-  
+
     if (noteError) {
       console.error('Error saving service note to project notes:', noteError);
       alert(noteError.message);
       return;
     }
-  
+
     loadProjectNotes(project.id);
   }
-  
 
   setTimeForm({
     workDate: today,
@@ -499,9 +921,14 @@ async function submitTimeEntry() {
     notes: '',
   });
 
+  setSelectedServiceTypes([]);
+  setServiceQuantities({});
+  setPendingServiceItems([]);
   setEditingTimeEntryId(null);
   loadTimeEntries(project.id);
 }
+
+
 
 
 function editTimeEntry(entry: TimeEntry) {
@@ -544,18 +971,32 @@ function cancelInlineTimeEdit() {
 }
 
 async function saveInlineTimeEntry(entryId: string) {
-  if (!project || !inlineTimeForm.workDate || !inlineTimeForm.hours) return;
+  if (!project || !inlineTimeForm.workDate || !inlineTimeForm.workCompleted) {
+    return;
+  }
+
+  const inlineBillingMethod = billingMethodForService(
+    inlineTimeForm.workCompleted
+  );
+
+  const inlineShowsHours = inlineBillingMethod === 'Per Hour';
+  const inlineShowsFeet = inlineBillingMethod === 'Per Foot';
+  const inlineShowsLaterals = inlineBillingMethod === 'Per Lateral';
+
+  if (inlineShowsHours && !inlineTimeForm.hours) return;
+  if (inlineShowsFeet && !inlineTimeForm.feet) return;
+  if (inlineShowsLaterals && !inlineTimeForm.laterals) return;
 
   const { error } = await supabase
     .from('time_entries')
     .update({
-      work_date: timeForm.workDate,
-work_completed: timeForm.workCompleted,
-service_vehicle: timeForm.serviceVehicle,
-hours: isHourlyProject ? Number(timeForm.hours) : null,
-feet: showFeetInput ? Number(timeForm.feet) : null,
-laterals: showLateralsInput ? Number(timeForm.laterals) : null,
-notes: timeForm.notes,
+      work_date: inlineTimeForm.workDate,
+      work_completed: inlineTimeForm.workCompleted,
+      service_vehicle: inlineTimeForm.serviceVehicle,
+      hours: inlineShowsHours ? Number(inlineTimeForm.hours) : null,
+      feet: inlineShowsFeet ? Number(inlineTimeForm.feet) : null,
+      laterals: inlineShowsLaterals ? Number(inlineTimeForm.laterals) : null,
+      notes: inlineTimeForm.notes,
     })
     .eq('id', entryId);
 
@@ -672,6 +1113,15 @@ function startProjectEdit() {
     serviceStartDate: project.service_start_date ?? '',
     pricingType: project.pricing_type ?? '',
     assignedToId: project.assigned_to ?? '',
+    billingMethodSource: project.billing_method_source ?? 'customer',
+mainPricingType: project.main_pricing_type ?? billingMethods.main,
+lateralPricingType: project.lateral_pricing_type ?? billingMethods.lateral,
+jetPricingType: project.jet_pricing_type ?? billingMethods.jet,
+dyePricingType: project.dye_pricing_type ?? billingMethods.dye,
+smokePricingType: project.smoke_pricing_type ?? billingMethods.smoke,
+trafficControlPricingType:
+  project.traffic_control_pricing_type ?? billingMethods.trafficControl,
+
   });
 
   setEditingProject(true);
@@ -686,6 +1136,23 @@ async function saveProjectEdit() {
     employees.find((employee) => employee.id === projectEditForm.assignedToId) ??
     null;
 
+    const billingChanged =
+  projectEditForm.billingMethodSource !==
+    (project.billing_method_source ?? 'customer') ||
+  projectEditForm.mainPricingType !== (project.main_pricing_type ?? '') ||
+  projectEditForm.lateralPricingType !==
+    (project.lateral_pricing_type ?? '') ||
+  projectEditForm.jetPricingType !== (project.jet_pricing_type ?? '') ||
+  projectEditForm.dyePricingType !== (project.dye_pricing_type ?? '') ||
+  projectEditForm.smokePricingType !== (project.smoke_pricing_type ?? '') ||
+  projectEditForm.trafficControlPricingType !==
+    (project.traffic_control_pricing_type ?? '');
+
+const billingMethodsUpdatedAt = billingChanged
+  ? new Date().toISOString()
+  : project.billing_methods_updated_at;
+
+
   const { error } = await supabase
     .from('projects')
     .update({
@@ -696,7 +1163,37 @@ async function saveProjectEdit() {
       }),
       pricing_type: projectEditForm.pricingType,
       assigned_to: projectEditForm.assignedToId || null,
+billing_method_source: projectEditForm.billingMethodSource,
+billing_methods_updated_at: billingMethodsUpdatedAt,
+
+main_pricing_type:
+
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.mainPricingType
+    : null,
+lateral_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.lateralPricingType
+    : null,
+jet_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.jetPricingType
+    : null,
+dye_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.dyePricingType
+    : null,
+smoke_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.smokePricingType
+    : null,
+traffic_control_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.trafficControlPricingType
+    : null,
+
     })
+    
     .eq('id', project.id);
 
   if (error) {
@@ -715,6 +1212,34 @@ async function saveProjectEdit() {
     pricing_type: projectEditForm.pricingType,
     assigned_to: projectEditForm.assignedToId || null,
     employees: assignedEmployee ? { name: assignedEmployee.name } : null,
+    billing_method_source: projectEditForm.billingMethodSource,
+    billing_methods_updated_at: billingMethodsUpdatedAt,
+
+main_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.mainPricingType
+    : null,
+lateral_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.lateralPricingType
+    : null,
+jet_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.jetPricingType
+    : null,
+dye_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.dyePricingType
+    : null,
+smoke_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.smokePricingType
+    : null,
+traffic_control_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.trafficControlPricingType
+    : null,
+
   });
 
   setEditingProject(false);
@@ -772,42 +1297,43 @@ async function saveProjectEdit() {
   </div>
 
   <div className="shrink-0 text-right">
-  {!editingProject && project.status === 'Active' && (
-  <button
-    type="button"
-    onClick={() => {
-      const confirmed = window.confirm(
-        'Are you sure you want to mark this project as completed?'
-      );
+  <div className="mb-1 h-4">
+    {!editingProject && project.status === 'Active' && (
+      <button
+        type="button"
+        onClick={() => {
+          const confirmed = window.confirm(
+            'Are you sure you want to mark this project as completed?'
+          );
 
-      if (confirmed) {
-        updateProjectStatus('Completed');
-      }
-    }}
-    className="mb-1 block w-full text-xs font-medium text-gray-500 hover:text-black hover:underline"
-  >
-    Mark completed
-  </button>
-)}
+          if (confirmed) {
+            updateProjectStatus('Completed');
+          }
+        }}
+        className="block w-full text-xs font-medium text-gray-500 hover:text-black hover:underline"
+      >
+        Mark completed
+      </button>
+    )}
 
-{!editingProject && project.status === 'Completed' && (
-  <button
-    type="button"
-    onClick={() => {
-      const confirmed = window.confirm(
-        'Reopen this project and mark it active?'
-      );
+    {!editingProject && project.status === 'Completed' && (
+      <button
+        type="button"
+        onClick={() => {
+          const confirmed = window.confirm(
+            'Reopen this project and mark it active?'
+          );
 
-      if (confirmed) {
-        updateProjectStatus('Active');
-      }
-    }}
-    className="mb-1 block w-full text-xs font-medium text-gray-500 hover:text-black hover:underline"
-  >
-    Reopen project
-  </button>
-)}
-
+          if (confirmed) {
+            updateProjectStatus('Active');
+          }
+        }}
+        className="block w-full text-xs font-medium text-gray-500 hover:text-black hover:underline"
+      >
+        Reopen project
+      </button>
+    )}
+  </div>
 
   <span
     className={`inline-block min-w-[96px] rounded-full border px-4 py-1 text-center text-sm font-medium ${statusBadgeClass(
@@ -842,11 +1368,25 @@ async function saveProjectEdit() {
       placeholder="Project location"
       className="mt-1 w-full rounded-lg border p-3 text-sm"
     />
-  ) : (
-    <p className="mt-1 text-sm font-semibold text-gray-700">
-  {project.project_location || 'No project location saved'}
-</p>
-  )}
+    ) : (
+      <div className="mt-1 flex items-center gap-2">
+        <p className="min-w-0 text-sm font-semibold text-gray-700">
+          {project.project_location || 'No project location saved'}
+        </p>
+    
+        {project.project_location && (
+          <button
+          type="button"
+          aria-label="Copy project location"
+          title="Copy project location"
+          onClick={() => navigator.clipboard.writeText(project.project_location || '')}
+          className="shrink-0 rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-600"
+        >
+          <Copy size={14} strokeWidth={1.75} />
+        </button>
+        )}
+      </div>
+    )}
 </div>
 <div className="mt-4 grid gap-3 text-sm">
   <div>
@@ -954,46 +1494,100 @@ async function saveProjectEdit() {
   </p>
 
   <div className="mt-4 border-t pt-4">
-  <p className="text-xs font-medium uppercase text-gray-500">Customer Billing Methods</p>
+  <p className="text-xs font-medium uppercase text-gray-500">
+    Billing Methods
+  </p>
+
+  <p className="mt-1 text-xs text-gray-500">
+  Source: {project.billing_method_source || 'Customer'}
+</p>
+
+{project.billing_methods_updated_at && (
+  <p className="mt-1 text-xs text-gray-500">
+    Updated: {formatTimestamp(project.billing_methods_updated_at)}
+  </p>
+)}
+
+  {editingProject && (
+  <div className="mt-3 space-y-3">
+    <select
+      value={projectEditForm.billingMethodSource}
+      onChange={(e) =>
+        setProjectEditForm({
+          ...projectEditForm,
+          billingMethodSource: e.target.value,
+        })
+      }
+      className="w-full rounded-lg border p-2 text-sm"
+    >
+      <option value="customer">Customer</option>
+      <option value="standard">Standard</option>
+      <option value="project">Project Override</option>
+    </select>
+
+    {projectEditForm.billingMethodSource === 'project' && (
+      <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
+        {billingTypeOptions.map((option) => (
+          <div key={option.code} className="grid gap-2">
+            <div className="flex items-baseline gap-2">
+              <p className="font-medium">{option.label}</p>
+              <p className="text-xs font-medium text-gray-500">
+                {option.code}
+              </p>
+            </div>
+
+            <select
+              value={projectEditForm[option.field]}
+              onChange={(e) =>
+                setProjectEditForm({
+                  ...projectEditForm,
+                  [option.field]: e.target.value,
+                })
+              }
+              className="rounded-lg border p-2 text-sm"
+            >
+              <option value="" disabled hidden>
+                Select billing method
+              </option>
+
+              {option.choices.map((choice) => (
+                <option key={choice} value={choice}>
+                  {choice}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
 
 
   <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-  <div className="grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
-    <span className="font-semibold">MAIN</span>
-    <span className="text-gray-600">
-      {project.customers?.main_pricing_type || 'Not set'}
-    </span>
+    <div className="grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
+      <span className="font-semibold">MAIN</span>
+      <span className="text-gray-600">{billingMethods.main}</span>
 
-    <span className="font-semibold">LAT</span>
-    <span className="text-gray-600">
-      {project.customers?.lateral_pricing_type || 'Not set'}
-    </span>
+      <span className="font-semibold">LAT</span>
+      <span className="text-gray-600">{billingMethods.lateral}</span>
 
-    <span className="font-semibold">JET</span>
-    <span className="text-gray-600">
-      {project.customers?.jet_pricing_type || 'Not set'}
-    </span>
-  </div>
+      <span className="font-semibold">JET</span>
+      <span className="text-gray-600">{billingMethods.jet}</span>
+    </div>
 
-  <div className="grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
-    <span className="font-semibold">DYE</span>
-    <span className="text-gray-600">
-      {project.customers?.dye_pricing_type || 'Not set'}
-    </span>
+    <div className="grid grid-cols-[56px_1fr] gap-x-4 gap-y-1">
+      <span className="font-semibold">DYE</span>
+      <span className="text-gray-600">{billingMethods.dye}</span>
 
-    <span className="font-semibold">SMK</span>
-    <span className="text-gray-600">
-      {project.customers?.smoke_pricing_type || 'Not set'}
-    </span>
+      <span className="font-semibold">SMK</span>
+      <span className="text-gray-600">{billingMethods.smoke}</span>
 
-    <span className="font-semibold">TRFC</span>
-    <span className="text-gray-600">
-      {project.customers?.traffic_control_pricing_type || 'Not set'}
-    </span>
+      <span className="font-semibold">TRFC</span>
+      <span className="text-gray-600">{billingMethods.trafficControl}</span>
+    </div>
   </div>
 </div>
-
-  </div>
 </div>
 
 
@@ -1064,115 +1658,166 @@ async function saveProjectEdit() {
 
 <div>
   <label className="mb-2 block text-sm font-medium">Service Vehicle</label>
-  <select
-    className={`block w-full min-w-0 max-w-full rounded-lg border p-3 ${
-      timeForm.serviceVehicle ? 'text-black' : 'text-gray-400'
-    }`}
-    value={timeForm.serviceVehicle}
-    onChange={(e) =>
-      setTimeForm({ ...timeForm, serviceVehicle: e.target.value })
-    }
-  >
-    <option value="" disabled hidden>
-      Select service vehicle
-    </option>
-    <option value="2016 Ford Van" className="text-black">
-      2016 Ford Van
-    </option>
-    <option value="2007 Ford F-150" className="text-black">
-      2007 Ford F-150
-    </option>
-  </select>
+
+  <div className="grid grid-cols-2 gap-2">
+    {['2016 Ford Van', '2007 Ford F-150'].map((vehicle) => {
+      const selected = timeForm.serviceVehicle === vehicle;
+
+      return (
+        <button
+          key={vehicle}
+          type="button"
+          onClick={() =>
+            setTimeForm({
+              ...timeForm,
+              serviceVehicle: selected ? '' : vehicle,
+            })
+          }
+          className={`rounded-lg border px-3 py-3 text-sm font-medium ${
+            selected
+              ? 'border-black bg-black text-white'
+              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+          }`}
+        >
+          {vehicle}
+        </button>
+      );
+    })}
+  </div>
 </div>
 
-<div>
+
+<div className="md:col-span-2">
   <label className="mb-2 block text-sm font-medium">
     Type of Service Completed
   </label>
-  <select
-    className={`block w-full min-w-0 max-w-full rounded-lg border p-3 ${
-      timeForm.workCompleted ? 'text-black' : 'text-gray-400'
-    }`}
-    value={timeForm.workCompleted}
-    onChange={(e) => {
-      const workCompleted = e.target.value;
 
-      setTimeForm({
-        ...timeForm,
-        workCompleted,
-        feet: ['Mainline', 'Jetter'].includes(workCompleted)
-          ? timeForm.feet
-          : '',
-        laterals: workCompleted === 'Lateral' ? timeForm.laterals : '',
-      });
-    }}
-  >
-    <option value="" disabled hidden>
-      Select service type
-    </option>
-    <option value="Mainline" className="text-black">
-      Mainline
-    </option>
-    <option value="Lateral" className="text-black">
-      Lateral
-    </option>
-    <option value="Jetter" className="text-black">
-      Jetter
-    </option>
-    <option value="Traffic Control" className="text-black">
-      Traffic Control
-    </option>
-  </select>
+  <div className="grid grid-cols-2 gap-2">
+  {serviceTypeOptions.map((serviceType) => {
+  const selected = selectedServiceTypes.includes(serviceType);
+
+  return (
+    <button
+      key={serviceType}
+      type="button"
+      onClick={() => {
+        if (selected) {
+          setSelectedServiceTypes(
+            selectedServiceTypes.filter((type) => type !== serviceType)
+          );
+
+          const nextQuantities = { ...serviceQuantities };
+          delete nextQuantities[serviceType];
+          setServiceQuantities(nextQuantities);
+          return;
+        }
+
+        setSelectedServiceTypes([...selectedServiceTypes, serviceType]);
+      }}
+      className={`rounded-lg border px-3 py-3 text-sm font-medium ${
+        selected
+          ? 'border-black bg-black text-white'
+          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+      }`}
+    >
+      {serviceType}
+    </button>
+  );
+})}
+
+  </div>
 </div>
 
+{selectedServiceTypes.length > 0 && (
+  <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
+    {selectedServiceTypes.map((serviceType) => {
+      const billingMethod = billingMethodForService(serviceType);
 
-  {isHourlyProject && (
-  <div>
-    <label className="mb-2 block text-sm font-medium">Hours Worked</label>
-    <input
-      type="text"
-      inputMode="decimal"
-      pattern="[0-9]*[.]?[0-9]*"
-      placeholder="Enter hours"
-      value={timeForm.hours}
-      onChange={(e) => setTimeForm({ ...timeForm, hours: e.target.value })}
-      className="block w-full min-w-0 max-w-full rounded-lg border p-3"
-    />
+      if (billingMethod === 'Flat Rate') {
+        return (
+          <div key={serviceType} className="rounded-lg border p-3">
+            <p className="text-sm font-medium">{serviceType}</p>
+            <p className="mt-1 text-sm text-gray-500">Flat rate</p>
+          </div>
+        );
+      }
+
+      return (
+        <div key={serviceType}>
+          <label className="mb-2 block text-sm font-medium">
+            {serviceType} - {quantityLabelForService(serviceType)}
+          </label>
+          <input
+            type="text"
+            inputMode={
+              billingMethod === 'Per Hour' || billingMethod === 'Per Foot'
+                ? 'decimal'
+                : 'numeric'
+            }
+            placeholder={quantityPlaceholderForService(serviceType)}
+            value={serviceQuantities[serviceType] ?? ''}
+            onChange={(e) =>
+              setServiceQuantities({
+                ...serviceQuantities,
+                [serviceType]: e.target.value,
+              })
+            }
+            className="block w-full min-w-0 max-w-full rounded-lg border p-3"
+          />
+        </div>
+      );
+    })}
   </div>
 )}
 
-{showFeetInput && (
-  <div>
-    <label className="mb-2 block text-sm font-medium">Feet Serviced</label>
-    <input
-      type="text"
-      inputMode="decimal"
-      pattern="[0-9]*[.]?[0-9]*"
-      placeholder="Enter feet"
-      value={timeForm.feet}
-      onChange={(e) => setTimeForm({ ...timeForm, feet: e.target.value })}
-      className="block w-full min-w-0 max-w-full rounded-lg border p-3"
-    />
+<div className="flex flex-wrap items-center gap-3 md:col-span-2">
+  <button
+    type="button"
+    onClick={addSelectedServicesToSubmission}
+    className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-50"
+  >
+    Add to Submission
+  </button>
+
+  {serviceSubmissionError && (
+    <p className="text-sm font-medium text-red-600">
+      {serviceSubmissionError}
+    </p>
+  )}
+</div>
+
+{pendingServiceItems.length > 0 && (
+  <div className="md:col-span-2 rounded-xl border p-4">
+    <p className="text-sm font-bold text-gray-700">Submission Review</p>
+
+    <div className="mt-3 space-y-2">
+      {pendingServiceItems.map((item) => (
+        <div
+          key={item.id}
+          className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
+        >
+          <div>
+            <p className="text-sm font-medium">{item.serviceType}</p>
+            <p className="text-xs text-gray-500">
+  {item.serviceVehicle}
+</p>
+<p className="text-xs text-gray-500">
+  {item.billingMethod} - {quantityLabelForPendingItem(item)}
+</p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => removePendingServiceItem(item.id)}
+            className="rounded-lg border px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+    </div>
   </div>
 )}
-
-{showLateralsInput && (
-  <div>
-    <label className="mb-2 block text-sm font-medium">
-      Laterals Serviced
-    </label>
-    <input
-      type="text"
-      inputMode="numeric"
-      pattern="[0-9]*"
-      placeholder="Enter laterals"
-      value={timeForm.laterals}
-      onChange={(e) => setTimeForm({ ...timeForm, laterals: e.target.value })}
-      className="block w-full min-w-0 max-w-full rounded-lg border p-3"
-    />
-  </div>
-)}
-
 
 
   <div className="md:col-span-2">
@@ -1187,13 +1832,24 @@ async function saveProjectEdit() {
   </div>
 </div>
 
-<button
-  type="button"
-  onClick={submitTimeEntry}
-  className="mt-4 rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
->
-  {editingTimeEntryId ? 'Update Time' : 'Submit Time'}
-</button>
+<div className="mt-4 flex flex-wrap gap-3">
+  <button
+    type="button"
+    onClick={submitTimeEntry}
+    className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
+  >
+    {editingTimeEntryId ? 'Update Time' : 'Submit All'}
+  </button>
+
+  <button
+    type="button"
+    onClick={clearServiceSubmissionForm}
+    className="rounded-lg border px-5 py-3 text-sm font-medium hover:bg-gray-50"
+  >
+    Clear
+  </button>
+</div>
+
 </>
   )}
 
@@ -1234,11 +1890,90 @@ async function saveProjectEdit() {
 
       <div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
 
-  {timeEntries.map((entry) => {
-    const isEditing = inlineEditingTimeEntryId === entry.id;
+      {groupedTimeEntries.map(([workDate, entries]) => {
+  const isDateExpanded = expandedServiceDates.includes(workDate);
+  const summary = serviceDateSummary(entries);
 
-    return (
-      <div key={entry.id} className="rounded-xl border p-4">
+  return (
+    <div key={workDate} className="rounded-xl border">
+      <button
+  type="button"
+  onClick={() =>
+    setExpandedServiceDates((dates) =>
+      dates.includes(workDate)
+        ? dates.filter((date) => date !== workDate)
+        : [...dates, workDate]
+    )
+  }
+  className="w-full p-4 text-left"
+>
+<div className="grid w-full gap-4 md:grid-cols-[180px_minmax(0,1fr)_80px] md:items-start">
+<div>
+  <div className="flex items-start justify-between gap-4">
+    <div>
+      <p className="text-xs font-medium uppercase text-gray-500">
+        Service Date
+      </p>
+      <p className="mt-1 font-semibold">{formatDate(workDate)}</p>
+    </div>
+
+    <div className="text-right md:hidden">
+      <p className="text-xs font-medium uppercase text-gray-500">
+        Entries
+      </p>
+      <p className="mt-1 pr-4 font-semibold">
+        {entries.length}
+      </p>
+    </div>
+  </div>
+
+  <div className="mt-5">
+      <p className="text-xs font-medium uppercase text-gray-500">
+        Vehicles
+      </p>
+      <p className="mt-1 text-sm text-gray-700">
+        {summary.vehicles}
+      </p>
+    </div>
+  </div>
+
+  <div className="min-w-0">
+    <p className="text-xs font-medium uppercase text-gray-500">
+      Services
+    </p>
+
+    <div className="mt-1 space-y-1">
+      {summary.services.length > 0 ? (
+        summary.services.map((service) => (
+          <p key={service} className="text-sm font-medium text-gray-700 md:truncate">
+            {service}
+          </p>
+        ))
+      ) : (
+        <p className="text-sm text-gray-500">No services listed</p>
+      )}
+    </div>
+  </div>
+
+  <div className="hidden border-t pt-3 md:block md:border-t-0 md:pt-0 md:text-right">
+    <p className="text-xs font-medium uppercase text-gray-500">
+      Entries
+    </p>
+    <p className="mt-1 font-semibold">
+      {entries.length}
+    </p>
+  </div>
+</div>
+</button>
+
+
+      {isDateExpanded && (
+        <div className="space-y-3 border-t p-3">
+          {entries.map((entry) => {
+            const isEditing = inlineEditingTimeEntryId === entry.id;
+
+            return (
+              <div key={entry.id} className="rounded-xl border p-4">
         {isEditing ? (
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -1291,9 +2026,11 @@ async function saveProjectEdit() {
               >
                 <option value="">Select work type</option>
                 <option>Mainline</option>
-                <option>Lateral</option>
-                <option>Jetter</option>
-                <option>Traffic Control</option>
+<option>Lateral</option>
+<option>Jetter</option>
+<option>Dye</option>
+<option>Smoke</option>
+<option>Traffic Control</option>
               </select>
             </div>
 
@@ -1376,16 +2113,10 @@ async function saveProjectEdit() {
 
   <div className="text-right">
   <p className="text-xs font-medium uppercase text-gray-500">
-  {isHourlyProject ? 'Service Hours' : 'Serviced'}
+  {billingMethodForEntry(entry) || 'Quantity'}
 </p>
 <p className="mt-1 font-semibold">
-{isHourlyProject
-  ? `${entry.hours ?? 0} hrs`
-  : entry.feet !== null && entry.feet !== undefined
-    ? `${entry.feet} ft`
-    : entry.laterals !== null && entry.laterals !== undefined
-      ? `${entry.laterals} laterals`
-      : 'No quantity'}
+{quantityLabelForEntry(entry)}
 </p>
 
   </div>
@@ -1421,6 +2152,24 @@ async function saveProjectEdit() {
         <p className="mt-1 text-sm text-gray-700">
   {entry.work_completed || 'No work type selected'}
 </p>
+<div>
+  <p className="text-xs font-medium uppercase text-gray-500">
+    Quantities
+  </p>
+
+  {entryQuantityDetails(entry).length > 0 ? (
+    <div className="mt-1 grid gap-1 text-sm text-gray-700">
+      {entryQuantityDetails(entry).map((detail) => (
+        <p key={detail.label}>
+          <span className="font-medium">{detail.label}:</span>{' '}
+          {detail.value}
+        </p>
+      ))}
+    </div>
+  ) : (
+    <p className="mt-1 text-sm text-gray-700">No quantity submitted</p>
+  )}
+</div>
 
       </div>
 
@@ -1460,8 +2209,13 @@ async function saveProjectEdit() {
           </>
         )}
       </div>
-    );
-  })}
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+})}
 
 {timeEntries.length === 0 && (
     <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">

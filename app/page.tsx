@@ -44,6 +44,9 @@ const emptyPricingModels = {
   MAIN: '',
   LAT: '',
   JET: '',
+  DYE: '',
+  SMK: '',
+  TRFC: '',
 };
 
 const pricingModelOptions = [
@@ -62,7 +65,23 @@ const pricingModelOptions = [
     label: 'Jetter',
     choices: ['Per Hour', 'Per Foot'],
   },
+  {
+    code: 'DYE',
+    label: 'Dye',
+    choices: ['Per Hour'],
+  },
+  {
+    code: 'SMK',
+    label: 'Smoke',
+    choices: ['Per Hour', 'Per Mainline Test', 'Per Residence'],
+  },
+  {
+    code: 'TRFC',
+    label: 'Traffic Control',
+    choices: ['Flat Rate'],
+  },
 ] as const;
+
 
 export default function DashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -73,12 +92,15 @@ export default function DashboardPage() {
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
+  const [showCustomerBillingMethods, setShowCustomerBillingMethods] =
+  useState(false);
 
   const [newCustomer, setNewCustomer] = useState({
     name: '',
     contactName: '',
     phone: '',
     email: '',
+    address: '',
     pricingModels: emptyPricingModels,
   });
 
@@ -92,6 +114,13 @@ export default function DashboardPage() {
     startdateofservice: '',
     projectLocation: '',
     notes: '',
+billingMethodSource: 'customer',
+mainPricingType: '',
+lateralPricingType: '',
+jetPricingType: '',
+dyePricingType: '',
+smokePricingType: '',
+trafficControlPricingType: '',
   });
 
   function formatDate(value: string | undefined) {
@@ -193,7 +222,9 @@ export default function DashboardPage() {
     async function loadCustomers() {
       const { data, error } = await supabase
         .from('customers')
-        .select('id, name, contact_name, phone, email, address, main_pricing_type, lateral_pricing_type, jet_pricing_type, notes')
+        .select(
+          'id, name, contact_name, phone, email, address, main_pricing_type, lateral_pricing_type, jet_pricing_type, dye_pricing_type, smoke_pricing_type, traffic_control_pricing_type, notes'
+        )        
         .order('name');
 
       if (error) {
@@ -212,6 +243,9 @@ export default function DashboardPage() {
           MAIN: customer.main_pricing_type ?? '',
           LAT: customer.lateral_pricing_type ?? '',
           JET: customer.jet_pricing_type ?? '',
+          DYE: customer.dye_pricing_type ?? '',
+          SMK: customer.smoke_pricing_type ?? '',
+          TRFC: customer.traffic_control_pricing_type ?? '',
         },
         notes: customer.notes ?? '',
       }));
@@ -248,8 +282,13 @@ export default function DashboardPage() {
   async function saveCustomer() {
     if (
       !newCustomer.name.trim() ||
+      !newCustomer.contactName.trim() ||
+      !newCustomer.phone.trim() ||
+      !newCustomer.email.trim() ||
+      !newCustomer.address.trim() ||
       Object.values(newCustomer.pricingModels).some((value) => !value)
     ) {
+      alert('Please complete all required customer fields.');
       return;
     }
 
@@ -260,10 +299,13 @@ export default function DashboardPage() {
         contact_name: newCustomer.contactName,
         phone: newCustomer.phone,
         email: newCustomer.email,
+        address: newCustomer.address,
         main_pricing_type: newCustomer.pricingModels.MAIN,
-lateral_pricing_type: newCustomer.pricingModels.LAT,
-jet_pricing_type: newCustomer.pricingModels.JET,
-
+        lateral_pricing_type: newCustomer.pricingModels.LAT,
+        jet_pricing_type: newCustomer.pricingModels.JET,
+        dye_pricing_type: newCustomer.pricingModels.DYE,
+        smoke_pricing_type: newCustomer.pricingModels.SMK,
+        traffic_control_pricing_type: newCustomer.pricingModels.TRFC,
       })
       .select()
       .single();
@@ -285,6 +327,9 @@ jet_pricing_type: newCustomer.pricingModels.JET,
         MAIN: data.main_pricing_type ?? '',
         LAT: data.lateral_pricing_type ?? '',
         JET: data.jet_pricing_type ?? '',
+        DYE: data.dye_pricing_type ?? '',
+        SMK: data.smoke_pricing_type ?? '',
+        TRFC: data.traffic_control_pricing_type ?? '',
       },
       notes: data.notes ?? '',
     };
@@ -296,6 +341,8 @@ jet_pricing_type: newCustomer.pricingModels.JET,
       contactName: '',
       phone: '',
       email: '',
+      address: '',
+
       pricingModels: emptyPricingModels,
     });
 
@@ -314,6 +361,31 @@ jet_pricing_type: newCustomer.pricingModels.JET,
       service_start_date: newProject.startdateofservice,
       project_location: newProject.projectLocation,
       notes: newProject.notes,
+      billing_method_source: newProject.billingMethodSource,
+main_pricing_type:
+  newProject.billingMethodSource === 'project'
+    ? newProject.mainPricingType
+    : null,
+lateral_pricing_type:
+  newProject.billingMethodSource === 'project'
+    ? newProject.lateralPricingType
+    : null,
+jet_pricing_type:
+  newProject.billingMethodSource === 'project'
+    ? newProject.jetPricingType
+    : null,
+dye_pricing_type:
+  newProject.billingMethodSource === 'project'
+    ? newProject.dyePricingType
+    : null,
+smoke_pricing_type:
+  newProject.billingMethodSource === 'project'
+    ? newProject.smokePricingType
+    : null,
+traffic_control_pricing_type:
+  newProject.billingMethodSource === 'project'
+    ? newProject.trafficControlPricingType
+    : null,
     });
 
     if (error) {
@@ -332,6 +404,13 @@ jet_pricing_type: newCustomer.pricingModels.JET,
       startdateofservice: '',
       projectLocation: '',
       notes: '',
+      billingMethodSource: 'customer',
+      mainPricingType: '',
+      lateralPricingType: '',
+      jetPricingType: '',
+      dyePricingType: '',
+      smokePricingType: '',
+      trafficControlPricingType: '',
     });
 
     setProjectCustomerSearch('');
@@ -361,8 +440,10 @@ jet_pricing_type: newCustomer.pricingModels.JET,
 
           <button
             type="button"
-            onClick={() => setShowCustomerForm(true)}
-            className="rounded-lg border bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50"
+onClick={() => {
+  setShowCustomerBillingMethods(false);
+  setShowCustomerForm(true);
+}}            className="rounded-lg border bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50"
           >
             + Add Customer
           </button>
@@ -390,7 +471,7 @@ jet_pricing_type: newCustomer.pricingModels.JET,
       <h2 className="text-2xl font-bold">Add Customer</h2>
 
       <div className="mt-4 grid flex-1 gap-4 overflow-y-auto pr-1">
-        <input
+      <input required
           type="text"
           placeholder="Customer name"
           value={newCustomer.name}
@@ -400,7 +481,7 @@ jet_pricing_type: newCustomer.pricingModels.JET,
           className="rounded-lg border p-3"
         />
 
-        <input
+<input required
           type="text"
           placeholder="Contact name"
           value={newCustomer.contactName}
@@ -413,7 +494,7 @@ jet_pricing_type: newCustomer.pricingModels.JET,
           className="rounded-lg border p-3"
         />
 
-        <input
+<input required
           type="tel"
           placeholder="Phone"
           value={newCustomer.phone}
@@ -423,7 +504,7 @@ jet_pricing_type: newCustomer.pricingModels.JET,
           className="rounded-lg border p-3"
         />
 
-        <input
+<input required
           type="email"
           placeholder="Email"
           value={newCustomer.email}
@@ -433,51 +514,77 @@ jet_pricing_type: newCustomer.pricingModels.JET,
           className="rounded-lg border p-3"
         />
 
-        <div className="rounded-lg border p-3">
-          <p className="text-sm font-medium">Billing Methods</p>
+<input
+  type="text"
+  required
+  placeholder="Mailing address"
+  value={newCustomer.address}
+  onChange={(e) =>
+    setNewCustomer({ ...newCustomer, address: e.target.value })
+  }
+  className="rounded-lg border p-3"
+/>
 
-          <div className="mt-3 grid gap-3">
-            {pricingModelOptions.map((option) => (
-              <div
-                key={option.code}
-                className="grid gap-2 md:grid-cols-[120px_1fr]"
-              >
-                <div>
-                  <p className="font-medium">{option.label}</p>
-                  <p className="text-xs text-gray-500">{option.code}</p>
-                </div>
+<div className="rounded-lg border p-3">
+  <button
+    type="button"
+    onClick={() =>
+      setShowCustomerBillingMethods(!showCustomerBillingMethods)
+    }
+    className="flex w-full items-center justify-between gap-3 text-left"
+  >
+    <span className="text-sm font-medium">Billing Methods</span>
 
-                <select
-                  value={newCustomer.pricingModels[option.code]}
-                  onChange={(e) =>
-                    setNewCustomer({
-                      ...newCustomer,
-                      pricingModels: {
-                        ...newCustomer.pricingModels,
-                        [option.code]: e.target.value,
-                      },
-                    })
-                  }
-                  className={`rounded-lg border p-3 ${
-                    newCustomer.pricingModels[option.code]
-                      ? 'text-black'
-                      : 'text-gray-400'
-                  }`}
-                >
-                  <option value="" disabled hidden>
-                    Select pricing
-                  </option>
+    <span className="text-xl leading-none text-gray-500">
+      {showCustomerBillingMethods ? '⌄' : '›'}
+    </span>
+  </button>
 
-                  {option.choices.map((choice) => (
-                    <option key={choice} value={choice} className="text-black">
-                      {choice}
-                    </option>
-                  ))}
-                </select>
-              </div>
+  {showCustomerBillingMethods && (
+    <div className="mt-3 grid gap-3">
+      {pricingModelOptions.map((option) => (
+        <div
+          key={option.code}
+          className="grid gap-2 md:grid-cols-[120px_1fr]"
+        >
+          <div className="flex items-baseline gap-2">
+  <p className="font-medium">{option.label}</p>
+  <p className="text-xs font-medium text-gray-500">{option.code}</p>
+</div>
+
+          <select
+            value={newCustomer.pricingModels[option.code]}
+            onChange={(e) =>
+              setNewCustomer({
+                ...newCustomer,
+                pricingModels: {
+                  ...newCustomer.pricingModels,
+                  [option.code]: e.target.value,
+                },
+              })
+            }
+            className={`rounded-lg border p-3 ${
+              newCustomer.pricingModels[option.code]
+                ? 'text-black'
+                : 'text-gray-400'
+            }`}
+          >
+            <option value="" disabled hidden>
+              Select pricing
+            </option>
+
+            {option.choices.map((choice) => (
+              <option key={choice} value={choice} className="text-black">
+                {choice}
+              </option>
             ))}
-          </div>
+          </select>
         </div>
+      ))}
+    </div>
+  )}
+</div>
+
       </div>
 
       <div className="mt-6 flex justify-end gap-3">
@@ -645,6 +752,80 @@ jet_pricing_type: newCustomer.pricingModels.JET,
                   className="block w-full min-w-0 max-w-full rounded-lg border p-3"
                 />
               </div>
+              <div className="md:col-span-2">
+  <label className="mb-2 block text-sm font-medium">
+    Billing Method Source
+  </label>
+
+  <select
+    value={newProject.billingMethodSource}
+    onChange={(e) =>
+      setNewProject({
+        ...newProject,
+        billingMethodSource: e.target.value,
+      })
+    }
+    className="w-full rounded-lg border p-3"
+  >
+    <option value="customer">Customer</option>
+    <option value="standard">Standard</option>
+    <option value="project">Project Override</option>
+  </select>
+</div>
+
+{newProject.billingMethodSource === 'project' && (
+  <div className="md:col-span-2 rounded-lg border p-3">
+    <p className="text-sm font-medium">Project Override Billing Methods</p>
+
+    <div className="mt-3 grid gap-3 md:grid-cols-2">
+      {pricingModelOptions.map((option) => {
+        const fieldMap = {
+          MAIN: 'mainPricingType',
+          LAT: 'lateralPricingType',
+          JET: 'jetPricingType',
+          DYE: 'dyePricingType',
+          SMK: 'smokePricingType',
+          TRFC: 'trafficControlPricingType',
+        } as const;
+
+        const field = fieldMap[option.code];
+
+        return (
+          <div key={option.code} className="grid gap-2">
+            <div className="flex items-baseline gap-2">
+  <p className="font-medium">{option.label}</p>
+  <p className="text-xs font-medium text-gray-500">{option.code}</p>
+</div>
+
+            <select
+              value={newProject[field]}
+              onChange={(e) =>
+                setNewProject({
+                  ...newProject,
+                  [field]: e.target.value,
+                })
+              }
+              className={`rounded-lg border p-3 ${
+                newProject[field] ? 'text-black' : 'text-gray-400'
+              }`}
+            >
+              <option value="" disabled hidden>
+                Select billing method
+              </option>
+
+              {option.choices.map((choice) => (
+                <option key={choice} value={choice} className="text-black">
+                  {choice}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+)}
+
             </div>
 
             <div className="mt-6 flex justify-end gap-3">

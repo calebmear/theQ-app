@@ -637,20 +637,22 @@ billing_methods_updated_at: data.billing_methods_updated_at,
           .filter((vehicle): vehicle is string => Boolean(vehicle))
       )
     );
+
+    
   
     const serviceTotals = entries.reduce<
-  Record<
-    string,
-    {
-      hours: number;
-      feet: number;
-      laterals: number;
-      residences: number;
-      mainlineTests: number;
-      flatRates: number;
-    }
-  >
->((summary, entry) => {
+      Record<
+        string,
+        {
+          hours: number;
+          feet: number;
+          laterals: number;
+          residences: number;
+          mainlineTests: number;
+          flatRates: number;
+        }
+      >
+    >((summary, entry) => {
       const serviceType = entry.work_completed || 'Unknown Service';
       const billingMethod = billingMethodForEntry(entry);
   
@@ -665,29 +667,12 @@ billing_methods_updated_at: data.billing_methods_updated_at,
         };
       }
   
-      if (billingMethod === 'Per Hour') {
-        summary[serviceType].hours += entry.hours ?? 0;
-      }
-  
-      if (billingMethod === 'Per Foot') {
-        summary[serviceType].feet += entry.feet ?? 0;
-      }
-  
-      if (billingMethod === 'Per Lateral') {
-        summary[serviceType].laterals += entry.laterals ?? 0;
-      }
-
-      if (billingMethod === 'Per Residence') {
-        summary[serviceType].residences += entry.residences ?? 0;
-      }
-      
-      if (billingMethod === 'Per Mainline Test') {
-        summary[serviceType].mainlineTests += entry.mainline_tests ?? 0;
-      }
-      
-      if (billingMethod === 'Flat Rate' || entry.flat_rate) {
-        summary[serviceType].flatRates += 1;
-      }
+      if (billingMethod === 'Per Hour') summary[serviceType].hours += entry.hours ?? 0;
+      if (billingMethod === 'Per Foot') summary[serviceType].feet += entry.feet ?? 0;
+      if (billingMethod === 'Per Lateral') summary[serviceType].laterals += entry.laterals ?? 0;
+      if (billingMethod === 'Per Residence') summary[serviceType].residences += entry.residences ?? 0;
+      if (billingMethod === 'Per Mainline Test') summary[serviceType].mainlineTests += entry.mainline_tests ?? 0;
+      if (billingMethod === 'Flat Rate' || entry.flat_rate) summary[serviceType].flatRates += 1;
   
       return summary;
     }, {});
@@ -700,7 +685,6 @@ billing_methods_updated_at: data.billing_methods_updated_at,
       if (totals.laterals > 0) quantities.push(`${totals.laterals} laterals`);
       if (totals.residences > 0) quantities.push(`${totals.residences} residences`);
       if (totals.mainlineTests > 0) quantities.push(`${totals.mainlineTests} tests`);
-
       if (totals.flatRates > 0) quantities.push('Flat rate');
   
       return `${serviceType}: ${quantities.join(' • ') || 'No quantity'}`;
@@ -712,8 +696,82 @@ billing_methods_updated_at: data.billing_methods_updated_at,
     };
   }
   
-  
+  function serviceNamesForEntries(entries: TimeEntry[]) {
+    const names = Array.from(
+      new Set(
+        entries
+          .map((entry) => entry.work_completed)
+          .filter((service): service is string => Boolean(service))
+      )
+    );
 
+    return names.length > 0 ? names.join(', ') : 'No services listed';
+  }
+
+  function projectServiceSummary(entries: TimeEntry[]) {
+    const serviceDays = new Set(entries.map((entry) => entry.work_date));
+  
+    const serviceTotals = entries.reduce<
+      Record<
+        string,
+        {
+          hours: number;
+          feet: number;
+          laterals: number;
+          residences: number;
+          mainlineTests: number;
+          flatRates: number;
+        }
+      >
+    >((summary, entry) => {
+      const serviceType = entry.work_completed || 'Unknown Service';
+      const billingMethod = billingMethodForEntry(entry);
+  
+      if (!summary[serviceType]) {
+        summary[serviceType] = {
+          hours: 0,
+          feet: 0,
+          laterals: 0,
+          residences: 0,
+          mainlineTests: 0,
+          flatRates: 0,
+        };
+      }
+  
+      if (billingMethod === 'Per Hour') summary[serviceType].hours += entry.hours ?? 0;
+      if (billingMethod === 'Per Foot') summary[serviceType].feet += entry.feet ?? 0;
+      if (billingMethod === 'Per Lateral') summary[serviceType].laterals += entry.laterals ?? 0;
+      if (billingMethod === 'Per Residence') summary[serviceType].residences += entry.residences ?? 0;
+      if (billingMethod === 'Per Mainline Test') summary[serviceType].mainlineTests += entry.mainline_tests ?? 0;
+      if (billingMethod === 'Flat Rate' || entry.flat_rate) summary[serviceType].flatRates += 1;
+  
+      return summary;
+    }, {});
+  
+    const services = Object.entries(serviceTotals).map(([serviceType, totals]) => {
+      const quantities = [];
+  
+      if (totals.hours > 0) quantities.push(`${totals.hours} hrs`);
+      if (totals.feet > 0) quantities.push(`${totals.feet} ft`);
+      if (totals.laterals > 0) quantities.push(`${totals.laterals} laterals`);
+      if (totals.residences > 0) quantities.push(`${totals.residences} residences`);
+      if (totals.mainlineTests > 0) quantities.push(`${totals.mainlineTests} tests`);
+      if (totals.flatRates > 0) quantities.push(`${totals.flatRates} flat rate`);
+  
+      return {
+        serviceType,
+        summary: quantities.join(' • ') || 'No quantity',
+      };
+    });
+  
+    return {
+      dayCount: serviceDays.size,
+      entryCount: entries.length,
+      services,
+    };
+  }
+  
+  
   const groupedTimeEntries = Object.entries(
     timeEntries.reduce<Record<string, TimeEntry[]>>((groups, entry) => {
       if (!groups[entry.work_date]) {
@@ -724,6 +782,10 @@ billing_methods_updated_at: data.billing_methods_updated_at,
       return groups;
     }, {})
   );
+  
+  const serviceSummary = projectServiceSummary(timeEntries);
+  
+
 
 async function loadTimeEntries(projectId: string) {
   const { data, error } = await supabase
@@ -1465,14 +1527,14 @@ traffic_control_pricing_type:
   </div>
 
   {!editingProject && (
-    <button
-      type="button"
-      onClick={startProjectEdit}
-      className="text-center text-sm font-medium text-gray-500 hover:text-black hover:underline"
-      >
-      Edit project details
-    </button>
-  )}
+  <button
+    type="button"
+    onClick={startProjectEdit}
+    className="mt-2 text-center text-sm font-medium text-gray-500 hover:text-black hover:underline"
+    >
+    Edit project details
+  </button>
+)}
 </div>
 
 
@@ -1502,24 +1564,25 @@ traffic_control_pricing_type:
   </p>
 
   <div className="mt-4 border-t pt-4">
-  <div className="flex items-center gap-2">
-  <p className="text-xs font-medium uppercase text-gray-500">
-    Billing Methods
-  </p>
+  <div className="flex w-full items-center justify-between gap-3">
+  <div>
+    <p className="text-xs font-medium uppercase text-gray-500">
+      Billing Methods
+    </p>
 
-  <span className="text-xs text-gray-300">•</span>
+    {project.billing_methods_updated_at && (
+      <p className="mt-1 text-xs text-gray-500">
+        Updated {formatTimestamp(project.billing_methods_updated_at)}
+      </p>
+    )}
+  </div>
 
-
-  <p className="text-xs text-gray-500">
-    Source: {formatBillingSource(project.billing_method_source)}
-  </p>
+  <span className="inline-flex min-w-[96px] justify-center rounded-full border bg-gray-50 px-4 py-1 text-xs font-semibold text-gray-700">
+    {formatBillingSource(project.billing_method_source)}
+  </span>
 </div>
 
-{project.billing_methods_updated_at && (
-  <p className="mt-1 text-xs text-gray-500">
-    Updated: {formatTimestamp(project.billing_methods_updated_at)}
-  </p>
-)}
+
 
 
   {editingProject && (
@@ -1578,7 +1641,7 @@ traffic_control_pricing_type:
 )}
 
 
-<div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+<div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
   <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
     <span className="font-semibold">MAIN</span>
     <span className="min-w-0 break-words text-gray-600">
@@ -1884,26 +1947,96 @@ traffic_control_pricing_type:
           </div>
 
           <div className="rounded-2xl bg-white p-6 shadow">
+          <div>
+  <h2 className="text-xl font-bold">Service Summary</h2>
+  <p className="mt-1 text-sm text-gray-600">
+    View service totals and submitted entries.
+  </p>
+</div>
+
+{timeEntries.length > 0 && (
+  <div className="mt-4 rounded-xl border bg-gray-50 p-4">
+  <div className="grid grid-cols-2 gap-3 text-center">
+  <div className="rounded-lg bg-white px-3 py-3">
+    <p className="text-xs font-medium uppercase text-gray-500">
+      Service Days
+    </p>
+    <p className="mt-1 text-lg font-bold">
+      {serviceSummary.dayCount}
+    </p>
+  </div>
+
+  <div className="rounded-lg bg-white px-3 py-3">
+    <p className="text-xs font-medium uppercase text-gray-500">
+      Submissions
+    </p>
+    <p className="mt-1 text-lg font-bold">
+      {serviceSummary.entryCount}
+    </p>
+  </div>
+</div>
+
+<div className="mt-4 border-t pt-4">
+  <div className="mb-3 flex items-center justify-between">
+    <p className="text-sm font-bold text-gray-800">
+      Service Totals
+    </p>
+
+    
+  </div>
+
+  <div className="space-y-2">
+    {serviceSummary.services.map((service) => (
+      <div
+        key={service.serviceType}
+        className="rounded-lg border bg-white px-3 py-2"
+      >
+        <div className="flex items-start justify-between gap-3 text-sm">
+          <span className="font-semibold text-gray-800">
+            {service.serviceType}
+          </span>
+
+          <span className="text-right font-medium text-gray-600">
+            {service.summary}
+          </span>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+
+  </div>
+)}
+
+</div>
+
+<div className="rounded-2xl bg-white p-6 shadow">
+
+<div>
   <button
     type="button"
     onClick={() => setShowServiceLog(!showServiceLog)}
     className="flex w-full items-center justify-between gap-4 text-left"
   >
     <div>
-      <h2 className="text-xl font-bold">Service Log</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        View submitted service entries.
-      </p>
+    <h2 className="text-xl font-bold">Service History</h2>
+  <p className="mt-1 text-sm text-gray-600">
+    View submitted service entries.
+  </p>
     </div>
 
     <span className="text-2xl leading-none text-gray-500">
       {showServiceLog ? '⌄' : '›'}
     </span>
   </button>
+</div>
 
-  {showServiceLog && (
-    <>
-      <div className="mt-4 flex justify-end">
+{showServiceLog && (
+  <>
+
+    
+    <div className="mt-4 flex justify-end">
+
         <button
           type="button"
           onClick={() => {
@@ -1916,7 +2049,7 @@ traffic_control_pricing_type:
         </button>
       </div>
 
-      <div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-2">
+      <div className="mt-4 max-h-[70vh] space-y-3 overflow-y-auto pr-2">
 
       {groupedTimeEntries.map(([workDate, entries]) => {
   const isDateExpanded = expandedServiceDates.includes(workDate);
@@ -1933,315 +2066,219 @@ traffic_control_pricing_type:
         : [...dates, workDate]
     )
   }
-  className="w-full p-4 text-left"
+  className="w-full rounded-xl bg-white px-4 py-3 text-left"
 >
-<div className="grid w-full gap-4 md:grid-cols-[180px_minmax(0,1fr)_80px] md:items-start">
-<div>
-  <div className="flex items-start justify-between gap-4">
-    <div>
-      <p className="text-xs font-medium uppercase text-gray-500">
-        Service Date
+  <div className="flex items-start justify-between gap-3">
+    <div className="min-w-0">
+      <p className="text-sm font-bold text-gray-900">
+        {formatDate(workDate)}
       </p>
-      <p className="mt-1 font-semibold">{formatDate(workDate)}</p>
+
+      <p className="mt-1 truncate text-sm text-gray-600">
+  {serviceNamesForEntries(entries)}
+</p>
     </div>
 
-    <div className="text-right md:hidden">
-      <p className="text-xs font-medium uppercase text-gray-500">
-        Entries
+    <div className="shrink-0 text-right">
+      <p className="text-xs font-medium text-gray-500">
+        {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
       </p>
-      <p className="mt-1 pr-4 font-semibold">
-        {entries.length}
-      </p>
+
+      <span className="mt-1 block text-xl leading-none text-gray-400">
+        {isDateExpanded ? '⌄' : '›'}
+      </span>
     </div>
   </div>
-
-  <div className="mt-5">
-      <p className="text-xs font-medium uppercase text-gray-500">
-        Vehicles
-      </p>
-      <p className="mt-1 text-sm text-gray-700">
-        {summary.vehicles}
-      </p>
-    </div>
-  </div>
-
-  <div className="min-w-0">
-    <p className="text-xs font-medium uppercase text-gray-500">
-      Services
-    </p>
-
-    <div className="mt-1 space-y-1">
-      {summary.services.length > 0 ? (
-        summary.services.map((service) => (
-          <p key={service} className="text-sm font-medium text-gray-700 md:truncate">
-            {service}
-          </p>
-        ))
-      ) : (
-        <p className="text-sm text-gray-500">No services listed</p>
-      )}
-    </div>
-  </div>
-
-  <div className="hidden border-t pt-3 md:block md:border-t-0 md:pt-0 md:text-right">
-    <p className="text-xs font-medium uppercase text-gray-500">
-      Entries
-    </p>
-    <p className="mt-1 font-semibold">
-      {entries.length}
-    </p>
-  </div>
-</div>
 </button>
 
 
-      {isDateExpanded && (
-        <div className="space-y-3 border-t p-3">
-          {entries.map((entry) => {
-            const isEditing = inlineEditingTimeEntryId === entry.id;
 
-            return (
-              <div key={entry.id} className="rounded-xl border p-4">
-        {isEditing ? (
-          <div className="grid gap-4 md:grid-cols-2">
+{isDateExpanded && (
+  <div className="space-y-2 border-t bg-gray-50 p-3">
+    {entries.map((entry) => {
+  const isEditing = inlineEditingTimeEntryId === entry.id;
+
+  return (
+    <div key={entry.id} className="rounded-lg border bg-white p-3">
+      {isEditing ? (
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Service Date
+            </label>
+            <input
+              type="date"
+              value={inlineTimeForm.workDate}
+              onChange={(e) =>
+                setInlineTimeForm({
+                  ...inlineTimeForm,
+                  workDate: e.target.value,
+                })
+              }
+              className="w-full rounded-lg border p-3"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Hours
+            </label>
+            <input
+              type="number"
+              value={inlineTimeForm.hours}
+              onChange={(e) =>
+                setInlineTimeForm({
+                  ...inlineTimeForm,
+                  hours: e.target.value,
+                })
+              }
+              className="w-full rounded-lg border p-3"
+            />
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Work Type
+            </label>
+            <select
+              value={inlineTimeForm.workCompleted}
+              onChange={(e) =>
+                setInlineTimeForm({
+                  ...inlineTimeForm,
+                  workCompleted: e.target.value,
+                })
+              }
+              className="w-full rounded-lg border p-3"
+            >
+              <option value="">Select work type</option>
+              <option>Mainline</option>
+              <option>Lateral</option>
+              <option>Jetter</option>
+              <option>Dye</option>
+              <option>Smoke</option>
+              <option>Traffic Control</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Service Vehicle
+            </label>
+            <select
+              value={inlineTimeForm.serviceVehicle}
+              onChange={(e) =>
+                setInlineTimeForm({
+                  ...inlineTimeForm,
+                  serviceVehicle: e.target.value,
+                })
+              }
+              className="w-full rounded-lg border p-3"
+            >
+              <option value="">Select service vehicle</option>
+              <option>2016 Ford Van</option>
+              <option>2007 Ford F-150</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="mb-2 block text-sm font-medium">
+              Notes
+            </label>
+            <textarea
+              value={inlineTimeForm.notes}
+              onChange={(e) =>
+                setInlineTimeForm({
+                  ...inlineTimeForm,
+                  notes: e.target.value,
+                })
+              }
+              className="w-full rounded-lg border p-3"
+              rows={3}
+            />
+          </div>
+
+          <div className="flex gap-2 md:col-span-2">
+            <button
+              type="button"
+              onClick={() => saveInlineTimeEntry(entry.id)}
+              className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+            >
+              Save
+            </button>
+
+            <button
+              type="button"
+              onClick={cancelInlineTimeEdit}
+              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={() => deleteTimeEntry(entry.id)}
+              className="ml-auto rounded-lg border px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-start justify-between gap-3">
             <div>
-              <label className="mb-2 block text-sm font-medium">
-                Service Date
-              </label>
-              <input
-                type="date"
-                value={inlineTimeForm.workDate}
-                onChange={(e) =>
-                  setInlineTimeForm({
-                    ...inlineTimeForm,
-                    workDate: e.target.value,
-                  })
-                }
-                className="w-full rounded-lg border p-3"
-              />
+              <p className="text-sm font-semibold text-gray-900">
+                {entry.work_completed || 'No work type selected'}
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                {entry.service_vehicle || 'No vehicle selected'}
+              </p>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium">
-                Hours
-              </label>
-              <input
-                type="number"
-                value={inlineTimeForm.hours}
-                onChange={(e) =>
-                  setInlineTimeForm({
-                    ...inlineTimeForm,
-                    hours: e.target.value,
-                  })
-                }
-                className="w-full rounded-lg border p-3"
-              />
-            </div>
+            <p className="shrink-0 text-right text-sm font-semibold text-gray-700">
+              {quantityLabelForEntry(entry)}
+            </p>
+          </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium">
-                Work Type
-              </label>
-              <select
-                value={inlineTimeForm.workCompleted}
-                onChange={(e) =>
-                  setInlineTimeForm({
-                    ...inlineTimeForm,
-                    workCompleted: e.target.value,
-                  })
-                }
-                className="w-full rounded-lg border p-3"
-              >
-                <option value="">Select work type</option>
-                <option>Mainline</option>
-<option>Lateral</option>
-<option>Jetter</option>
-<option>Dye</option>
-<option>Smoke</option>
-<option>Traffic Control</option>
-              </select>
-            </div>
+          {entry.notes && (
+            <p className="mt-3 rounded-lg bg-gray-50 p-2 text-sm text-gray-700">
+              {entry.notes}
+            </p>
+          )}
 
-            <div>
-              <label className="mb-2 block text-sm font-medium">
-                Service Vehicle
-              </label>
-              <select
-                value={inlineTimeForm.serviceVehicle}
-                onChange={(e) =>
-                  setInlineTimeForm({
-                    ...inlineTimeForm,
-                    serviceVehicle: e.target.value,
-                  })
-                }
-                className="w-full rounded-lg border p-3"
-              >
-                <option value="">Select service vehicle</option>
-                <option>2016 Ford Van</option>
-                <option>2007 Ford F-150</option>
-              </select>
-            </div>
+          <p className="mt-2 text-xs text-gray-500">
+            {submittedUpdatedLabel(entry)}
+          </p>
 
-            <div className="md:col-span-2">
-              <label className="mb-2 block text-sm font-medium">
-                Notes
-              </label>
-              <textarea
-                value={inlineTimeForm.notes}
-                onChange={(e) =>
-                  setInlineTimeForm({
-                    ...inlineTimeForm,
-                    notes: e.target.value,
-                  })
-                }
-                className="w-full rounded-lg border p-3"
-                rows={3}
-              />
-            </div>
-
-            <div className="flex gap-2 md:col-span-2">
+          {managingTimeEntries && (
+            <div className="mt-3 flex gap-2">
               <button
                 type="button"
-                onClick={() => saveInlineTimeEntry(entry.id)}
-                className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+                onClick={() => startInlineTimeEdit(entry)}
+                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
               >
-                Save
-              </button>
-
-              <button
-                type="button"
-                onClick={cancelInlineTimeEdit}
-                className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
-              >
-                Cancel
+                Edit
               </button>
 
               <button
                 type="button"
                 onClick={() => deleteTimeEntry(entry.id)}
-                className="ml-auto rounded-lg border px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+                className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
               >
                 Delete
               </button>
             </div>
-          </div>
-        ) : (
-          <>
-            <button
-  type="button"
-  onClick={() =>
-    setExpandedTimeEntryId(expandedTimeEntryId === entry.id ? null : entry.id)
-  }
-  className="flex w-full items-center justify-between gap-4 text-left"
->
-  <div>
-    <p className="text-xs font-medium uppercase text-gray-500">Service Date</p>
-    <p className="mt-1 font-semibold">{formatDate(entry.work_date)}</p>
-  </div>
-
-  <div className="text-right">
-  <p className="text-xs font-medium uppercase text-gray-500">
-  {billingMethodForEntry(entry) || 'Quantity'}
-</p>
-<p className="mt-1 font-semibold">
-{quantityLabelForEntry(entry)}
-</p>
-
-  </div>
-</button>
-
-{managingTimeEntries && (
-  <div className="mt-3 flex gap-2">
-    <button
-      type="button"
-      onClick={() => startInlineTimeEdit(entry)}
-      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-    >
-      Edit
-    </button>
-
-    <button
-      type="button"
-      onClick={() => deleteTimeEntry(entry.id)}
-      className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-    >
-      Delete
-    </button>
-  </div>
-)}
-
-{expandedTimeEntryId === entry.id && (
-  <div className="mt-4 border-t pt-4">
-    <div className="grid gap-4">
-      <div>
-        <p className="text-xs font-medium uppercase text-gray-500">
-          Service Type
-        </p>
-        <p className="mt-1 text-sm text-gray-700">
-  {entry.work_completed || 'No work type selected'}
-</p>
-<div>
-  <p className="text-xs font-medium uppercase text-gray-500">
-    Quantities
-  </p>
-
-  {entryQuantityDetails(entry).length > 0 ? (
-    <div className="mt-1 grid gap-1 text-sm text-gray-700">
-      {entryQuantityDetails(entry).map((detail) => (
-        <p key={detail.label}>
-          <span className="font-medium">{detail.label}:</span>{' '}
-          {detail.value}
-        </p>
-      ))}
-    </div>
-  ) : (
-    <p className="mt-1 text-sm text-gray-700">No quantity submitted</p>
-  )}
-</div>
-
-      </div>
-
-      <div>
-        <p className="text-xs font-medium uppercase text-gray-500">
-          Service Vehicle
-        </p>
-        <p className="mt-1 text-sm text-gray-700">
-  {entry.service_vehicle || 'No vehicle selected'}
-</p>
-
-      </div>
-
-      <div>
-        <p className="text-xs font-medium uppercase text-gray-500">
-          Service Notes
-        </p>
-        <p className="mt-1 text-sm text-gray-700">
-          {entry.notes || 'No notes submitted'}
-        </p>
-      </div>
-
-      <p className="text-xs text-gray-500">
-        {submittedUpdatedLabel(entry)}
-      </p>
-    </div>
-  </div>
-)}
-
-
-
-
-
-
-            
-            
-          </>
-        )}
-      </div>
-            );
-          })}
-        </div>
+          )}
+        </>
       )}
     </div>
+  );
+})}
+
+  </div>
+)}
+</div>
   );
 })}
 

@@ -8,33 +8,28 @@ export default function AppSplash() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const alreadyShown = sessionStorage.getItem('theq-splash-shown');
-
-    if (alreadyShown) {
-      setVisible(false);
+    const shouldSkip = sessionStorage.getItem('skipAppSplashOnce');
+  
+    if (shouldSkip) {
+      sessionStorage.removeItem('skipAppSplashOnce');
+      setShowSplash(false);
       return;
     }
-
-    sessionStorage.setItem('theq-splash-shown', 'true');
-    setVisible(true);
-
-    const enterTimer = window.setTimeout(() => {
-      setMounted(true);
-    }, 50);
-
-    const leaveTimer = window.setTimeout(() => {
-      setLeaving(true);
-    }, 1200);
-
-    const removeTimer = window.setTimeout(() => {
-      setVisible(false);
-    }, 1850);
-
-    return () => {
-      window.clearTimeout(enterTimer);
-      window.clearTimeout(leaveTimer);
-      window.clearTimeout(removeTimer);
-    };
+  
+    const hasSeenSplash = sessionStorage.getItem('hasSeenSplash');
+  
+    if (hasSeenSplash) {
+      setShowSplash(false);
+      return;
+    }
+  
+    sessionStorage.setItem('hasSeenSplash', 'true');
+  
+    const timer = window.setTimeout(() => {
+      setShowSplash(false);
+    }, 1400);
+  
+    return () => window.clearTimeout(timer);
   }, []);
 
   if (!visible) return null;

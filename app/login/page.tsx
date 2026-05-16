@@ -50,6 +50,7 @@ export default function LoginPage() {
     setLaunching(true);
 
     setTimeout(() => {
+      sessionStorage.setItem('skipAppSplashOnce', 'true');
       router.push('/');
     }, 1700);
   }

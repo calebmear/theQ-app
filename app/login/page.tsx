@@ -134,7 +134,7 @@ style={
           top: `${launchQPosition.top}px`,
           '--start-left': `${launchQPosition.left}px`,
           '--start-top': `${launchQPosition.top}px`,
-          '--target-left': '50vw',
+          '--target-left': 'calc(50vw - var(--login-q-center-nudge))',
           '--target-top': '44vh',
         } as React.CSSProperties
       }

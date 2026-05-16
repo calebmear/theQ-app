@@ -10,9 +10,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
+    --foreground-rgb: 0, 0, 0;
+    --background-start-rgb: 214, 219, 220;
+    --background-end-rgb: 255, 255, 255;
+    --login-q-center-nudge: 0px;
   }
 }
 
@@ -92,6 +93,18 @@ body {
   will-change: left, top, font-size, opacity;
 }
 
+
+@media (max-width: 480px) {
+  :root {
+    --login-q-center-nudge: 8px;
+  }
+}
+
+@media (max-width: 390px) {
+  :root {
+    --login-q-center-nudge: 10px;
+  }
+}
 
 
 

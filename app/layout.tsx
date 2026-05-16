@@ -2,6 +2,9 @@ import './globals.css';
 import AppNav from '../components/AppNav';
 import AppSearch from '../components/AppSearch';
 import AppSplash from '../components/AppSplash';
+import AuthGuard from '../components/AuthGuard';
+import UserMenu from '../components/UserMenu';
+
 
 export const metadata = {
   title: 'THEQ App',
@@ -22,6 +25,7 @@ export const viewport = {
   viewportFit: 'cover',
 };
 
+
 export default function RootLayout({
   children,
 }: {
@@ -30,21 +34,29 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-100">
-        <AppSplash />
+  <AppSplash />
 
-        <div className="min-h-screen bg-gray-100 text-black pb-[env(safe-area-inset-bottom)] md:flex">
-          <aside className="sticky top-0 z-40 border-r bg-white px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] md:h-screen md:w-64 md:shrink-0 md:p-4">
-            <div className="flex items-center gap-3 md:block">
-              <h1 className="shrink-0 text-2xl font-bold">THE Q</h1>
-              <AppSearch />
-            </div>
+  <AuthGuard>
+    <div className="min-h-screen bg-gray-100 text-black pb-[env(safe-area-inset-bottom)] md:flex">
+      <aside className="sticky top-0 z-40 border-r bg-white px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] md:h-screen md:w-64 md:shrink-0 md:p-4">
+      <div className="flex w-full items-center gap-3">
+  <h1 className="shrink-0 text-2xl font-bold">THE Q</h1>
 
-            <AppNav />
-          </aside>
+  <div className="min-w-0 flex-1">
+    <AppSearch />
+  </div>
 
-          <main className="flex-1 p-4 md:p-8">{children}</main>
-        </div>
-      </body>
+  <UserMenu />
+</div>
+
+
+        <AppNav />
+      </aside>
+
+      <main className="flex-1 p-4 md:p-8">{children}</main>
+    </div>
+  </AuthGuard>
+</body>
     </html>
   );
 }

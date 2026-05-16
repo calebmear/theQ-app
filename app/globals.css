@@ -49,3 +49,53 @@ body {
 .animate-logo-intro {
   animation: logo-intro 1.4s ease-out both;
 }
+
+
+@keyframes loginQToCenter {
+  0% {
+    left: var(--start-left);
+    top: var(--start-top);
+    opacity: 1;
+    font-size: 1.875rem;
+    transform: translate(0, 0);
+  }
+
+  55% {
+    left: var(--target-left);
+    top: var(--target-top);
+    opacity: 1;
+    font-size: 5rem;
+    transform: translate(-50%, -50%);
+  }
+
+  78% {
+    left: var(--target-left);
+    top: var(--target-top);
+    opacity: 1;
+    font-size: 5rem;
+    transform: translate(-50%, -50%);
+  }
+
+  100% {
+    left: var(--target-left);
+    top: var(--target-top);
+    opacity: 0;
+    font-size: 5rem;
+    transform: translate(-50%, -50%);
+  }
+}
+
+
+
+.animate-login-q-to-center {
+  animation: loginQToCenter 1.7s ease-in-out forwards;
+  will-change: left, top, font-size, opacity;
+}
+
+
+
+
+
+
+
+

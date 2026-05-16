@@ -422,6 +422,12 @@ function quantityPlaceholderForService(serviceType: string) {
   return '';
 }
 
+function formatBillingSource(value: string | null) {
+  if (value === 'project') return 'Project Override';
+  if (value === 'standard') return 'Standard';
+  return 'Customer';
+}
+
 function clearServiceSubmissionForm() {
   setTimeForm({
     workDate: today,
@@ -1390,7 +1396,7 @@ traffic_control_pricing_type:
       </div>
     )}
 </div>
-<div className="mt-4 grid gap-3 text-sm">
+<div className="mt-2 grid gap-3 text-sm">
   <div>
   <p className="text-xs font-medium uppercase text-gray-500">Assigned To</p>
 
@@ -1496,19 +1502,25 @@ traffic_control_pricing_type:
   </p>
 
   <div className="mt-4 border-t pt-4">
+  <div className="flex items-center gap-2">
   <p className="text-xs font-medium uppercase text-gray-500">
     Billing Methods
   </p>
 
-  <p className="mt-1 text-xs text-gray-500">
-  Source: {project.billing_method_source || 'Customer'}
-</p>
+  <span className="text-xs text-gray-300">•</span>
+
+
+  <p className="text-xs text-gray-500">
+    Source: {formatBillingSource(project.billing_method_source)}
+  </p>
+</div>
 
 {project.billing_methods_updated_at && (
   <p className="mt-1 text-xs text-gray-500">
     Updated: {formatTimestamp(project.billing_methods_updated_at)}
   </p>
 )}
+
 
   {editingProject && (
   <div className="mt-3 space-y-3">

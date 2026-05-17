@@ -225,6 +225,7 @@ const [inlineTimeForm, setInlineTimeForm] = useState<TimeForm>({
 
 const { role } = useUserProfile();
 const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
 const canManageProjects = role === 'admin' || role === 'management';
 const canSubmitService =
@@ -638,10 +639,21 @@ billing_methods_updated_at: data.billing_methods_updated_at,
       } = await supabase.auth.getUser();
   
       setCurrentUserId(user?.id ?? null);
+  
+      if (!user) return;
+  
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('full_name')
+        .eq('id', user.id)
+        .single();
+  
+      setCurrentUserName(profile?.full_name ?? null);
     }
   
     loadCurrentUser();
   }, []);
+  
 
   if (loading) {
     return <div className="text-black">Loading project...</div>;
@@ -828,56 +840,38 @@ billing_methods_updated_at: data.billing_methods_updated_at,
   
 
 
-async function loadTimeEntries(projectId: string) {
-  const { data, error } = await supabase
-    .from('time_entries')
-    .select(`
-  id,
-  work_date,
-  work_completed,
-  service_vehicle,
-  hours,
-  feet,
-  laterals,
-  residences,
-  mainline_tests,
-  flat_rate,
-  notes,
-  created_at,
-  updated_at,
-  created_by,
-  updated_by,
-  created_profile:user_profiles!time_entries_created_by_fkey (
-    full_name
-  ),
-  updated_profile:user_profiles!time_entries_updated_by_fkey (
-    full_name
-  )
-`)
-    
-    
-    .eq('project_id', projectId)
-.is('deleted_at', null)
-.order('work_date', { ascending: false });
-
-
-  if (error) {
-    console.error('Error loading time entries:', error);
-    return;
-  }
-
-  const formattedEntries: TimeEntry[] = (data ?? []).map((entry) => ({
-    ...entry,
-    created_profile: Array.isArray(entry.created_profile)
-      ? entry.created_profile[0] ?? null
-      : entry.created_profile,
-    updated_profile: Array.isArray(entry.updated_profile)
-      ? entry.updated_profile[0] ?? null
-      : entry.updated_profile,
-  }));
+  async function loadTimeEntries(projectId: string) {
+    const { data, error } = await supabase
+      .from('time_entries')
+      .select(`
+        id,
+        work_date,
+        work_completed,
+        service_vehicle,
+        hours,
+        feet,
+        laterals,
+        residences,
+        mainline_tests,
+        flat_rate,
+        notes,
+        created_at,
+        updated_at,
+        created_by,
+        updated_by
+      `)
+      .eq('project_id', projectId)
+      .is('deleted_at', null)
+      .order('work_date', { ascending: false });
   
-  setTimeEntries(formattedEntries);
-}
+    if (error) {
+      console.error('Error loading time entries:', error);
+      alert(`Could not load service history: ${error.message}`);
+      return;
+    }
+  
+    setTimeEntries(data ?? []);
+  }
 
 
 async function updateProjectStatus(status: string) {
@@ -1043,10 +1037,8 @@ async function submitTimeEntry() {
     hours: item.billingMethod === 'Per Hour' ? Number(item.quantity) : null,
     feet: item.billingMethod === 'Per Foot' ? Number(item.quantity) : null,
     laterals: item.billingMethod === 'Per Lateral' ? Number(item.quantity) : null,
-    residences:
-      item.billingMethod === 'Per Residence' ? Number(item.quantity) : null,
-    mainline_tests:
-      item.billingMethod === 'Per Mainline Test' ? Number(item.quantity) : null,
+    residences: item.billingMethod === 'Per Residence' ? Number(item.quantity) : null,
+    mainline_tests: item.billingMethod === 'Per Mainline Test' ? Number(item.quantity) : null,
     flat_rate: item.billingMethod === 'Flat Rate',
     notes: timeForm.notes,
     created_by: user.id,
@@ -1054,8 +1046,9 @@ async function submitTimeEntry() {
   }));
 
 
-  const { error } = await supabase.from('time_entries').insert(timeEntryValues);
-
+  const { error } = await supabase
+  .from('time_entries')
+  .insert(timeEntryValues);
   if (error) {
     console.error('Error submitting time entry:', error);
     alert(error.message);
@@ -1087,21 +1080,40 @@ async function submitTimeEntry() {
   }
 
   if (timeForm.notes.trim()) {
-    const { error: noteError } = await supabase.from('project_notes').insert({
-      project_id: project.id,
-      note: `Service note: ${timeForm.notes.trim()}`,
-      created_by: user.id,
-      updated_by: user.id,
-    });
-
+    const { data: insertedNote, error: noteError } = await supabase
+      .from('project_notes')
+      .insert({
+        project_id: project.id,
+        note: `Service note: ${timeForm.notes.trim()}`,
+        created_by: user.id,
+        updated_by: user.id,
+      })
+      .select('id, note, created_at, updated_at, created_by, updated_by')
+      .single();
+  
     if (noteError) {
       console.error('Error saving service note to project notes:', noteError);
       alert(noteError.message);
       return;
     }
+  
+    if (insertedNote) {
+      setProjectNotes((notes) => [
+        {
+          ...insertedNote,
+          created_profile: { full_name: currentUserName ?? 'Unknown' },
+updated_profile: { full_name: currentUserName ?? 'Unknown' },
 
-    loadProjectNotes(project.id);
+        },
+        ...notes,
+      ]);
+    } else {
+      await loadProjectNotes(project.id);
+    }
+  
+    setShowNotes(true);
   }
+  
 
   setTimeForm({
     workDate: today,
@@ -1117,8 +1129,17 @@ async function submitTimeEntry() {
   setServiceQuantities({});
   setPendingServiceItems([]);
   setEditingTimeEntryId(null);
-  loadTimeEntries(project.id);
-setShowServiceSubmission(false);
+  
+    await loadTimeEntries(project.id);
+    await loadProjectNotes(project.id);
+
+  
+  
+  setExpandedServiceDates((dates) =>
+    dates.includes(timeForm.workDate) ? dates : [timeForm.workDate, ...dates]
+  );
+  setShowServiceLog(true);
+  setShowServiceSubmission(false);
 }
 
 
@@ -1164,21 +1185,18 @@ function cancelInlineTimeEdit() {
 }
 
 async function saveInlineTimeEntry(entryId: string) {
-  if (!project || !inlineTimeForm.workDate || !inlineTimeForm.workCompleted) {
-    return;
-  }
+  if (!project || !inlineTimeForm.workDate || !inlineTimeForm.workCompleted) return;
 
-  const inlineBillingMethod = billingMethodForService(
-    inlineTimeForm.workCompleted
-  );
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
+  if (!user) return;
+
+  const inlineBillingMethod = billingMethodForService(inlineTimeForm.workCompleted);
   const inlineShowsHours = inlineBillingMethod === 'Per Hour';
   const inlineShowsFeet = inlineBillingMethod === 'Per Foot';
   const inlineShowsLaterals = inlineBillingMethod === 'Per Lateral';
-
-  if (inlineShowsHours && !inlineTimeForm.hours) return;
-  if (inlineShowsFeet && !inlineTimeForm.feet) return;
-  if (inlineShowsLaterals && !inlineTimeForm.laterals) return;
 
   const { error } = await supabase
     .from('time_entries')
@@ -1190,18 +1208,18 @@ async function saveInlineTimeEntry(entryId: string) {
       feet: inlineShowsFeet ? Number(inlineTimeForm.feet) : null,
       laterals: inlineShowsLaterals ? Number(inlineTimeForm.laterals) : null,
       notes: inlineTimeForm.notes,
+      updated_by: user.id,
     })
     .eq('id', entryId);
 
   if (error) {
-    console.error('Error updating time entry:', error);
+    alert(error.message);
     return;
   }
 
   cancelInlineTimeEdit();
-  loadTimeEntries(project.id);
+  await loadTimeEntries(project.id);
 }
-
 
 async function deleteTimeEntry(entryId: string) {
   if (!project) return;
@@ -1209,21 +1227,30 @@ async function deleteTimeEntry(entryId: string) {
   const confirmed = window.confirm('Are you sure you want to delete this time entry?');
   if (!confirmed) return;
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
   const { error } = await supabase
     .from('time_entries')
     .update({
       deleted_at: new Date().toISOString(),
       deleted_reason: 'Deleted from project workspace',
+      updated_by: user.id,
     })
     .eq('id', entryId);
 
   if (error) {
-    console.error('Error deleting time entry:', error);
+    alert(error.message);
     return;
   }
 
-  loadTimeEntries(project.id);
+  await loadTimeEntries(project.id);
 }
+
+
 
 async function loadEmployees() {
   const { data, error } = await supabase
@@ -1257,8 +1284,17 @@ function formatTimestamp(value: string | null) {
 }
 
 function submittedUpdatedLabel(entry: TimeEntry) {
-  const createdBy = entry.created_profile?.full_name || 'Unknown';
-  const updatedBy = entry.updated_profile?.full_name || createdBy;
+  const createdBy =
+  entry.created_profile?.full_name ||
+  (entry.created_by === currentUserId ? currentUserName : null) ||
+  'Unknown';
+
+const updatedBy =
+  entry.updated_profile?.full_name ||
+  (entry.updated_by === currentUserId ? currentUserName : null) ||
+  createdBy;
+
+
 
   if (entry.updated_at) {
     const createdAt = new Date(entry.created_at).getTime();

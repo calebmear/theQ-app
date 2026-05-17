@@ -866,7 +866,17 @@ async function loadTimeEntries(projectId: string) {
     return;
   }
 
-  setTimeEntries(data ?? []);
+  const formattedEntries: TimeEntry[] = (data ?? []).map((entry) => ({
+    ...entry,
+    created_profile: Array.isArray(entry.created_profile)
+      ? entry.created_profile[0] ?? null
+      : entry.created_profile,
+    updated_profile: Array.isArray(entry.updated_profile)
+      ? entry.updated_profile[0] ?? null
+      : entry.updated_profile,
+  }));
+  
+  setTimeEntries(formattedEntries);
 }
 
 
@@ -918,7 +928,17 @@ async function loadProjectNotes(projectId: string) {
     return;
   }
 
-  setProjectNotes(data ?? []);
+  const formattedNotes: ProjectNote[] = (data ?? []).map((note) => ({
+    ...note,
+    created_profile: Array.isArray(note.created_profile)
+      ? note.created_profile[0] ?? null
+      : note.created_profile,
+    updated_profile: Array.isArray(note.updated_profile)
+      ? note.updated_profile[0] ?? null
+      : note.updated_profile,
+  }));
+  
+  setProjectNotes(formattedNotes);
 }
 
 async function saveProjectNote() {

@@ -6,11 +6,25 @@ import { useUserProfile } from '../lib/useUserProfile';
 
 export default function AppNav() {
   const pathname = usePathname();
-  const { role } = useUserProfile();
+  const { role, loading } = useUserProfile();
 
-  const normalizedRole = role ? String(role).trim().toLowerCase() : null;
-  const canViewDashboard =
-    normalizedRole === 'admin' || normalizedRole === 'management';
+const normalizedRole = role ? String(role).trim().toLowerCase() : null;
+
+if (loading || !normalizedRole) {
+  return null;
+}
+
+const canViewDashboard =
+normalizedRole === 'admin' || normalizedRole === 'management';
+
+const navItems = [
+...(canViewDashboard
+  ? [{ href: '/dashboard', label: 'Dashboard' }]
+  : []),
+{ href: '/activework', label: 'Active Work' },
+{ href: '/projects', label: 'Projects' },
+{ href: '/customers', label: 'Customers' },
+];
 
   const navClass = (active: boolean) =>
     `flex h-12 items-center justify-center border-b-4 text-sm font-medium ${
@@ -21,39 +35,20 @@ export default function AppNav() {
 
   return (
     <nav
-      className={`mt-3 -mx-4 grid bg-white md:mx-0 md:mt-6 md:flex md:flex-col ${
-        canViewDashboard ? 'grid-cols-4' : 'grid-cols-3'
-      }`}
+      className="mt-3 -mx-4 grid bg-white md:mx-0 md:mt-6 md:flex md:flex-col"
+      style={{
+        gridTemplateColumns: `repeat(${navItems.length}, minmax(0, 1fr))`,
+      }}
     >
-      {canViewDashboard && (
+      {navItems.map((item) => (
         <Link
-          href="/dashboard"
-          className={navClass(pathname.startsWith('/dashboard'))}
+          key={item.href}
+          href={item.href}
+          className={navClass(pathname.startsWith(item.href))}
         >
-          Dashboard
+          {item.label}
         </Link>
-      )}
-
-      <Link
-        href="/activework"
-        className={navClass(pathname.startsWith('/activework'))}
-      >
-        Active Work
-      </Link>
-
-      <Link
-        href="/projects"
-        className={navClass(pathname.startsWith('/projects'))}
-      >
-        Projects
-      </Link>
-
-      <Link
-        href="/customers"
-        className={navClass(pathname.startsWith('/customers'))}
-      >
-        Customers
-      </Link>
+      ))}
     </nav>
   );
 }

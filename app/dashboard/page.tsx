@@ -773,25 +773,17 @@ onClick={() => {
                   Service Start Date (Est.)
                 </label>
                 <input
-                  type={newProject.startdateofservice ? 'date' : 'text'}
-                  placeholder="Enter scheduled service start date"
-                  value={newProject.startdateofservice}
-                  onFocus={(e) => {
-                    e.currentTarget.type = 'date';
-                  }}
-                  onBlur={(e) => {
-                    if (!newProject.startdateofservice) {
-                      e.currentTarget.type = 'text';
-                    }
-                  }}
-                  onChange={(e) =>
-                    setNewProject({
-                      ...newProject,
-                      startdateofservice: e.target.value,
-                    })
-                  }
-                  className="block w-full min-w-0 max-w-full rounded-lg border p-3"
-                />
+  type="date"
+  value={newProject.startdateofservice}
+  onChange={(e) =>
+    setNewProject({
+      ...newProject,
+      startdateofservice: e.target.value,
+    })
+  }
+  className="block w-full min-w-0 max-w-full appearance-none rounded-lg border p-3 text-sm"
+/>
+
               </div>
               <div className="md:col-span-2">
   <label className="mb-2 block text-sm font-medium">

@@ -29,8 +29,6 @@ export default function AuthGuard({
         return;
       }
 
-      
-
       setCheckingAuth(false);
     }
 

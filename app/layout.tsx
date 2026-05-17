@@ -1,7 +1,6 @@
 import './globals.css';
 import AppNav from '../components/AppNav';
 import AppSearch from '../components/AppSearch';
-import AppSplash from '../components/AppSplash';
 import AuthGuard from '../components/AuthGuard';
 import UserMenu from '../components/UserMenu';
 
@@ -34,7 +33,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-100">
-  <AppSplash />
 
   <AuthGuard>
     <div className="min-h-screen bg-gray-100 text-black pb-[env(safe-area-inset-bottom)] md:flex">

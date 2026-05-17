@@ -1073,27 +1073,30 @@ function RecentActivity({
       groups[key].items.push(service);
       return groups;
     }, {})
-    )
+  )
     .map(([, group]) => group)
     .sort((a, b) => b.workDate.localeCompare(a.workDate));
-  
+
   return (
     <div className="rounded-2xl bg-white p-4 shadow md:p-6">
       <h2 className="text-xl font-bold">Recent Service Activity</h2>
 
       <div className="mt-4 space-y-3">
         {groupedServices.map((group) => (
-          <div
+          <Link
             key={`${group.customerName}-${group.workDate}`}
-            className="rounded-xl border p-4"
+            href={`/projects/${encodeURIComponent(
+              group.projectNumbers[0]
+            )}?from=/dashboard&fromLabel=Dashboard`}
+            className="block rounded-xl border p-4 hover:bg-gray-50"
           >
             <div className="flex items-start justify-between gap-3">
-            <div>
-  <p className="font-bold">{group.projectNumbers.join(', ')}</p>
-  <p className="mt-1 text-sm text-gray-600">
-    {group.customerName}
-  </p>
-</div>
+              <div>
+                <p className="font-bold">{group.projectNumbers.join(', ')}</p>
+                <p className="mt-1 text-sm text-gray-600">
+                  {group.customerName}
+                </p>
+              </div>
 
               <p className="text-right text-sm font-semibold text-gray-700">
                 {formatDate(group.workDate)}
@@ -1102,19 +1105,15 @@ function RecentActivity({
 
             <div className="mt-3 space-y-2">
               {group.items.map((service) => (
-                <Link
+                <div
                   key={service.id}
-                  href={`/projects/${encodeURIComponent(
-                    service.projectNumber
-                  )}?from=/dashboard&fromLabel=Dashboard`}
-                  className="block rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                  className="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700"
                 >
-                {service.workCompleted} • {service.quantity}
-
-                </Link>
+                  {service.workCompleted} • {service.quantity}
+                </div>
               ))}
             </div>
-          </div>
+          </Link>
         ))}
 
         {groupedServices.length === 0 && (
@@ -1126,6 +1125,7 @@ function RecentActivity({
     </div>
   );
 }
+
 
 
 

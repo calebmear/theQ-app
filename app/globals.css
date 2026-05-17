@@ -13,7 +13,6 @@
     --foreground-rgb: 0, 0, 0;
     --background-start-rgb: 214, 219, 220;
     --background-end-rgb: 255, 255, 255;
-    --login-q-center-nudge: 0px;
   }
 }
 
@@ -27,88 +26,36 @@ body {
     rgb(var(--background-start-rgb));
 }
 
-@keyframes logo-intro {
-  0% {
+@keyframes login-q {
+  from {
     opacity: 0;
-    transform: scale(0.82) rotate(-4deg);
-    filter: blur(8px);
+    transform: scale(0.96) translateY(6px);
   }
 
-  45% {
+  to {
     opacity: 1;
-    transform: scale(1.06) rotate(1deg);
-    filter: blur(0);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-    filter: blur(0);
+    transform: scale(1) translateY(0);
   }
 }
 
-.animate-logo-intro {
-  animation: logo-intro 1.4s ease-out both;
-}
-
-
-@keyframes loginQToCenter {
-  0% {
-    left: var(--start-left);
-    top: var(--start-top);
-    opacity: 1;
-    font-size: 1.875rem;
-    transform: translate(0, 0);
-  }
-
-  55% {
-    left: var(--target-left);
-    top: var(--target-top);
-    opacity: 1;
-    font-size: 5rem;
-    transform: translate(calc(-50% - 0.08em), -50%);
-  }
-
-  78% {
-    left: var(--target-left);
-    top: var(--target-top);
-    opacity: 1;
-    font-size: 5rem;
-    transform: translate(calc(-50% - 0.08em), -50%);
-  }
-
-  100% {
-    left: var(--target-left);
-    top: var(--target-top);
+@keyframes login-form {
+  from {
     opacity: 0;
-    font-size: 5rem;
-    transform: translate(calc(-50% - 0.08em), -50%);
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
-
-
-.animate-login-q-to-center {
-  animation: loginQToCenter 1.7s ease-in-out forwards;
-  will-change: left, top, font-size, opacity;
+.animate-login-q {
+  animation: login-q 700ms ease-out both;
 }
 
-
-@media (max-width: 480px) {
-  :root {
-    --login-q-center-nudge: 8px;
-  }
+.animate-login-form {
+  animation: login-form 450ms ease-out both;
 }
-
-@media (max-width: 390px) {
-  :root {
-    --login-q-center-nudge: 10px;
-  }
-}
-
-
-
-
-
 
 

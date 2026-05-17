@@ -110,6 +110,13 @@ export default function ProjectsPage() {
     return 'bg-gray-100 text-gray-700 border-gray-200';
   }
 
+  const projectCounts = {
+    Active: projects.filter((project) => project.status === 'Active').length,
+    Scheduled: projects.filter((project) => project.status === 'Scheduled').length,
+    Completed: projects.filter((project) => project.status === 'Completed').length,
+    All: projects.length,
+  };
+
   const visibleProjects = projects.filter((project) => {
     const matchesFilter =
       projectFilter === 'All' || project.status === projectFilter;
@@ -145,21 +152,30 @@ export default function ProjectsPage() {
           />
         </div>
 
-        <div className="mt-4 grid grid-cols-4 rounded-lg border bg-white p-1 shadow-sm">
+        <div className="mt-4 grid grid-cols-2 gap-1 rounded-lg border bg-white p-1 shadow-sm sm:grid-cols-4">
           {(['Active', 'Scheduled', 'Completed', 'All'] as ProjectFilter[]).map(
             (filter) => (
               <button
-                key={filter}
-                type="button"
-                onClick={() => setProjectFilter(filter)}
-                className={`rounded-md px-2 py-2 text-sm font-medium ${
-                  projectFilter === filter
-                    ? 'bg-black text-white'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                {filter}
-              </button>
+  key={filter}
+  type="button"
+  onClick={() => setProjectFilter(filter)}
+  className={`inline-flex items-center justify-center rounded-md px-2 py-2.5 text-sm font-medium ${
+    projectFilter === filter
+      ? 'bg-black text-white'
+      : 'text-gray-600 hover:bg-gray-50'
+  }`}
+>
+  <span>{filter}</span>
+  <span
+    className={`ml-1 rounded-full px-1.5 py-0.5 text-xs ${
+      projectFilter === filter
+        ? 'bg-white/20 text-white'
+        : 'bg-gray-100 text-gray-600'
+    }`}
+  >
+    {projectCounts[filter]}
+  </span>
+</button>
             )
           )}
         </div>

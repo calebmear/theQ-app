@@ -51,6 +51,15 @@ type Project = {
   notes?: string;
 };
 
+type RecentService = {
+  id: string;
+  projectNumber: string;
+  customerName: string;
+  workDate: string;
+  workCompleted: string;
+  quantity: string;
+};
+
 const emptyPricingModels = {
   MAIN: '',
   LAT: '',
@@ -107,6 +116,7 @@ export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectCustomerSearch, setProjectCustomerSearch] = useState('');
 
+  const [recentServices, setRecentServices] = useState<RecentService[]>([]);
 
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
@@ -123,6 +133,20 @@ export default function DashboardPage() {
     pricingModels: emptyPricingModels,
   });
 
+  function getLocalDateInputValue() {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/New_York',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    });
+  
+    return formatter.format(new Date());
+  }
+  
+  const today = getLocalDateInputValue();
+  
+
   const [newProject, setNewProject] = useState({
     id: '',
     name: '',
@@ -130,7 +154,7 @@ export default function DashboardPage() {
     assignedToId: '',
     status: 'Scheduled',
     progress: 0,
-    startdateofservice: '',
+    startdateofservice: today,
     projectLocation: '',
     notes: '',
 billingMethodSource: 'customer',
@@ -313,6 +337,7 @@ trafficControlPricingType: '',
     if (!canViewDashboard) return;
   
     loadProjects();
+    loadRecentServices();
   }, [canViewDashboard]);
 
   async function saveCustomer() {
@@ -437,7 +462,7 @@ traffic_control_pricing_type:
       assignedToId: '',
       status: 'Scheduled',
       progress: 0,
-      startdateofservice: '',
+      startdateofservice: today,
       projectLocation: '',
       notes: '',
       billingMethodSource: 'customer',
@@ -452,7 +477,65 @@ traffic_control_pricing_type:
     setProjectCustomerSearch('');
     setShowProjectForm(false);
     loadProjects();
+    loadRecentServices();
+
   }
+
+  async function loadRecentServices() {
+    const { data, error } = await supabase
+      .from('time_entries')
+      .select(`
+        id,
+        work_date,
+        work_completed,
+        hours,
+        feet,
+        laterals,
+        residences,
+        mainline_tests,
+        flat_rate,
+        projects (
+          project_number,
+          customers ( name )
+        )
+      `)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(4);
+  
+    if (error) {
+      console.error('Error loading recent services:', error);
+      return;
+    }
+  
+    const formattedServices: RecentService[] = (data ?? []).map((entry) => {
+      const project = Array.isArray(entry.projects) ? entry.projects[0] : entry.projects;
+      const customer = Array.isArray(project?.customers)
+        ? project.customers[0]
+        : project?.customers;
+  
+      const quantity =
+        entry.hours != null ? `${entry.hours} hrs` :
+        entry.feet != null ? `${entry.feet} ft` :
+        entry.laterals != null ? `${entry.laterals} laterals` :
+        entry.residences != null ? `${entry.residences} residences` :
+        entry.mainline_tests != null ? `${entry.mainline_tests} tests` :
+        entry.flat_rate ? 'Flat rate' :
+        'No quantity';
+  
+      return {
+        id: entry.id,
+        projectNumber: project?.project_number ?? '',
+        customerName: customer?.name ?? 'No customer saved',
+        workDate: entry.work_date,
+        workCompleted: entry.work_completed ?? 'Service',
+        quantity,
+      };
+    });
+  
+    setRecentServices(formattedServices);
+  }
+  
   if (!normalizedRole) {
     return null;
   }
@@ -492,19 +575,24 @@ onClick={() => {
           </div>
       </div>
     </div>
-      <div className="grid gap-6 xl:grid-cols-2">
-        <ProjectTable
-          title="Active Projects"
-          projects={activeProjects}
-          formatDate={formatDate}
-        />
 
-        <ProjectTable
-          title="Scheduled Projects"
-          projects={scheduledProjects}
-          formatDate={formatDate}
-        />
-      </div>
+<div className="grid gap-6 xl:grid-cols-2">
+  <ProjectTable
+    title="Active Projects"
+    projects={activeProjects.slice(0, 6)}
+    formatDate={formatDate}
+  />
+
+  <ProjectTable
+    title="Scheduled Projects"
+    projects={scheduledProjects.slice(0, 6)}
+    formatDate={formatDate}
+  />
+</div>
+
+<RecentActivity services={recentServices} formatDate={formatDate} />
+
+
 
       {showCustomerForm && (
   <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
@@ -886,6 +974,159 @@ onClick={() => {
         </div>
   );
 }
+
+
+
+function NeedsAttention({
+  projects,
+  formatDate,
+}: {
+  projects: Project[];
+  formatDate: (value: string | undefined) => string;
+}) {
+  const needsAttention = projects
+    .filter(
+      (project) =>
+        !project.assignedTo ||
+        !project.projectLocation ||
+        !project.latestServiceDate
+    )
+    .slice(0, 8);
+
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow md:p-6">
+      <h2 className="text-xl font-bold">Needs Attention</h2>
+
+      <div className="mt-4 space-y-3">
+        {needsAttention.map((project) => (
+          <Link
+            key={project.id}
+            href={`/projects/${encodeURIComponent(project.id)}?from=/dashboard&fromLabel=Dashboard`}
+            className="block rounded-xl border p-4 hover:bg-gray-50"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-bold">{project.id}</p>
+                <p className="mt-1 text-sm text-gray-600">{project.customer}</p>
+              </div>
+
+              <span className="rounded-full border px-2 py-1 text-xs font-medium text-gray-600">
+                {project.status}
+              </span>
+            </div>
+
+            <div className="mt-3 grid gap-1 text-sm text-gray-600">
+              {!project.assignedTo && <p>Missing assigned tech</p>}
+              {!project.projectLocation && <p>Missing project location</p>}
+              {!project.latestServiceDate && <p>No service submitted yet</p>}
+              {project.latestServiceDate && (
+                <p>Latest service: {formatDate(project.latestServiceDate)}</p>
+              )}
+            </div>
+          </Link>
+        ))}
+
+        {needsAttention.length === 0 && (
+          <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+            No projects need attention.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecentActivity({
+  services,
+  formatDate,
+}: {
+  services: RecentService[];
+  formatDate: (value: string | undefined) => string;
+}) {
+  const groupedServices = Object.entries(
+    services.reduce<
+      Record<
+        string,
+        {
+          customerName: string;
+          workDate: string;
+          projectNumbers: string[];
+          items: RecentService[];
+        }
+      >
+    >((groups, service) => {
+      const key = `${service.customerName}-${service.workDate}`;
+
+      if (!groups[key]) {
+        groups[key] = {
+          customerName: service.customerName,
+          workDate: service.workDate,
+          projectNumbers: [],
+          items: [],
+        };
+      }
+
+      if (!groups[key].projectNumbers.includes(service.projectNumber)) {
+        groups[key].projectNumbers.push(service.projectNumber);
+      }
+
+      groups[key].items.push(service);
+      return groups;
+    }, {})
+    )
+    .map(([, group]) => group)
+    .sort((a, b) => b.workDate.localeCompare(a.workDate));
+  
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow md:p-6">
+      <h2 className="text-xl font-bold">Recent Service Activity</h2>
+
+      <div className="mt-4 space-y-3">
+        {groupedServices.map((group) => (
+          <div
+            key={`${group.customerName}-${group.workDate}`}
+            className="rounded-xl border p-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+            <div>
+  <p className="font-bold">{group.projectNumbers.join(', ')}</p>
+  <p className="mt-1 text-sm text-gray-600">
+    {group.customerName}
+  </p>
+</div>
+
+              <p className="text-right text-sm font-semibold text-gray-700">
+                {formatDate(group.workDate)}
+              </p>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {group.items.map((service) => (
+                <Link
+                  key={service.id}
+                  href={`/projects/${encodeURIComponent(
+                    service.projectNumber
+                  )}?from=/dashboard&fromLabel=Dashboard`}
+                  className="block rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                >
+                {service.workCompleted} • {service.quantity}
+
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {groupedServices.length === 0 && (
+          <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+            No recent service activity.
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 
 function ProjectTable({

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useUserProfile } from '../../lib/useUserProfile';
 
 import { supabase } from '../../lib/supabaseClient';
 
@@ -71,6 +72,9 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
+  const { role } = useUserProfile();
+const canManageCustomers = role === 'admin' || role === 'management';
+
   const [showCustomerBillingMethods, setShowCustomerBillingMethods] =
     useState(false);
   const [newCustomer, setNewCustomer] =
@@ -129,12 +133,16 @@ export default function CustomersPage() {
   }
 
   async function saveCustomer() {
+
+    if (!canManageCustomers) return;
+
     if (
       !newCustomer.name.trim() ||
       !newCustomer.contactName.trim() ||
       !newCustomer.phone.trim() ||
       !newCustomer.email.trim() ||
       !newCustomer.address.trim() ||
+      
       Object.values(newCustomer.pricingModels).some((value) => !value)
     ) {
       alert('Please complete all required customer fields.');
@@ -204,18 +212,20 @@ export default function CustomersPage() {
           Customer directory, contact details, and profiles.
         </p>
 
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={() => {
-              setShowCustomerBillingMethods(false);
-              setShowCustomerForm(true);
-            }}
-            className="w-full rounded-lg bg-black px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
-          >
-            + Add Customer
-          </button>
-        </div>
+        {canManageCustomers && (
+  <div className="mt-3">
+    <button
+      type="button"
+      onClick={() => {
+        setShowCustomerBillingMethods(false);
+        setShowCustomerForm(true);
+      }}
+      className="w-full rounded-lg bg-black px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
+    >
+      + Add Customer
+    </button>
+  </div>
+)}
       </div>
 
       <div className="space-y-3">
@@ -253,7 +263,7 @@ export default function CustomersPage() {
         )}
       </div>
 
-      {showCustomerForm && (
+      {canManageCustomers && showCustomerForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
           <div className="flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
             <h2 className="text-2xl font-bold">Add Customer</h2>

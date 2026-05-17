@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useUserProfile } from '../../lib/useUserProfile';
 
 import { supabase } from '../../lib/supabaseClient';
 
@@ -93,6 +95,16 @@ const pricingModelOptions = [
 
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { role } = useUserProfile();
+
+  const canViewDashboard = role === 'admin' || role === 'management';
+
+  useEffect(() => {
+    if (role === 'field') {
+      router.replace('/activework');
+    }
+  }, [role, router]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);

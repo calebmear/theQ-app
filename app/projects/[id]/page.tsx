@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { Copy } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useSearchParams } from 'next/navigation';
+import { useUserProfile } from '../../../lib/useUserProfile';
 
 
 type ProjectDetail = {
@@ -55,15 +56,18 @@ type TimeEntry = {
   feet: number | null;
   laterals: number | null;
   residences: number | null;
-mainline_tests: number | null;
-flat_rate: boolean | null;
+  mainline_tests: number | null;
+  flat_rate: boolean | null;
   notes: string | null;
   created_at: string;
+  updated_at: string | null;
   deleted_at?: string | null;
   deleted_reason?: string | null;
-  updated_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_profile?: { full_name: string } | null;
+  updated_profile?: { full_name: string } | null;
 };
-
 type TimeForm = {
   workDate: string;
   workCompleted: string;
@@ -78,6 +82,11 @@ type ProjectNote = {
   id: string;
   note: string;
   created_at: string;
+  updated_at: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_profile?: { full_name: string } | null;
+  updated_profile?: { full_name: string } | null;
 };
 
 type Employee = {
@@ -213,6 +222,26 @@ const [inlineTimeForm, setInlineTimeForm] = useState<TimeForm>({
   laterals: '',
   notes: '',
 });
+
+const { role } = useUserProfile();
+const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+
+const canManageProjects = role === 'admin' || role === 'management';
+const canSubmitService =
+  role === 'admin' || role === 'management' || role === 'field';
+const canAddProjectNotes =
+  role === 'admin' || role === 'management' || role === 'field';
+const canManageHistory = role === 'admin' || role === 'management';
+
+function canManageEntry(entry: TimeEntry) {
+  if (canManageHistory) return true;
+  return role === 'field' && entry.created_by === currentUserId;
+}
+
+function canManageNote(note: ProjectNote) {
+  if (canManageHistory) return true;
+  return role === 'field' && note.created_by === currentUserId;
+}
 
 
 const standardBillingMethods = {
@@ -602,6 +631,18 @@ billing_methods_updated_at: data.billing_methods_updated_at,
 
   }, [params.id]);
 
+  useEffect(() => {
+    async function loadCurrentUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+  
+      setCurrentUserId(user?.id ?? null);
+    }
+  
+    loadCurrentUser();
+  }, []);
+
   if (loading) {
     return <div className="text-black">Loading project...</div>;
   }
@@ -790,9 +831,29 @@ billing_methods_updated_at: data.billing_methods_updated_at,
 async function loadTimeEntries(projectId: string) {
   const { data, error } = await supabase
     .from('time_entries')
-    .select(
-      'id, work_date, work_completed, service_vehicle, hours, feet, laterals, residences, mainline_tests, flat_rate, notes, created_at, updated_at'
-      )
+    .select(`
+  id,
+  work_date,
+  work_completed,
+  service_vehicle,
+  hours,
+  feet,
+  laterals,
+  residences,
+  mainline_tests,
+  flat_rate,
+  notes,
+  created_at,
+  updated_at,
+  created_by,
+  updated_by,
+  created_profile:user_profiles!time_entries_created_by_fkey (
+    full_name
+  ),
+  updated_profile:user_profiles!time_entries_updated_by_fkey (
+    full_name
+  )
+`)
     
     
     .eq('project_id', projectId)
@@ -808,7 +869,9 @@ async function loadTimeEntries(projectId: string) {
   setTimeEntries(data ?? []);
 }
 
+
 async function updateProjectStatus(status: string) {
+  if (!canManageProjects) return;
   if (!project) return;
 
   const { data, error } = await supabase
@@ -833,7 +896,20 @@ async function updateProjectStatus(status: string) {
 async function loadProjectNotes(projectId: string) {
   const { data, error } = await supabase
     .from('project_notes')
-    .select('id, note, created_at')
+    .select(`
+  id,
+  note,
+  created_at,
+  updated_at,
+  created_by,
+  updated_by,
+  created_profile:user_profiles!project_notes_created_by_fkey (
+    full_name
+  ),
+  updated_profile:user_profiles!project_notes_updated_by_fkey (
+    full_name
+  )
+`)
     .eq('project_id', projectId)
     .order('created_at', { ascending: false });
 
@@ -846,11 +922,20 @@ async function loadProjectNotes(projectId: string) {
 }
 
 async function saveProjectNote() {
+  if (!canAddProjectNotes) return;
   if (!project || !newProjectNote.trim()) return;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
 
   const { error } = await supabase.from('project_notes').insert({
     project_id: project.id,
     note: `Project note: ${newProjectNote.trim()}`,
+    created_by: user.id,
+    updated_by: user.id,
   });
 
   if (error) {
@@ -862,6 +947,7 @@ async function saveProjectNote() {
   setNewProjectNote('');
   loadProjectNotes(project.id);
 }
+
 
 function startProjectNoteEdit(note: ProjectNote) {
   setEditingProjectNoteId(note.id);
@@ -913,11 +999,19 @@ async function deleteProjectNote(noteId: string) {
 
 
 async function submitTimeEntry() {
+  if (!canSubmitService) return;
+
   if (!project || !timeForm.workDate) {
     return;
   }
 
   if (pendingServiceItems.length === 0) return;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
 
   const isFirstTimeEntry = !editingTimeEntryId && timeEntries.length === 0;
 
@@ -927,15 +1021,18 @@ async function submitTimeEntry() {
     work_completed: item.serviceType,
     service_vehicle: item.serviceVehicle,
     hours: item.billingMethod === 'Per Hour' ? Number(item.quantity) : null,
-feet: item.billingMethod === 'Per Foot' ? Number(item.quantity) : null,
-laterals: item.billingMethod === 'Per Lateral' ? Number(item.quantity) : null,
-residences:
-  item.billingMethod === 'Per Residence' ? Number(item.quantity) : null,
-mainline_tests:
-  item.billingMethod === 'Per Mainline Test' ? Number(item.quantity) : null,
-flat_rate: item.billingMethod === 'Flat Rate',
-notes: timeForm.notes,
+    feet: item.billingMethod === 'Per Foot' ? Number(item.quantity) : null,
+    laterals: item.billingMethod === 'Per Lateral' ? Number(item.quantity) : null,
+    residences:
+      item.billingMethod === 'Per Residence' ? Number(item.quantity) : null,
+    mainline_tests:
+      item.billingMethod === 'Per Mainline Test' ? Number(item.quantity) : null,
+    flat_rate: item.billingMethod === 'Flat Rate',
+    notes: timeForm.notes,
+    created_by: user.id,
+    updated_by: user.id,
   }));
+
 
   const { error } = await supabase.from('time_entries').insert(timeEntryValues);
 
@@ -973,6 +1070,8 @@ notes: timeForm.notes,
     const { error: noteError } = await supabase.from('project_notes').insert({
       project_id: project.id,
       note: `Service note: ${timeForm.notes.trim()}`,
+      created_by: user.id,
+      updated_by: user.id,
     });
 
     if (noteError) {
@@ -999,6 +1098,7 @@ notes: timeForm.notes,
   setPendingServiceItems([]);
   setEditingTimeEntryId(null);
   loadTimeEntries(project.id);
+setShowServiceSubmission(false);
 }
 
 
@@ -1137,16 +1237,35 @@ function formatTimestamp(value: string | null) {
 }
 
 function submittedUpdatedLabel(entry: TimeEntry) {
+  const createdBy = entry.created_profile?.full_name || 'Unknown';
+  const updatedBy = entry.updated_profile?.full_name || createdBy;
+
   if (entry.updated_at) {
     const createdAt = new Date(entry.created_at).getTime();
     const updatedAt = new Date(entry.updated_at).getTime();
 
     if (updatedAt - createdAt > 5000) {
-      return `Updated: ${formatTimestamp(entry.updated_at)}`;
+      return `Updated by ${updatedBy} at ${formatTimestamp(entry.updated_at)}`;
     }
   }
 
-  return `Submitted: ${formatTimestamp(entry.created_at)}`;
+  return `Submitted by ${createdBy} at ${formatTimestamp(entry.created_at)}`;
+}
+
+function noteSubmittedUpdatedLabel(note: ProjectNote) {
+  const createdBy = note.created_profile?.full_name || 'Unknown';
+  const updatedBy = note.updated_profile?.full_name || createdBy;
+
+  if (note.updated_at) {
+    const createdAt = new Date(note.created_at).getTime();
+    const updatedAt = new Date(note.updated_at).getTime();
+
+    if (updatedAt - createdAt > 5000) {
+      return `Updated by ${updatedBy} at ${formatTimestamp(note.updated_at)}`;
+    }
+  }
+
+  return `Submitted by ${createdBy} at ${formatTimestamp(note.created_at)}`;
 }
 
 function formatPhone(value: string | null | undefined) {
@@ -1178,6 +1297,7 @@ function statusBadgeClass(status: string) {
 }
 
 function startProjectEdit() {
+  if (!canManageProjects) return;
   if (!project) return;
 
   setProjectEditForm({
@@ -1201,6 +1321,7 @@ trafficControlPricingType:
 }
 
 async function saveProjectEdit() {
+  if (!canManageProjects) return;
   if (!project || !projectEditForm.projectNumber.trim()) {
     return;
   }
@@ -1368,7 +1489,7 @@ traffic_control_pricing_type:
 
   <div className="shrink-0 text-right">
   <div className="mb-1 h-4">
-    {!editingProject && project.status === 'Active' && (
+  {canManageProjects && !editingProject && project.status === 'Active' && (
       <button
         type="button"
         onClick={() => {
@@ -1386,7 +1507,7 @@ traffic_control_pricing_type:
       </button>
     )}
 
-    {!editingProject && project.status === 'Completed' && (
+{canManageProjects && !editingProject && project.status === 'Completed' && (
       <button
         type="button"
         onClick={() => {
@@ -1526,7 +1647,7 @@ traffic_control_pricing_type:
 
   </div>
 
-  {!editingProject && (
+  {!editingProject && canManageProjects && (
   <button
     type="button"
     onClick={startProjectEdit}
@@ -1585,7 +1706,7 @@ traffic_control_pricing_type:
 
 
 
-  {editingProject && (
+{editingProject && canManageProjects && (
   <div className="mt-3 space-y-3">
     <select
       value={projectEditForm.billingMethodSource}
@@ -1710,241 +1831,248 @@ traffic_control_pricing_type:
 <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
   <div className="min-w-0 space-y-6">
 
-  <div className="rounded-2xl bg-white p-6 shadow">
-  <button
-    type="button"
-    onClick={() => setShowServiceSubmission(!showServiceSubmission)}
-    className="flex w-full items-center justify-between gap-4 text-left"
-  >
-    <div>
-      <h2 className="text-xl font-bold">Service Submission</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        Add service date, hours, vehicle, and notes.
-      </p>
-    </div>
-
-    <span className="text-2xl leading-none text-gray-500">
-  {showServiceSubmission ? '⌄' : '›'}
-</span>
-
-  </button>
-
-  {showServiceSubmission && (
-    <>
-<div className="mt-4 grid min-w-0 gap-4 md:grid-cols-2">
-
-      <div className="min-w-0">
-  <label className="mb-2 block text-sm font-medium">Service Date</label>
-  <input
-    type="date"
-    value={timeForm.workDate}
-    onChange={(e) =>
-      setTimeForm({ ...timeForm, workDate: e.target.value })
-    }
-    className="block w-full min-w-0 max-w-full appearance-none rounded-lg border border-black p-3 text-sm"
-  />
-</div>
-
-
-<div>
-  <label className="mb-2 block text-sm font-medium">Service Vehicle</label>
-
-  <div className="grid grid-cols-2 gap-2">
-    {['2016 Ford Van', '2007 Ford F-150'].map((vehicle) => {
-      const selected = timeForm.serviceVehicle === vehicle;
-
-      return (
-        <button
-          key={vehicle}
-          type="button"
-          onClick={() =>
-            setTimeForm({
-              ...timeForm,
-              serviceVehicle: selected ? '' : vehicle,
-            })
-          }
-          className={`rounded-lg border px-3 py-3 text-sm font-medium ${
-            selected
-              ? 'border-black bg-black text-white'
-              : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-          }`}
-        >
-          {vehicle}
-        </button>
-      );
-    })}
-  </div>
-</div>
-
-
-<div className="md:col-span-2">
-  <label className="mb-2 block text-sm font-medium">
-    Type of Service Completed
-  </label>
-
-  <div className="grid grid-cols-2 gap-2">
-  {serviceTypeOptions.map((serviceType) => {
-  const selected = selectedServiceTypes.includes(serviceType);
-
-  return (
-    <button
-      key={serviceType}
-      type="button"
-      onClick={() => {
-        if (selected) {
-          setSelectedServiceTypes(
-            selectedServiceTypes.filter((type) => type !== serviceType)
-          );
-
-          const nextQuantities = { ...serviceQuantities };
-          delete nextQuantities[serviceType];
-          setServiceQuantities(nextQuantities);
-          return;
-        }
-
-        setSelectedServiceTypes([...selectedServiceTypes, serviceType]);
-      }}
-      className={`rounded-lg border px-3 py-3 text-sm font-medium ${
-        selected
-          ? 'border-black bg-black text-white'
-          : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-      }`}
-    >
-      {serviceType}
-    </button>
-  );
-})}
-
-  </div>
-</div>
-
-{selectedServiceTypes.length > 0 && (
-  <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
-    {selectedServiceTypes.map((serviceType) => {
-      const billingMethod = billingMethodForService(serviceType);
-
-      if (billingMethod === 'Flat Rate') {
-        return (
-          <div key={serviceType} className="rounded-lg border p-3">
-            <p className="text-sm font-medium">{serviceType}</p>
-            <p className="mt-1 text-sm text-gray-500">Flat rate</p>
-          </div>
-        );
-      }
-
-      return (
-        <div key={serviceType}>
-          <label className="mb-2 block text-sm font-medium">
-            {serviceType} - {quantityLabelForService(serviceType)}
-          </label>
-          <input
-            type="text"
-            inputMode={
-              billingMethod === 'Per Hour' || billingMethod === 'Per Foot'
-                ? 'decimal'
-                : 'numeric'
-            }
-            placeholder={quantityPlaceholderForService(serviceType)}
-            value={serviceQuantities[serviceType] ?? ''}
-            onChange={(e) =>
-              setServiceQuantities({
-                ...serviceQuantities,
-                [serviceType]: e.target.value,
-              })
-            }
-            className="block w-full min-w-0 max-w-full rounded-lg border p-3"
-          />
-        </div>
-      );
-    })}
-  </div>
-)}
-
-<div className="md:col-span-2">
-  <button
-    type="button"
-    onClick={addSelectedServicesToSubmission}
-    className="w-full rounded-lg border border-[#009be5] bg-[#eaf7fe] px-5 py-3 text-sm font-semibold text-[#007bb8] shadow-sm hover:bg-[#d8f0fc]"
-  >
-    Add Service
-  </button>
-
-  {serviceSubmissionError && (
-    <p className="mt-2 text-sm font-medium text-red-600">
-      {serviceSubmissionError}
-    </p>
-  )}
-</div>
-
-
-{pendingServiceItems.length > 0 && (
-  <div className="md:col-span-2 rounded-xl border p-4">
-    <p className="text-sm font-bold text-gray-700">Submission Review</p>
-
-    <div className="mt-3 space-y-2">
-      {pendingServiceItems.map((item) => (
-        <div
-          key={item.id}
-          className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
-        >
-          <div>
-            <p className="text-sm font-medium">{item.serviceType}</p>
-            <p className="text-xs text-gray-500">
-  {item.serviceVehicle}
-</p>
-<p className="text-xs text-gray-500">
-  {item.billingMethod} - {quantityLabelForPendingItem(item)}
-</p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => removePendingServiceItem(item.id)}
-            className="rounded-lg border px-3 py-1 text-xs text-red-600 hover:bg-red-50"
-          >
-            Remove
-          </button>
-        </div>
-      ))}
-    </div>
-  </div>
-)}
-
-
-  <div className="md:col-span-2">
-    <label className="mb-2 block text-sm font-medium">Submission Notes</label>
-    <textarea
-  placeholder="Add notes about the work completed..."
-  value={timeForm.notes}
-  onChange={(e) => setTimeForm({ ...timeForm, notes: e.target.value })}
-  className="w-full rounded-lg border p-3"
-  rows={4}
-/>
-  </div>
-</div>
-
-<div className="mt-4 grid gap-3">
-  <button
-    type="button"
-    onClick={submitTimeEntry}
-    className="w-full rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
-    >
-    {editingTimeEntryId ? 'Update Time' : 'Submit All'}
-  </button>
-
+  {canSubmitService && (
   <button
   type="button"
-  onClick={clearServiceSubmissionForm}
-  className="w-full rounded-lg border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-100"
+  onClick={() => setShowServiceSubmission(true)}
+  className="w-full rounded-lg border border-[#009be5] bg-[#eaf7fe] px-5 py-3 text-sm font-semibold text-[#007bb8] shadow-sm hover:bg-[#d8f0fc]"
 >
-  Clear
+  + Record Service
 </button>
+)}
+
+{canSubmitService && showServiceSubmission && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <button
+      type="button"
+      aria-label="Close service submission"
+      onClick={() => setShowServiceSubmission(false)}
+      className="absolute inset-0"
+    />
+
+    <div className="relative z-10 max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+      <div className="sticky top-0 z-20 flex items-center justify-between border-b bg-white px-6 py-4">
+        <div>
+          <h2 className="text-xl font-bold">Record Service</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Add service date, vehicle, services, quantities, and notes.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowServiceSubmission(false)}
+          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+        >
+          Close
+        </button>
+      </div>
+
+      <div className="p-6">
+  <div className="grid min-w-0 gap-4 md:grid-cols-2">
+    <div className="min-w-0">
+      <label className="mb-2 block text-sm font-medium">Service Date</label>
+      <input
+        type="date"
+        value={timeForm.workDate}
+        onChange={(e) => setTimeForm({ ...timeForm, workDate: e.target.value })}
+        className="block w-full min-w-0 max-w-full appearance-none rounded-lg border border-black p-3 text-sm"
+      />
+    </div>
+
+    <div>
+      <label className="mb-2 block text-sm font-medium">Service Vehicle</label>
+      <div className="grid grid-cols-2 gap-2">
+      {['2007 Ford F-150', '2016 Ford Van'].map((vehicle) => {
+          const selected = timeForm.serviceVehicle === vehicle;
+
+          return (
+            <button
+              key={vehicle}
+              type="button"
+              onClick={() =>
+                setTimeForm({
+                  ...timeForm,
+                  serviceVehicle: selected ? '' : vehicle,
+                })
+              }
+              className={`rounded-lg border px-3 py-3 text-sm font-medium ${
+                selected
+                  ? 'border-black bg-black text-white'
+                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {vehicle}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+
+    <div className="md:col-span-2">
+      <label className="mb-2 block text-sm font-medium">
+        Type of Service Completed
+      </label>
+
+      <div className="grid grid-cols-2 gap-2">
+        {serviceTypeOptions.map((serviceType) => {
+          const selected = selectedServiceTypes.includes(serviceType);
+
+          return (
+            <button
+              key={serviceType}
+              type="button"
+              onClick={() => {
+                if (selected) {
+                  setSelectedServiceTypes(
+                    selectedServiceTypes.filter((type) => type !== serviceType)
+                  );
+
+                  const nextQuantities = { ...serviceQuantities };
+                  delete nextQuantities[serviceType];
+                  setServiceQuantities(nextQuantities);
+                  return;
+                }
+
+                setSelectedServiceTypes([...selectedServiceTypes, serviceType]);
+              }}
+              className={`rounded-lg border px-3 py-3 text-sm font-medium ${
+                selected
+                  ? 'border-black bg-black text-white'
+                  : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              {serviceType}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+
+    {selectedServiceTypes.length > 0 && (
+      <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
+        {selectedServiceTypes.map((serviceType) => {
+          const billingMethod = billingMethodForService(serviceType);
+
+          if (billingMethod === 'Flat Rate') {
+            return (
+              <div key={serviceType} className="rounded-lg border p-3">
+                <p className="text-sm font-medium">{serviceType}</p>
+                <p className="mt-1 text-sm text-gray-500">Flat rate</p>
+              </div>
+            );
+          }
+
+          return (
+            <div key={serviceType}>
+              <label className="mb-2 block text-sm font-medium">
+                {serviceType} - {quantityLabelForService(serviceType)}
+              </label>
+              <input
+                type="text"
+                inputMode={
+                  billingMethod === 'Per Hour' || billingMethod === 'Per Foot'
+                    ? 'decimal'
+                    : 'numeric'
+                }
+                placeholder={quantityPlaceholderForService(serviceType)}
+                value={serviceQuantities[serviceType] ?? ''}
+                onChange={(e) =>
+                  setServiceQuantities({
+                    ...serviceQuantities,
+                    [serviceType]: e.target.value,
+                  })
+                }
+                className="block w-full min-w-0 max-w-full rounded-lg border p-3"
+              />
+            </div>
+          );
+        })}
+      </div>
+    )}
+
+    <div className="md:col-span-2">
+      <button
+        type="button"
+        onClick={addSelectedServicesToSubmission}
+        className="w-full rounded-lg border border-[#009be5] bg-[#eaf7fe] px-5 py-3 text-sm font-semibold text-[#007bb8] shadow-sm hover:bg-[#d8f0fc]"
+      >
+        Add Service
+      </button>
+
+      {serviceSubmissionError && (
+        <p className="mt-2 text-sm font-medium text-red-600">
+          {serviceSubmissionError}
+        </p>
+      )}
+    </div>
+
+    {pendingServiceItems.length > 0 && (
+      <div className="rounded-xl border p-4 md:col-span-2">
+        <p className="text-sm font-bold text-gray-700">Submission Review</p>
+
+        <div className="mt-3 space-y-2">
+          {pendingServiceItems.map((item) => (
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2"
+            >
+              <div>
+                <p className="text-sm font-medium">{item.serviceType}</p>
+                <p className="text-xs text-gray-500">{item.serviceVehicle}</p>
+                <p className="text-xs text-gray-500">
+                  {item.billingMethod} - {quantityLabelForPendingItem(item)}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => removePendingServiceItem(item.id)}
+                className="rounded-lg border px-3 py-1 text-xs text-red-600 hover:bg-red-50"
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <div className="md:col-span-2">
+      <label className="mb-2 block text-sm font-medium">Submission Notes</label>
+      <textarea
+        placeholder="Add notes about the work completed..."
+        value={timeForm.notes}
+        onChange={(e) => setTimeForm({ ...timeForm, notes: e.target.value })}
+        className="w-full rounded-lg border p-3"
+        rows={4}
+      />
+    </div>
+  </div>
+
+  <div className="mt-4 grid gap-3">
+    <button
+      type="button"
+      onClick={submitTimeEntry}
+      className="w-full rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+    >
+      Submit All
+    </button>
+
+    <button
+      type="button"
+      onClick={clearServiceSubmissionForm}
+      className="w-full rounded-lg border border-red-200 bg-red-50 px-5 py-3 text-sm font-semibold text-red-700 hover:bg-red-100"
+    >
+      Clear
+    </button>
+  </div>
 </div>
 
-</>
-  )}
+    </div>
+  </div>
+)}
 
-          </div>
 
           <div className="rounded-2xl bg-white p-6 shadow">
           <div>
@@ -2390,7 +2518,7 @@ traffic_control_pricing_type:
               <>
                 <p className="text-sm text-gray-700">{note.note}</p>
                 <p className="mt-2 text-xs text-gray-500">
-                  {formatTimestamp(note.created_at)}
+                {noteSubmittedUpdatedLabel(note)}
                 </p>
 
                 {managingProjectNotes && (
@@ -2466,7 +2594,7 @@ traffic_control_pricing_type:
               <>
                 <p className="text-sm text-gray-700">{note.note}</p>
                 <p className="mt-2 text-xs text-gray-500">
-                  {formatTimestamp(note.created_at)}
+                {noteSubmittedUpdatedLabel(note)}
                 </p>
 
                 {managingProjectNotes && (

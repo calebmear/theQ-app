@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '../lib/supabaseClient';
 
@@ -19,6 +19,7 @@ function formatRole(role: UserProfile['role'] | null) {
 
 export default function UserMenu() {
   const router = useRouter();
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -29,56 +30,74 @@ export default function UserMenu() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-  
+
+      setOpen(false);
+
       if (!user) {
         setEmail('');
         setProfile(null);
         return;
       }
-  
+
       setEmail(user.email ?? '');
-  
+
       const { data, error } = await supabase
         .from('user_profiles')
         .select('full_name, role')
         .eq('id', user.id)
         .single();
-  
+
       if (error) {
         console.error('Error loading user profile:', error);
         setProfile(null);
         return;
       }
-  
+
       setProfile(data ?? null);
     }
-  
+
     loadUser();
-  
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(() => {
       loadUser();
     });
-  
+
     return () => {
       subscription.unsubscribe();
     };
   }, []);
-  
+
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current) return;
+
+      if (!menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+    };
+  }, []);
 
   async function logout() {
+    setOpen(false);
     await supabase.auth.signOut();
     router.replace('/login');
   }
 
   return (
-    <div className="relative shrink-0">
+    <div ref={menuRef} className="relative shrink-0">
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => setOpen((value) => !value)}
         className="min-w-[72px] max-w-[140px] rounded-lg px-2 py-1 text-center hover:bg-gray-100"
-        >
+      >
         <p className="truncate text-sm font-semibold text-gray-900">
           {profile?.full_name || email || 'User'}
         </p>

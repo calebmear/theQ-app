@@ -26,15 +26,28 @@ export default function LoginPage() {
     setErrorMessage('');
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
+    if (error || !data.user) {
+      setLoading(false);
+      setErrorMessage('Invalid email or password.');
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('role, active')
+      .eq('id', data.user.id)
+      .single();
+
     setLoading(false);
 
-    if (error) {
-      setErrorMessage('Invalid email or password.');
+    if (profileError || !profile || profile.active === false) {
+      await supabase.auth.signOut();
+      setErrorMessage('Your account is not active.');
       return;
     }
 
@@ -51,7 +64,13 @@ export default function LoginPage() {
 
     setTimeout(() => {
       sessionStorage.setItem('skipAppSplashOnce', 'true');
-      router.push('/');
+    
+      if (profile.role === 'field') {
+        router.replace('/activework');
+        return;
+      }
+    
+      router.replace('/');
     }, 1700);
   }
 
@@ -93,7 +112,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-lg border p-3"
-              disabled={launching}
+              disabled={loading || launching}
             />
           </div>
 
@@ -104,7 +123,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-lg border p-3"
-              disabled={launching}
+              disabled={loading || launching}
             />
           </div>
 
@@ -126,24 +145,24 @@ export default function LoginPage() {
       </div>
 
       {launching && launchQPosition && (
-  <div className="fixed inset-0 z-[10000] bg-white">
-    <div
-className="animate-login-q-to-center fixed font-bold leading-none text-black"
-style={
-        {
-          left: `${launchQPosition.left}px`,
-          top: `${launchQPosition.top}px`,
-          '--start-left': `${launchQPosition.left}px`,
-          '--start-top': `${launchQPosition.top}px`,
-          '--target-left': 'calc(50vw - var(--login-q-center-nudge))',
-          '--target-top': '44vh',
-        } as React.CSSProperties
-      }
-    >
-      Q
-    </div>
-  </div>
-)}
+        <div className="fixed inset-0 z-[10000] bg-white">
+          <div
+            className="animate-login-q-to-center fixed font-bold leading-none text-black"
+            style={
+              {
+                left: `${launchQPosition.left}px`,
+                top: `${launchQPosition.top}px`,
+                '--start-left': `${launchQPosition.left}px`,
+                '--start-top': `${launchQPosition.top}px`,
+                '--target-left': 'calc(50vw - var(--login-q-center-nudge))',
+                '--target-top': '44vh',
+              } as React.CSSProperties
+            }
+          >
+            Q
+          </div>
+        </div>
+      )}
     </div>
   );
 }

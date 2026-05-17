@@ -100,6 +100,7 @@ type PendingServiceItem = {
   billingMethod: string;
   quantity: string;
   serviceVehicle: string;
+  note: string;
 };
 
 
@@ -154,6 +155,9 @@ const [serviceQuantities, setServiceQuantities] = useState<
   Record<string, string>
 >({});
 
+const [serviceNotes, setServiceNotes] = useState<Record<string, string>>({});
+
+
 const [pendingServiceItems, setPendingServiceItems] = useState<
   PendingServiceItem[]
 >([]);
@@ -175,15 +179,26 @@ const [expandedTimeEntryId, setExpandedTimeEntryId] = useState<string | null>(
 );
 const [expandedServiceDates, setExpandedServiceDates] = useState<string[]>([]);
 
+const [expandedServiceNoteDates, setExpandedServiceNoteDates] = useState<string[]>([]);
+
 const [employees, setEmployees] = useState<Employee[]>([]);
 
 const projectNoteHistory = projectNotes.filter(
   (note) => !note.note.toLowerCase().startsWith('service note:')
 );
 
-const serviceNoteHistory = projectNotes.filter((note) =>
-  note.note.toLowerCase().startsWith('service note:')
-);
+const serviceNoteHistory = Object.entries(
+  timeEntries
+    .filter((entry) => entry.notes?.trim())
+    .reduce<Record<string, TimeEntry[]>>((groups, entry) => {
+      if (!groups[entry.work_date]) {
+        groups[entry.work_date] = [];
+      }
+
+      groups[entry.work_date].push(entry);
+      return groups;
+    }, {})
+).sort(([dateA], [dateB]) => dateB.localeCompare(dateA));
 
 const [managingProjectNotes, setManagingProjectNotes] = useState(false);
 
@@ -224,24 +239,33 @@ const [inlineTimeForm, setInlineTimeForm] = useState<TimeForm>({
 });
 
 const { role } = useUserProfile();
+const normalizedRole = role ? String(role).trim().toLowerCase() : null;
+
 const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 const [currentUserName, setCurrentUserName] = useState<string | null>(null);
 
-const canManageProjects = role === 'admin' || role === 'management';
+const canManageProjects =
+  normalizedRole === 'admin' || normalizedRole === 'management';
 const canSubmitService =
-  role === 'admin' || role === 'management' || role === 'field';
+  normalizedRole === 'admin' ||
+  normalizedRole === 'management' ||
+  normalizedRole === 'field';
 const canAddProjectNotes =
-  role === 'admin' || role === 'management' || role === 'field';
-const canManageHistory = role === 'admin' || role === 'management';
+  normalizedRole === 'admin' ||
+  normalizedRole === 'management' ||
+  normalizedRole === 'field';
+const canManageHistory =
+  normalizedRole === 'admin' || normalizedRole === 'management';
+
 
 function canManageEntry(entry: TimeEntry) {
   if (canManageHistory) return true;
-  return role === 'field' && entry.created_by === currentUserId;
+  return normalizedRole === 'field' && entry.created_by === currentUserId;
 }
 
 function canManageNote(note: ProjectNote) {
   if (canManageHistory) return true;
-  return role === 'field' && note.created_by === currentUserId;
+  return normalizedRole === 'field' && note.created_by === currentUserId;
 }
 
 
@@ -376,43 +400,33 @@ function entryQuantityDetails(entry: TimeEntry) {
 
 
 function quantityLabelForEntry(entry: TimeEntry) {
-  const entryBillingMethod = billingMethodForEntry(entry);
-
-  if (entryBillingMethod === 'Per Hour') {
-    return `${entry.hours ?? 0} hrs`;
+  if (entry.hours !== null && entry.hours !== undefined) {
+    return `${entry.hours} hrs`;
   }
 
-  if (entryBillingMethod === 'Per Foot') {
-    return entry.feet !== null && entry.feet !== undefined
-      ? `${entry.feet} ft`
-      : 'No quantity';
+  if (entry.feet !== null && entry.feet !== undefined) {
+    return `${entry.feet} ft`;
   }
 
-  if (entryBillingMethod === 'Per Lateral') {
-    return entry.laterals !== null && entry.laterals !== undefined
-      ? `${entry.laterals} laterals`
-      : 'No quantity';
+  if (entry.laterals !== null && entry.laterals !== undefined) {
+    return `${entry.laterals} laterals`;
   }
 
-  if (entryBillingMethod === 'Per Residence') {
-    return entry.residences !== null && entry.residences !== undefined
-      ? `${entry.residences} residences`
-      : 'No quantity';
+  if (entry.residences !== null && entry.residences !== undefined) {
+    return `${entry.residences} residences`;
   }
-  
-  if (entryBillingMethod === 'Per Mainline Test') {
-    return entry.mainline_tests !== null && entry.mainline_tests !== undefined
-      ? `${entry.mainline_tests} tests`
-      : 'No quantity';
-  }
-  
 
-  if (entryBillingMethod === 'Flat Rate' || entry.flat_rate) {
+  if (entry.mainline_tests !== null && entry.mainline_tests !== undefined) {
+    return `${entry.mainline_tests} tests`;
+  }
+
+  if (entry.flat_rate) {
     return 'Flat rate';
   }
 
   return 'No quantity';
 }
+
 
 
 const serviceTypeOptions = [
@@ -471,6 +485,8 @@ function clearServiceSubmissionForm() {
 
   setSelectedServiceTypes([]);
   setServiceQuantities({});
+  setServiceNotes({});
+
   setPendingServiceItems([]);
   setEditingTimeEntryId(null);
   setServiceSubmissionError('');
@@ -509,12 +525,15 @@ function addSelectedServicesToSubmission() {
       billingMethod,
       quantity: serviceQuantities[serviceType] ?? '',
       serviceVehicle: timeForm.serviceVehicle,
+      note: serviceNotes[serviceType] ?? '',
     };
   });
 
   setPendingServiceItems([...pendingServiceItems, ...newItems]);
   setSelectedServiceTypes([]);
   setServiceQuantities({});
+  setServiceNotes({});
+
   setTimeForm({
     ...timeForm,
     serviceVehicle: '',
@@ -778,7 +797,6 @@ billing_methods_updated_at: data.billing_methods_updated_at,
       >
     >((summary, entry) => {
       const serviceType = entry.work_completed || 'Unknown Service';
-      const billingMethod = billingMethodForEntry(entry);
   
       if (!summary[serviceType]) {
         summary[serviceType] = {
@@ -791,12 +809,15 @@ billing_methods_updated_at: data.billing_methods_updated_at,
         };
       }
   
-      if (billingMethod === 'Per Hour') summary[serviceType].hours += entry.hours ?? 0;
-      if (billingMethod === 'Per Foot') summary[serviceType].feet += entry.feet ?? 0;
-      if (billingMethod === 'Per Lateral') summary[serviceType].laterals += entry.laterals ?? 0;
-      if (billingMethod === 'Per Residence') summary[serviceType].residences += entry.residences ?? 0;
-      if (billingMethod === 'Per Mainline Test') summary[serviceType].mainlineTests += entry.mainline_tests ?? 0;
-      if (billingMethod === 'Flat Rate' || entry.flat_rate) summary[serviceType].flatRates += 1;
+      summary[serviceType].hours += Number(entry.hours ?? 0);
+      summary[serviceType].feet += Number(entry.feet ?? 0);
+      summary[serviceType].laterals += Number(entry.laterals ?? 0);
+      summary[serviceType].residences += Number(entry.residences ?? 0);
+      summary[serviceType].mainlineTests += Number(entry.mainline_tests ?? 0);
+  
+      if (entry.flat_rate) {
+        summary[serviceType].flatRates += 1;
+      }
   
       return summary;
     }, {});
@@ -823,6 +844,7 @@ billing_methods_updated_at: data.billing_methods_updated_at,
       services,
     };
   }
+  
   
   
   const groupedTimeEntries = Object.entries(
@@ -940,49 +962,80 @@ async function loadProjectNotes(projectId: string) {
   const { data, error } = await supabase
     .from('project_notes')
     .select(`
-  id,
-  note,
-  created_at,
-  updated_at,
-  created_by,
-  updated_by,
-  created_profile:user_profiles!project_notes_created_by_fkey (
-    full_name
-  ),
-  updated_profile:user_profiles!project_notes_updated_by_fkey (
-    full_name
-  )
-`)
+      id,
+      note,
+      created_at,
+      updated_at,
+      created_by,
+      updated_by
+    `)
     .eq('project_id', projectId)
     .order('created_at', { ascending: false });
 
   if (error) {
     console.error('Error loading project notes:', error);
+    alert(`Could not load project notes: ${error.message}`);
     return;
+  }
+
+  const userIds = Array.from(
+    new Set(
+      (data ?? [])
+        .flatMap((note) => [note.created_by, note.updated_by])
+        .filter((id): id is string => Boolean(id))
+    )
+  );
+
+  let profileById: Record<string, { full_name: string }> = {};
+
+  if (userIds.length > 0) {
+    const { data: profiles, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id, full_name')
+      .in('id', userIds);
+
+    if (profileError) {
+      console.error('Error loading note user profiles:', profileError);
+    } else {
+      profileById = Object.fromEntries(
+        (profiles ?? []).map((profile) => [
+          profile.id,
+          { full_name: profile.full_name },
+        ])
+      );
+    }
   }
 
   const formattedNotes: ProjectNote[] = (data ?? []).map((note) => ({
     ...note,
-    created_profile: Array.isArray(note.created_profile)
-      ? note.created_profile[0] ?? null
-      : note.created_profile,
-    updated_profile: Array.isArray(note.updated_profile)
-      ? note.updated_profile[0] ?? null
-      : note.updated_profile,
+    created_profile: note.created_by
+      ? profileById[note.created_by] ?? null
+      : null,
+    updated_profile: note.updated_by
+      ? profileById[note.updated_by] ?? null
+      : null,
   }));
-  
+
   setProjectNotes(formattedNotes);
 }
 
+
 async function saveProjectNote() {
-  if (!canAddProjectNotes) return;
+  if (!canAddProjectNotes) {
+    alert('You do not have permission to add project notes.');
+    return;
+  }
+
   if (!project || !newProjectNote.trim()) return;
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) return;
+  if (!user) {
+    alert('You must be signed in to add a project note.');
+    return;
+  }
 
   const { error } = await supabase.from('project_notes').insert({
     project_id: project.id,
@@ -998,7 +1051,7 @@ async function saveProjectNote() {
   }
 
   setNewProjectNote('');
-  loadProjectNotes(project.id);
+  await loadProjectNotes(project.id);
 }
 
 
@@ -1079,7 +1132,7 @@ async function submitTimeEntry() {
     residences: item.billingMethod === 'Per Residence' ? Number(item.quantity) : null,
     mainline_tests: item.billingMethod === 'Per Mainline Test' ? Number(item.quantity) : null,
     flat_rate: item.billingMethod === 'Flat Rate',
-    notes: timeForm.notes,
+    notes: item.note,
     created_by: user.id,
     updated_by: user.id,
   }));
@@ -1118,41 +1171,7 @@ async function submitTimeEntry() {
     await updateProjectStatus('Active');
   }
 
-  if (timeForm.notes.trim()) {
-    const { data: insertedNote, error: noteError } = await supabase
-      .from('project_notes')
-      .insert({
-        project_id: project.id,
-        note: `Service note: ${timeForm.notes.trim()}`,
-        created_by: user.id,
-        updated_by: user.id,
-      })
-      .select('id, note, created_at, updated_at, created_by, updated_by')
-      .single();
-  
-    if (noteError) {
-      console.error('Error saving service note to project notes:', noteError);
-      alert(noteError.message);
-      return;
-    }
-  
-    if (insertedNote) {
-      setProjectNotes((notes) => [
-        {
-          ...insertedNote,
-          created_profile: { full_name: currentUserName ?? 'Unknown' },
-updated_profile: { full_name: currentUserName ?? 'Unknown' },
 
-        },
-        ...notes,
-      ]);
-    } else {
-      await loadProjectNotes(project.id);
-    }
-  
-    setShowNotes(true);
-  }
-  
 
   setTimeForm({
     workDate: today,
@@ -1166,6 +1185,8 @@ updated_profile: { full_name: currentUserName ?? 'Unknown' },
 
   setSelectedServiceTypes([]);
   setServiceQuantities({});
+  setServiceNotes({});
+
   setPendingServiceItems([]);
   setEditingTimeEntryId(null);
   
@@ -1203,7 +1224,14 @@ function startInlineTimeEdit(entry: TimeEntry) {
     workDate: entry.work_date,
     workCompleted: entry.work_completed ?? '',
     serviceVehicle: entry.service_vehicle ?? '',
-    hours: entry.hours === null ? '' : String(entry.hours),
+    hours:
+      entry.hours !== null && entry.hours !== undefined
+        ? String(entry.hours)
+        : entry.residences !== null && entry.residences !== undefined
+        ? String(entry.residences)
+        : entry.mainline_tests !== null && entry.mainline_tests !== undefined
+        ? String(entry.mainline_tests)
+        : '',
     feet: entry.feet === null ? '' : String(entry.feet),
     laterals: entry.laterals === null ? '' : String(entry.laterals),
     notes: entry.notes ?? '',
@@ -1234,8 +1262,11 @@ async function saveInlineTimeEntry(entryId: string) {
 
   const inlineBillingMethod = billingMethodForService(inlineTimeForm.workCompleted);
   const inlineShowsHours = inlineBillingMethod === 'Per Hour';
-  const inlineShowsFeet = inlineBillingMethod === 'Per Foot';
-  const inlineShowsLaterals = inlineBillingMethod === 'Per Lateral';
+const inlineShowsFeet = inlineBillingMethod === 'Per Foot';
+const inlineShowsLaterals = inlineBillingMethod === 'Per Lateral';
+const inlineShowsResidences = inlineBillingMethod === 'Per Residence';
+const inlineShowsMainlineTests = inlineBillingMethod === 'Per Mainline Test';
+const inlineShowsFlatRate = inlineBillingMethod === 'Flat Rate';
 
   const { error } = await supabase
     .from('time_entries')
@@ -1244,10 +1275,13 @@ async function saveInlineTimeEntry(entryId: string) {
       work_completed: inlineTimeForm.workCompleted,
       service_vehicle: inlineTimeForm.serviceVehicle,
       hours: inlineShowsHours ? Number(inlineTimeForm.hours) : null,
-      feet: inlineShowsFeet ? Number(inlineTimeForm.feet) : null,
-      laterals: inlineShowsLaterals ? Number(inlineTimeForm.laterals) : null,
-      notes: inlineTimeForm.notes,
-      updated_by: user.id,
+feet: inlineShowsFeet ? Number(inlineTimeForm.feet) : null,
+laterals: inlineShowsLaterals ? Number(inlineTimeForm.laterals) : null,
+residences: inlineShowsResidences ? Number(inlineTimeForm.hours) : null,
+mainline_tests: inlineShowsMainlineTests ? Number(inlineTimeForm.hours) : null,
+flat_rate: inlineShowsFlatRate,
+notes: inlineTimeForm.notes,
+updated_by: user.id,
     })
     .eq('id', entryId);
 
@@ -1637,8 +1671,8 @@ traffic_control_pricing_type:
   
 
  
-<div className="my-4 border-t" />
-<div className="mt-3">
+<div className="mt-4 border-t pt-4">
+
 <p className="text-xs font-medium uppercase text-gray-500">Location</p>
 
   {editingProject ? (
@@ -1760,7 +1794,7 @@ traffic_control_pricing_type:
 
 
 
-<div className="py-3">
+<div className="pt-4">
 <p className="text-xs font-medium uppercase text-gray-500">Customer Info</p>
 
   {project.customers?.id ? (
@@ -2022,13 +2056,18 @@ traffic_control_pricing_type:
                   setSelectedServiceTypes(
                     selectedServiceTypes.filter((type) => type !== serviceType)
                   );
-
+                
                   const nextQuantities = { ...serviceQuantities };
                   delete nextQuantities[serviceType];
                   setServiceQuantities(nextQuantities);
+                
+                  const nextNotes = { ...serviceNotes };
+                  delete nextNotes[serviceType];
+                  setServiceNotes(nextNotes);
+                
                   return;
                 }
-
+                
                 setSelectedServiceTypes([...selectedServiceTypes, serviceType]);
               }}
               className={`rounded-lg border px-3 py-3 text-sm font-medium ${
@@ -2052,9 +2091,23 @@ traffic_control_pricing_type:
           if (billingMethod === 'Flat Rate') {
             return (
               <div key={serviceType} className="rounded-lg border p-3">
-                <p className="text-sm font-medium">{serviceType}</p>
-                <p className="mt-1 text-sm text-gray-500">Flat rate</p>
-              </div>
+  <p className="text-sm font-medium">{serviceType}</p>
+  <p className="mt-1 text-sm text-gray-500">Flat rate</p>
+
+  <textarea
+    placeholder={`Add note for ${serviceType}...`}
+    value={serviceNotes[serviceType] ?? ''}
+    onChange={(e) =>
+      setServiceNotes({
+        ...serviceNotes,
+        [serviceType]: e.target.value,
+      })
+    }
+    className="mt-3 w-full rounded-lg border p-3 text-sm"
+    rows={3}
+  />
+</div>
+
             );
           }
 
@@ -2080,6 +2133,19 @@ traffic_control_pricing_type:
                 }
                 className="block w-full min-w-0 max-w-full rounded-lg border p-3"
               />
+
+<textarea
+  placeholder={`Add note for ${serviceType}...`}
+  value={serviceNotes[serviceType] ?? ''}
+  onChange={(e) =>
+    setServiceNotes({
+      ...serviceNotes,
+      [serviceType]: e.target.value,
+    })
+  }
+  className="mt-3 w-full rounded-lg border p-3 text-sm"
+  rows={3}
+/>
             </div>
           );
         })}
@@ -2133,16 +2199,7 @@ traffic_control_pricing_type:
       </div>
     )}
 
-    <div className="md:col-span-2">
-      <label className="mb-2 block text-sm font-medium">Submission Notes</label>
-      <textarea
-        placeholder="Add notes about the work completed..."
-        value={timeForm.notes}
-        onChange={(e) => setTimeForm({ ...timeForm, notes: e.target.value })}
-        className="w-full rounded-lg border p-3"
-        rows={4}
-      />
-    </div>
+
   </div>
 
   <div className="mt-4 grid gap-3">
@@ -2317,47 +2374,85 @@ traffic_control_pricing_type:
 
 
 {isDateExpanded && (
-  <div className="space-y-2 border-t bg-gray-50 p-3">
+  <div className="max-h-[60vh] space-y-2 overflow-y-auto border-t bg-gray-50 p-3 pr-2 md:max-h-none md:overflow-visible md:pr-3">
     {entries.map((entry) => {
   const isEditing = inlineEditingTimeEntryId === entry.id;
 
   return (
     <div key={entry.id} className="rounded-lg border bg-white p-3">
       {isEditing ? (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Service Date
-            </label>
-            <input
-              type="date"
-              value={inlineTimeForm.workDate}
-              onChange={(e) =>
-                setInlineTimeForm({
-                  ...inlineTimeForm,
-                  workDate: e.target.value,
-                })
-              }
-              className="w-full rounded-lg border p-3"
-            />
-          </div>
+        <div className="grid min-w-0 gap-4 md:grid-cols-2">
+          <div className="min-w-0">
+  <label className="mb-2 block text-sm font-medium">
+    Service Date
+  </label>
+  <input
+    type="date"
+    value={inlineTimeForm.workDate}
+    onChange={(e) =>
+      setInlineTimeForm({
+        ...inlineTimeForm,
+        workDate: e.target.value,
+      })
+    }
+    className="block w-full min-w-0 max-w-full appearance-none rounded-lg border p-3 text-sm"
+  />
+</div>
 
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Hours
-            </label>
-            <input
-              type="number"
-              value={inlineTimeForm.hours}
-              onChange={(e) =>
-                setInlineTimeForm({
-                  ...inlineTimeForm,
-                  hours: e.target.value,
-                })
-              }
-              className="w-full rounded-lg border p-3"
-            />
-          </div>
+
+{billingMethodForService(inlineTimeForm.workCompleted) !== 'Flat Rate' && (
+  <div className="min-w-0">
+    <label className="mb-2 block text-sm font-medium">
+      {quantityLabelForService(inlineTimeForm.workCompleted)}
+    </label>
+
+    <div className="flex min-w-0 overflow-hidden rounded-lg border bg-white">
+      <input
+        type="number"
+        value={
+          billingMethodForService(inlineTimeForm.workCompleted) === 'Per Hour'
+            ? inlineTimeForm.hours
+            : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Foot'
+            ? inlineTimeForm.feet
+            : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Lateral'
+            ? inlineTimeForm.laterals
+            : inlineTimeForm.hours
+        }
+        onChange={(e) => {
+          const billingMethod = billingMethodForService(inlineTimeForm.workCompleted);
+
+          if (billingMethod === 'Per Foot') {
+            setInlineTimeForm({ ...inlineTimeForm, feet: e.target.value });
+            return;
+          }
+
+          if (billingMethod === 'Per Lateral') {
+            setInlineTimeForm({ ...inlineTimeForm, laterals: e.target.value });
+            return;
+          }
+
+          setInlineTimeForm({ ...inlineTimeForm, hours: e.target.value });
+        }}
+        className="min-w-0 flex-1 border-0 p-3 text-sm outline-none"
+      />
+
+      <span className="flex items-center border-l bg-gray-50 px-3 text-sm font-medium text-gray-600">
+        {billingMethodForService(inlineTimeForm.workCompleted) === 'Per Hour'
+          ? 'hrs'
+          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Foot'
+          ? 'ft'
+          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Lateral'
+          ? 'laterals'
+          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Residence'
+          ? 'residences'
+          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Mainline Test'
+          ? 'tests'
+          : ''}
+      </span>
+    </div>
+  </div>
+)}
+
 
           <div>
             <label className="mb-2 block text-sm font-medium">
@@ -2365,14 +2460,25 @@ traffic_control_pricing_type:
             </label>
             <select
               value={inlineTimeForm.workCompleted}
-              onChange={(e) =>
+              onChange={(e) => {
+                const nextWorkCompleted = e.target.value;
+                const nextBillingMethod = billingMethodForService(nextWorkCompleted);
+              
                 setInlineTimeForm({
                   ...inlineTimeForm,
-                  workCompleted: e.target.value,
-                })
-              }
-              className="w-full rounded-lg border p-3"
-            >
+                  workCompleted: nextWorkCompleted,
+                  hours:
+                    nextBillingMethod === 'Per Hour' ||
+                    nextBillingMethod === 'Per Residence' ||
+                    nextBillingMethod === 'Per Mainline Test'
+                      ? inlineTimeForm.hours
+                      : '',
+                  feet: nextBillingMethod === 'Per Foot' ? inlineTimeForm.feet : '',
+                  laterals: nextBillingMethod === 'Per Lateral' ? inlineTimeForm.laterals : '',
+                });
+              }}
+              className="block w-full min-w-0 max-w-full rounded-lg border p-3 text-sm"
+              >
               <option value="">Select work type</option>
               <option>Mainline</option>
               <option>Lateral</option>
@@ -2395,8 +2501,8 @@ traffic_control_pricing_type:
                   serviceVehicle: e.target.value,
                 })
               }
-              className="w-full rounded-lg border p-3"
-            >
+              className="block w-full min-w-0 max-w-full rounded-lg border p-3 text-sm"
+              >
               <option value="">Select service vehicle</option>
               <option>2016 Ford Van</option>
               <option>2007 Ford F-150</option>
@@ -2650,80 +2756,74 @@ traffic_control_pricing_type:
   </div>
 
   <div>
-    <h3 className="text-sm font-bold text-gray-700">Service Notes</h3>
+  <h3 className="text-sm font-bold text-gray-700">Service Notes</h3>
 
-    <div className="mt-3 space-y-3">
-      {serviceNoteHistory.map((note) => {
-        const isEditingNote = editingProjectNoteId === note.id;
+  <div className="mt-3 space-y-3">
+  {serviceNoteHistory.map(([workDate, entries]) => {
+  const isExpanded = expandedServiceNoteDates.includes(workDate);
 
-        return (
-          <div key={note.id} className="rounded-xl border p-4">
-            {isEditingNote ? (
-              <>
-                <textarea
-                  value={projectNoteEditText}
-                  onChange={(e) => setProjectNoteEditText(e.target.value)}
-                  className="w-full rounded-lg border p-3"
-                  rows={3}
-                />
+  return (
+    <div key={workDate} className="rounded-xl border">
+      <button
+        type="button"
+        onClick={() =>
+          setExpandedServiceNoteDates((dates) =>
+            dates.includes(workDate)
+              ? dates.filter((date) => date !== workDate)
+              : [...dates, workDate]
+          )
+        }
+        className="w-full rounded-xl bg-white px-4 py-3 text-left"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-gray-900">
+              {formatDate(workDate)}
+            </p>
 
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => updateProjectNote(note.id)}
-                    className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
-                  >
-                    Save
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={cancelProjectNoteEdit}
-                    className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-gray-700">{note.note}</p>
-                <p className="mt-2 text-xs text-gray-500">
-                {noteSubmittedUpdatedLabel(note)}
-                </p>
-
-                {managingProjectNotes && (
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => startProjectNoteEdit(note)}
-                      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => deleteProjectNote(note.id)}
-                      className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+            <p className="mt-1 text-xs text-gray-500">
+              {entries.length} {entries.length === 1 ? 'note' : 'notes'}
+            </p>
           </div>
-        );
-      })}
 
-      {serviceNoteHistory.length === 0 && (
-        <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
-          No service notes yet.
+          <span className="text-xl leading-none text-gray-400">
+            {isExpanded ? '⌄' : '›'}
+          </span>
+        </div>
+      </button>
+
+      {isExpanded && (
+        <div className="space-y-3 border-t bg-gray-50 p-3">
+          {entries.map((entry) => (
+            <div key={entry.id} className="rounded-lg bg-white p-3">
+              <p className="text-sm font-semibold text-gray-900">
+                {entry.work_completed || 'Service'}
+              </p>
+
+              <p className="mt-1 text-sm text-gray-700">
+                {entry.notes}
+              </p>
+
+              <p className="mt-2 text-xs text-gray-500">
+                {submittedUpdatedLabel(entry)}
+              </p>
+            </div>
+          ))}
         </div>
       )}
     </div>
+  );
+})}
+
+
+    {serviceNoteHistory.length === 0 && (
+      <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+        No service notes yet.
+      </div>
+    )}
   </div>
+</div>
+
   </div>
     </>
   )}

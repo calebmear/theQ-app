@@ -68,12 +68,14 @@ setShowLaunchQ(true);
 setTimeout(() => {
       sessionStorage.setItem('skipAppSplashOnce', 'true');
     
-      if (profile.role === 'field') {
-        router.replace('/activework');
-        return;
-      }
-    
-      router.replace('/');
+      const userRole = String(profile.role).trim().toLowerCase();
+
+if (userRole === 'field') {
+  router.replace('/activework');
+  return;
+}
+
+router.replace('/');
     }, 1700);
   }
 

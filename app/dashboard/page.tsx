@@ -98,18 +98,16 @@ export default function DashboardPage() {
   const router = useRouter();
   const { role } = useUserProfile();
 
-  const canViewDashboard = role === 'admin' || role === 'management';
+  const normalizedRole = role ? String(role).trim().toLowerCase() : null;
+  const canViewDashboard =
+    normalizedRole === 'admin' || normalizedRole === 'management';
 
-  useEffect(() => {
-    if (role === 'field') {
-      router.replace('/activework');
-    }
-  }, [role, router]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
-
   const [projectCustomerSearch, setProjectCustomerSearch] = useState('');
+
+
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
@@ -144,6 +142,7 @@ smokePricingType: '',
 trafficControlPricingType: '',
   });
 
+
   function formatDate(value: string | undefined) {
     if (!value) return '';
 
@@ -153,6 +152,14 @@ trafficControlPricingType: '',
       year: 'numeric',
     });
   }
+
+  useEffect(() => {
+    if (normalizedRole === 'field') {
+      router.replace('/activework');
+    }
+  }, [normalizedRole, router]);
+  
+  
 
   const activeProjects = projects.filter((project) => project.status === 'Active');
 
@@ -240,6 +247,8 @@ trafficControlPricingType: '',
   }
 
   useEffect(() => {
+    if (!canViewDashboard) return;
+  
     async function loadCustomers() {
       const { data, error } = await supabase
         .from('customers')
@@ -275,9 +284,11 @@ trafficControlPricingType: '',
     }
 
     loadCustomers();
-  }, []);
+  }, [canViewDashboard]);
 
   useEffect(() => {
+    if (!canViewDashboard) return;
+  
     async function loadEmployees() {
       const { data, error } = await supabase
         .from('employees')
@@ -294,11 +305,13 @@ trafficControlPricingType: '',
     }
 
     loadEmployees();
-  }, []);
+  }, [canViewDashboard]);
 
   useEffect(() => {
+    if (!canViewDashboard) return;
+  
     loadProjects();
-  }, []);
+  }, [canViewDashboard]);
 
   async function saveCustomer() {
     if (
@@ -437,6 +450,13 @@ traffic_control_pricing_type:
     setProjectCustomerSearch('');
     setShowProjectForm(false);
     loadProjects();
+  }
+  if (!normalizedRole) {
+    return null;
+  }
+
+  if (!canViewDashboard) {
+    return null;
   }
 
   return (

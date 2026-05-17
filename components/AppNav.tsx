@@ -2,9 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useUserProfile } from '../lib/useUserProfile';
 
 export default function AppNav() {
   const pathname = usePathname();
+  const { role } = useUserProfile();
+
+  const normalizedRole = role ? String(role).trim().toLowerCase() : null;
+  const canViewDashboard =
+    normalizedRole === 'admin' || normalizedRole === 'management';
 
   const navClass = (active: boolean) =>
     `flex h-12 items-center justify-center border-b-4 text-sm font-medium ${
@@ -14,15 +20,19 @@ export default function AppNav() {
     } md:h-auto md:justify-start md:border-b-0 md:border-l-4 md:px-3 md:py-2`;
 
   return (
-    <nav className="mt-3 -mx-4 grid grid-cols-4 bg-white md:mx-0 md:mt-6 md:flex md:flex-col">
-      <Link
-  href="/dashboard"
-  className={navClass(pathname.startsWith('/dashboard'))}
->
-  Dashboard
-</Link>
-
-
+    <nav
+      className={`mt-3 -mx-4 grid bg-white md:mx-0 md:mt-6 md:flex md:flex-col ${
+        canViewDashboard ? 'grid-cols-4' : 'grid-cols-3'
+      }`}
+    >
+      {canViewDashboard && (
+        <Link
+          href="/dashboard"
+          className={navClass(pathname.startsWith('/dashboard'))}
+        >
+          Dashboard
+        </Link>
+      )}
 
       <Link
         href="/activework"

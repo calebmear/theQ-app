@@ -870,8 +870,47 @@ billing_methods_updated_at: data.billing_methods_updated_at,
       return;
     }
   
-    setTimeEntries(data ?? []);
+    const userIds = Array.from(
+      new Set(
+        (data ?? [])
+          .flatMap((entry) => [entry.created_by, entry.updated_by])
+          .filter((id): id is string => Boolean(id))
+      )
+    );
+  
+    let profileById: Record<string, { full_name: string }> = {};
+  
+    if (userIds.length > 0) {
+      const { data: profiles, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+  
+      if (profileError) {
+        console.error('Error loading entry user profiles:', profileError);
+      } else {
+        profileById = Object.fromEntries(
+          (profiles ?? []).map((profile) => [
+            profile.id,
+            { full_name: profile.full_name },
+          ])
+        );
+      }
+    }
+  
+    const formattedEntries: TimeEntry[] = (data ?? []).map((entry) => ({
+      ...entry,
+      created_profile: entry.created_by
+        ? profileById[entry.created_by] ?? null
+        : null,
+      updated_profile: entry.updated_by
+        ? profileById[entry.updated_by] ?? null
+        : null,
+    }));
+  
+    setTimeEntries(formattedEntries);
   }
+  
 
 
 async function updateProjectStatus(status: string) {

@@ -14,6 +14,8 @@ export default function LoginPage() {
   const titleQRef = useRef<HTMLSpanElement | null>(null);
 
   const [launching, setLaunching] = useState(false);
+  const [showLaunchQ, setShowLaunchQ] = useState(false);
+
   const [launchQPosition, setLaunchQPosition] = useState<QPosition | null>(
     null
   );
@@ -61,8 +63,9 @@ export default function LoginPage() {
     }
 
     setLaunching(true);
+setShowLaunchQ(true);
 
-    setTimeout(() => {
+setTimeout(() => {
       sessionStorage.setItem('skipAppSplashOnce', 'true');
     
       if (profile.role === 'field') {
@@ -144,10 +147,12 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {launching && launchQPosition && (
+      {launching && showLaunchQ && launchQPosition && (
         <div className="fixed inset-0 z-[10000] bg-white">
           <div
-            className="animate-login-q-to-center fixed font-bold leading-none text-black"
+  onAnimationEnd={() => setShowLaunchQ(false)}
+  className="animate-login-q-to-center fixed select-none font-bold leading-none text-black"
+
             style={
               {
                 left: `${launchQPosition.left}px`,

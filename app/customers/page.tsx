@@ -73,7 +73,10 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const { role } = useUserProfile();
-const canManageCustomers = role === 'admin' || role === 'management';
+
+const normalizedRole = role ? String(role).trim().toLowerCase() : null;
+const canManageCustomers =
+  normalizedRole === 'admin' || normalizedRole === 'management';
 
   const [showCustomerBillingMethods, setShowCustomerBillingMethods] =
     useState(false);

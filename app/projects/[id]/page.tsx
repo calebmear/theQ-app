@@ -1295,6 +1295,7 @@ updated_by: user.id,
 }
 
 async function deleteTimeEntry(entryId: string) {
+  if (!canManageHistory) return;
   if (!project) return;
 
   const confirmed = window.confirm('Are you sure you want to delete this time entry?');
@@ -2543,13 +2544,15 @@ traffic_control_pricing_type:
               Cancel
             </button>
 
-            <button
-              type="button"
-              onClick={() => deleteTimeEntry(entry.id)}
-              className="ml-auto rounded-lg border px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-            >
-              Delete
-            </button>
+            {canManageHistory && (
+  <button
+    type="button"
+    onClick={() => deleteTimeEntry(entry.id)}
+    className="ml-auto rounded-lg border px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+  >
+    Delete
+  </button>
+)}
           </div>
         </div>
       ) : (
@@ -2580,25 +2583,27 @@ traffic_control_pricing_type:
             {submittedUpdatedLabel(entry)}
           </p>
 
-          {managingTimeEntries && (
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={() => startInlineTimeEdit(entry)}
-                className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-              >
-                Edit
-              </button>
+          {managingTimeEntries && canManageEntry(entry) && (
+  <div className="mt-3 flex gap-2">
+    <button
+      type="button"
+      onClick={() => startInlineTimeEdit(entry)}
+      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+    >
+      Edit
+    </button>
 
-              <button
-                type="button"
-                onClick={() => deleteTimeEntry(entry.id)}
-                className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-              >
-                Delete
-              </button>
-            </div>
-          )}
+    {canManageHistory && (
+      <button
+        type="button"
+        onClick={() => deleteTimeEntry(entry.id)}
+        className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+      >
+        Delete
+      </button>
+    )}
+  </div>
+)}
         </>
       )}
     </div>

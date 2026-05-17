@@ -177,7 +177,7 @@ function ProjectTable({
         {projects.map((project) => (
           <Link
             key={project.id}
-            href={`/projects/${encodeURIComponent(project.id)}`}
+            href={`/projects/${encodeURIComponent(project.id)}?from=/activework&fromLabel=Active%20Work`}
             className="block rounded-xl border p-4"
           >
             <div className="flex items-start justify-between gap-3">
@@ -197,9 +197,30 @@ function ProjectTable({
             </div>
 
             <div className="mt-3 grid gap-1 text-sm text-gray-600">
-              {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
-              {project.projectLocation && <p>Location: {project.projectLocation}</p>}
-            </div>
+  {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
+  {project.projectLocation && <p>Location: {project.projectLocation}</p>}
+</div>
+
+{project.projectLocation && (
+  <div className="mt-3">
+    <a
+      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+        project.projectLocation
+      )}`}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => {
+        e.stopPropagation();
+      }}
+      className="block w-full rounded-lg bg-black px-3 py-2 text-center text-sm font-medium text-white hover:bg-gray-800"
+    >
+      Open in Maps
+    </a>
+  </div>
+)}
+
+
+
           </Link>
         ))}
 

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useUserProfile } from '../../../lib/useUserProfile';
 
 import { supabase } from '../../../lib/supabaseClient';
 
@@ -50,6 +51,11 @@ export default function CustomerDetailPage({
   const [projectView, setProjectView] = useState<'active' | 'completed'>('active');
   const [loading, setLoading] = useState(true);
   const [editingCustomer, setEditingCustomer] = useState(false);
+  const { role } = useUserProfile();
+
+  const normalizedRole = role ? String(role).trim().toLowerCase() : null;
+  const canManageCustomers =
+    normalizedRole === 'admin' || normalizedRole === 'management';
   const [customerEditForm, setCustomerEditForm] = useState({
     contactName: '',
     phone: '',
@@ -142,8 +148,9 @@ trafficControlPricingType: data.traffic_control_pricing_type ?? '',
   }
 
   function startCustomerEdit() {
+    if (!canManageCustomers) return;
     if (!customer) return;
-
+  
     setCustomerEditForm({
       contactName: customer.contactName,
       phone: customer.phone,
@@ -154,31 +161,30 @@ trafficControlPricingType: data.traffic_control_pricing_type ?? '',
       lateralPricingType: customer.lateralPricingType,
       jetPricingType: customer.jetPricingType,
       dyePricingType: customer.dyePricingType,
-smokePricingType: customer.smokePricingType,
-trafficControlPricingType: customer.trafficControlPricingType,
-
-
+      smokePricingType: customer.smokePricingType,
+      trafficControlPricingType: customer.trafficControlPricingType,
     });
-
+  
     setEditingCustomer(true);
   }
-
+  
   function cancelCustomerEdit() {
     setEditingCustomer(false);
   }
-
+  
   async function saveCustomerEdit() {
+    if (!canManageCustomers) return;
     if (!customer) return;
-
+  
     const pricingChanged =
-  customerEditForm.mainPricingType !== customer.mainPricingType ||
-  customerEditForm.lateralPricingType !== customer.lateralPricingType ||
-  customerEditForm.jetPricingType !== customer.jetPricingType ||
-  customerEditForm.dyePricingType !== customer.dyePricingType ||
-  customerEditForm.smokePricingType !== customer.smokePricingType ||
-  customerEditForm.trafficControlPricingType !==
-    customer.trafficControlPricingType;
-
+      customerEditForm.mainPricingType !== customer.mainPricingType ||
+      customerEditForm.lateralPricingType !== customer.lateralPricingType ||
+      customerEditForm.jetPricingType !== customer.jetPricingType ||
+      customerEditForm.dyePricingType !== customer.dyePricingType ||
+      customerEditForm.smokePricingType !== customer.smokePricingType ||
+      customerEditForm.trafficControlPricingType !==
+        customer.trafficControlPricingType;
+  
     const { error } = await supabase
       .from('customers')
       .update({
@@ -191,23 +197,20 @@ trafficControlPricingType: customer.trafficControlPricingType,
         lateral_pricing_type: customerEditForm.lateralPricingType,
         jet_pricing_type: customerEditForm.jetPricingType,
         dye_pricing_type: customerEditForm.dyePricingType,
-smoke_pricing_type: customerEditForm.smokePricingType,
-traffic_control_pricing_type: customerEditForm.trafficControlPricingType,
-
-
+        smoke_pricing_type: customerEditForm.smokePricingType,
+        traffic_control_pricing_type: customerEditForm.trafficControlPricingType,
         ...(pricingChanged && {
           pricing_updated_at: new Date().toISOString(),
         }),
       })
-      
       .eq('id', customer.id);
-
+  
     if (error) {
       console.error('Error updating customer:', error);
       alert(error.message);
       return;
     }
-
+  
     setCustomer({
       ...customer,
       contactName: customerEditForm.contactName,
@@ -219,14 +222,13 @@ traffic_control_pricing_type: customerEditForm.trafficControlPricingType,
       lateralPricingType: customerEditForm.lateralPricingType,
       jetPricingType: customerEditForm.jetPricingType,
       dyePricingType: customerEditForm.dyePricingType,
-smokePricingType: customerEditForm.smokePricingType,
-trafficControlPricingType: customerEditForm.trafficControlPricingType,
-
-
+      smokePricingType: customerEditForm.smokePricingType,
+      trafficControlPricingType: customerEditForm.trafficControlPricingType,
     });
-
+  
     setEditingCustomer(false);
   }
+  
 
   if (loading) {
     return <div className="text-black">Loading customer...</div>;
@@ -264,7 +266,7 @@ trafficControlPricingType: customerEditForm.trafficControlPricingType,
             <h1 className="mt-1 text-xl font-bold">{customer.name}</h1>
           </div>
 
-          {!editingCustomer && (
+          {canManageCustomers && !editingCustomer && (
             <button
               type="button"
               onClick={startCustomerEdit}
@@ -448,8 +450,12 @@ trafficControlPricingType: customerEditForm.trafficControlPricingType,
           </div>
         </div>
 
-        {editingCustomer && (
-          <div className="flex justify-end gap-3 border-t pt-4">
+        {canManageCustomers && editingCustomer && (
+
+
+
+
+<div className="flex justify-end gap-3 border-t pt-4">
             <button
               type="button"
               onClick={cancelCustomerEdit}

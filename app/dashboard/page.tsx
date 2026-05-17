@@ -154,7 +154,9 @@ trafficControlPricingType: '',
   }
 
   useEffect(() => {
-    if (normalizedRole === 'field') {
+    if (!normalizedRole) return;
+  
+    if (normalizedRole !== 'admin' && normalizedRole !== 'management') {
       router.replace('/activework');
     }
   }, [normalizedRole, router]);
@@ -454,23 +456,21 @@ traffic_control_pricing_type:
   if (!normalizedRole) {
     return null;
   }
-
+  
   if (!canViewDashboard) {
     return null;
   }
 
   return (
     <div className="space-y-6 text-black">
-  
       <div className="space-y-3">
-        <div className="text-center">
-          <p className="text-sm text-gray-600">
-            Snapshot of active and scheduled work.
-          </p>
-        </div>
+        <p className="text-center text-sm text-gray-600">
+          Snapshot of active and scheduled work.
+        </p>
   
         <div className="flex justify-center">
-  <div className="flex flex-wrap justify-center gap-2">
+          <div className="flex flex-wrap justify-center gap-2">
+  
 
           <button
             type="button"
@@ -489,10 +489,9 @@ onClick={() => {
           >
             + Add Customer
           </button>
-        </div>
+          </div>
       </div>
-      </div>
-
+    </div>
       <div className="grid gap-6 xl:grid-cols-2">
         <ProjectTable
           title="Active Projects"

@@ -148,26 +148,35 @@ setTimeout(() => {
       </div>
 
       {launching && showLaunchQ && launchQPosition && (
-        <div className="fixed inset-0 z-[10000] bg-white">
-          <div
-  onAnimationEnd={() => setShowLaunchQ(false)}
-  className="animate-login-q-to-center fixed select-none font-bold leading-none text-black"
+  <div className="fixed inset-0 z-[10000] bg-white">
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 100 100"
+      onAnimationEnd={() => setShowLaunchQ(false)}
+      className="animate-login-q-to-center fixed h-[38px] w-[38px] overflow-visible"
+      style={
+        {
+          left: `${launchQPosition.left}px`,
+          top: `${launchQPosition.top}px`,
+          '--start-left': `${launchQPosition.left}px`,
+          '--start-top': `${launchQPosition.top}px`,
+          '--target-left': 'calc(50vw - var(--login-q-center-nudge))',
+          '--target-top': '44vh',
+        } as React.CSSProperties
+      }
+    >
+      <text
+        x="50"
+        y="78"
+        textAnchor="middle"
+        className="select-none fill-black text-[88px] font-bold"
+      >
+        Q
+      </text>
+    </svg>
+  </div>
+)}
 
-            style={
-              {
-                left: `${launchQPosition.left}px`,
-                top: `${launchQPosition.top}px`,
-                '--start-left': `${launchQPosition.left}px`,
-                '--start-top': `${launchQPosition.top}px`,
-                '--target-left': 'calc(50vw - var(--login-q-center-nudge))',
-                '--target-top': '44vh',
-              } as React.CSSProperties
-            }
-          >
-            Q
-          </div>
-        </div>
-      )}
     </div>
   );
 }

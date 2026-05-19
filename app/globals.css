@@ -6,8 +6,11 @@
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
   --background-end-rgb: 255, 255, 255;
+  --intro-start-left: 64px;
+  --intro-start-top: 32px;
+  --intro-center-top: 42%;
+  --intro-center-scale: 1.12;
 }
-
 @media (prefers-color-scheme: dark) {
   :root {
     --foreground-rgb: 0, 0, 0;
@@ -26,82 +29,58 @@ body {
     rgb(var(--background-start-rgb));
 }
 
-@keyframes login-q {
-  from {
-    opacity: 0;
-    transform: scale(0.96) translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
+@media (max-width: 640px) {
+  :root {
+    --intro-start-left: 65px;
+    --intro-start-top: 32px;
+    --intro-center-top: 38%;
+    --intro-center-scale: 1.18;
   }
 }
 
-@keyframes loginQFade {
+@keyframes theqIntro {
   0% {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.94);
+    opacity: 1;
+    left: var(--intro-start-left);
+    top: var(--intro-start-top);
+    transform: translate(-50%, -50%) scale(0.42);
   }
 
-  35% {
+  45% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    left: 50%;
+    top: var(--intro-center-top);
+    transform: translate(-50%, -50%) scale(var(--intro-center-scale));
   }
 
-  75% {
+  72% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    left: 50%;
+    top: var(--intro-center-top);
+    transform: translate(-50%, -50%) scale(var(--intro-center-scale));
   }
 
   100% {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
+    opacity: 0;
+    left: 50%;
+    top: var(--intro-center-top);
+    transform: translate(-50%, -50%) scale(var(--intro-center-scale));
   }
 }
 
-.login-q-stage {
-  position: relative;
-  height: 9rem;
-}
-
-.login-q-mark {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  font-size: 6rem;
+.theq-intro-mark {
+  position: fixed;
+  left: var(--intro-start-left);
+  top: var(--intro-start-top);
+  font-size: 7rem;
   line-height: 1;
   font-weight: 700;
   color: black;
-  transform: translate(-50%, -50%);
-  animation: loginQFade 900ms ease-out both;
+  animation: theqIntro 3.1s ease-in-out forwards;
+  will-change: left, top, transform, opacity;
 }
 
-@media (max-width: 480px) {
-  .login-q-stage {
-    height: 8rem;
-  }
 
-  .login-q-mark {
-    font-size: 6.5rem;
-  }
-}
-
-@keyframes loginFormFade {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-login-form {
-  animation: loginFormFade 450ms ease-out both;
-}
 
 
 

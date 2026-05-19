@@ -38,7 +38,56 @@ body {
   }
 }
 
-@keyframes login-form {
+@keyframes loginQFade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.94);
+  }
+
+  35% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  75% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.login-q-stage {
+  position: relative;
+  height: 9rem;
+}
+
+.login-q-mark {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  font-size: 6rem;
+  line-height: 1;
+  font-weight: 700;
+  color: black;
+  transform: translate(-50%, -50%);
+  animation: loginQFade 900ms ease-out both;
+}
+
+@media (max-width: 480px) {
+  .login-q-stage {
+    height: 8rem;
+  }
+
+  .login-q-mark {
+    font-size: 6.5rem;
+  }
+}
+
+@keyframes loginFormFade {
   from {
     opacity: 0;
     transform: translateY(8px);
@@ -50,12 +99,9 @@ body {
   }
 }
 
-.animate-login-q {
-  animation: login-q 700ms ease-out both;
+.animate-login-form {
+  animation: loginFormFade 450ms ease-out both;
 }
 
-.animate-login-form {
-  animation: login-form 450ms ease-out both;
-}
 
 

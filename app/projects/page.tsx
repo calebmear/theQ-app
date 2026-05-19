@@ -207,7 +207,10 @@ export default function ProjectsPage() {
 
             <div className="mt-3 grid gap-1 text-sm text-gray-600">
               <p>Assigned: {project.assignedTo}</p>
-              <p>Latest service: {formatDate(project.latestServiceDate)}</p>
+              <p>
+  {project.status === 'Completed' ? 'Completed' : 'Latest service'}:{' '}
+  {formatDate(project.latestServiceDate)}
+</p>
               {project.projectLocation && <p>{project.projectLocation}</p>}
             </div>
           </Link>

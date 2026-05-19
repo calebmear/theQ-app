@@ -1098,9 +1098,12 @@ function RecentActivity({
                 </p>
               </div>
 
-              <p className="text-right text-sm font-semibold text-gray-700">
-                {formatDate(group.workDate)}
-              </p>
+              <div className="shrink-0 text-right text-sm text-gray-500">
+  <p className="font-medium">Service date</p>
+  <p className="mt-1 font-semibold text-gray-700">
+    {formatDate(group.workDate)}
+  </p>
+</div>
             </div>
 
             <div className="mt-3 space-y-2">
@@ -1149,21 +1152,21 @@ function ProjectTable({
             href={`/projects/${encodeURIComponent(project.id)}?from=/dashboard&fromLabel=Dashboard`}
             className="block rounded-xl border p-4"
           >
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-bold">{project.id}</h3>
-                <p className="mt-1 text-sm font-medium">{project.customer}</p>
-              </div>
+           <div className="flex items-start justify-between gap-3">
+  <div className="min-w-0">
+    <h3 className="truncate font-bold">{project.id}</h3>
+    <p className="mt-1 text-sm font-medium">{project.customer}</p>
+  </div>
 
-              <div className="text-right text-xs text-gray-500">
-                <p>Latest service</p>
-                <p className="font-semibold text-gray-700">
-                  {project.latestServiceDate
-                    ? formatDate(project.latestServiceDate)
-                    : 'No service yet'}
-                </p>
-              </div>
-            </div>
+  <div className="shrink-0 text-right text-sm text-gray-500">
+    <p className="font-medium">Latest service</p>
+    <p className="mt-1 font-semibold text-gray-700">
+      {project.latestServiceDate
+        ? formatDate(project.latestServiceDate)
+        : 'No service yet'}
+    </p>
+  </div>
+</div>
 
             <div className="mt-3 grid gap-1 text-sm text-gray-600">
               {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}

@@ -9,6 +9,7 @@ export default function SplashScreen() {
   const router = useRouter();
   const { role } = useUserProfile();
 
+  const [checkingSession, setCheckingSession] = useState(true);
   const [introDone, setIntroDone] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,25 +18,39 @@ export default function SplashScreen() {
   const normalizedRole = role ? String(role).trim().toLowerCase() : null;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setIntroDone(true);
-    }, 900);
+    async function checkSession() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-    return () => window.clearTimeout(timer);
-  }, []);
+      if (!session) {
+        setCheckingSession(false);
+        return;
+      }
+
+      if (!normalizedRole) {
+        return;
+      }
+
+      router.replace(
+        normalizedRole === 'admin' || normalizedRole === 'management'
+          ? '/dashboard'
+          : '/activework'
+      );
+    }
+
+    checkSession();
+  }, [normalizedRole, router]);
 
   useEffect(() => {
-    if (!normalizedRole) return;
+    if (checkingSession) return;
 
-    if (normalizedRole === 'admin' || normalizedRole === 'management') {
-      router.replace('/dashboard');
-      return;
-    }
+    const timer = window.setTimeout(() => {
+      setIntroDone(true);
+    }, 700);
 
-    if (normalizedRole === 'field') {
-      router.replace('/activework');
-    }
-  }, [normalizedRole, router]);
+    return () => window.clearTimeout(timer);
+  }, [checkingSession]);
 
   async function signIn() {
     if (!email.trim() || !password) return;
@@ -52,6 +67,10 @@ export default function SplashScreen() {
     if (error) {
       alert(error.message);
     }
+  }
+
+  if (checkingSession) {
+    return null;
   }
 
   return (

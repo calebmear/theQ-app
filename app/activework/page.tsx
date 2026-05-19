@@ -181,20 +181,20 @@ function ProjectTable({
             className="block rounded-xl border p-4"
           >
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <h3 className="font-bold">{project.id}</h3>
-                <p className="mt-1 text-sm font-medium">{project.customer}</p>
-              </div>
+  <div className="min-w-0">
+    <h3 className="truncate font-bold">{project.id}</h3>
+    <p className="mt-1 text-sm font-medium">{project.customer}</p>
+  </div>
 
-              <div className="text-right text-xs text-gray-500">
-                <p>Latest service</p>
-                <p className="font-semibold text-gray-700">
-                  {project.latestServiceDate
-                    ? formatDate(project.latestServiceDate)
-                    : 'No service yet'}
-                </p>
-              </div>
-            </div>
+  <div className="shrink-0 text-right text-sm text-gray-500">
+    <p className="font-medium">Latest service</p>
+    <p className="mt-1 font-semibold text-gray-700">
+      {project.latestServiceDate
+        ? formatDate(project.latestServiceDate)
+        : 'No service yet'}
+    </p>
+  </div>
+</div>
 
             <div className="mt-3 grid gap-1 text-sm text-gray-600">
   {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
@@ -212,8 +212,8 @@ function ProjectTable({
       onClick={(e) => {
         e.stopPropagation();
       }}
-      className="block w-full rounded-lg bg-black px-3 py-2 text-center text-sm font-medium text-white hover:bg-gray-800"
-    >
+      className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
+      >
       Open in Maps
     </a>
   </div>

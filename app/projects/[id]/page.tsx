@@ -1696,16 +1696,17 @@ traffic_control_pricing_type:
         </p>
     
         {project.project_location && (
-          <button
-          type="button"
-          aria-label="Copy project location"
-          title="Copy project location"
-          onClick={() => navigator.clipboard.writeText(project.project_location || '')}
-          className="shrink-0 rounded-lg border border-gray-200 p-1.5 text-gray-400 hover:border-gray-300 hover:bg-gray-50 hover:text-gray-600"
-        >
-          <Copy size={14} strokeWidth={1.75} />
-        </button>
-        )}
+  <a
+    href={`https://maps.apple.com/?q=${encodeURIComponent(
+      project.project_location
+    )}`}
+    target="_blank"
+    rel="noreferrer"
+    className="shrink-0 rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+  >
+    Maps
+  </a>
+)}
       </div>
     )}
 </div>

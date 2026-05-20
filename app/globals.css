@@ -6,10 +6,7 @@
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
   --background-end-rgb: 255, 255, 255;
-  --intro-start-left: 64px;
-  --intro-start-top: 32px;
-  --intro-center-top: 42%;
-  --intro-center-scale: 1.12;
+
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -29,56 +26,9 @@ body {
     rgb(var(--background-start-rgb));
 }
 
-@media (max-width: 640px) {
-  :root {
-    --intro-start-left: 65px;
-    --intro-start-top: 32px;
-    --intro-center-top: 38%;
-    --intro-center-scale: 1.18;
-  }
-}
 
-@keyframes theqIntro {
-  0% {
-    opacity: 1;
-    left: var(--intro-start-left);
-    top: var(--intro-start-top);
-    transform: translate(-50%, -50%) scale(0.42);
-  }
 
-  45% {
-    opacity: 1;
-    left: 50%;
-    top: var(--intro-center-top);
-    transform: translate(-50%, -50%) scale(var(--intro-center-scale));
-  }
 
-  72% {
-    opacity: 1;
-    left: 50%;
-    top: var(--intro-center-top);
-    transform: translate(-50%, -50%) scale(var(--intro-center-scale));
-  }
-
-  100% {
-    opacity: 0;
-    left: 50%;
-    top: var(--intro-center-top);
-    transform: translate(-50%, -50%) scale(var(--intro-center-scale));
-  }
-}
-
-.theq-intro-mark {
-  position: fixed;
-  left: var(--intro-start-left);
-  top: var(--intro-start-top);
-  font-size: 7rem;
-  line-height: 1;
-  font-weight: 700;
-  color: black;
-  animation: theqIntro 3.1s ease-in-out forwards;
-  will-change: left, top, transform, opacity;
-}
 
 
 

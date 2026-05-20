@@ -3,30 +3,38 @@
 import { usePathname } from 'next/navigation';
 import AppNav from './AppNav';
 import AppSearch from './AppSearch';
+import AuthGuard from './AuthGuard';
+import UserMenu from './UserMenu';
 
-export default function AppShell({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+const publicRoutes = ['/', '/login'];
+
+export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isPublicRoute = publicRoutes.includes(pathname);
 
-  if (pathname === '/login') {
-    return <>{children}</>;
+  if (isPublicRoute) {
+    return <AuthGuard>{children}</AuthGuard>;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 text-black pb-[env(safe-area-inset-bottom)] md:flex">
-      <aside className="sticky top-0 z-40 border-r bg-white px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] md:h-screen md:w-64 md:shrink-0 md:p-4">
-        <div className="flex items-center gap-3 md:block">
-          <h1 className="shrink-0 text-2xl font-bold">THE Q</h1>
-          <AppSearch />
-        </div>
+    <AuthGuard>
+      <div className="min-h-screen bg-gray-100 text-black pb-[env(safe-area-inset-bottom)] md:flex">
+        <aside className="sticky top-0 z-40 border-r bg-white px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] md:h-screen md:w-64 md:shrink-0 md:p-4">
+          <div className="flex w-full items-center gap-3">
+            <h1 className="shrink-0 text-2xl font-bold">THE Q</h1>
 
-        <AppNav />
-      </aside>
+            <div className="min-w-0 flex-1">
+              <AppSearch />
+            </div>
 
-      <main className="flex-1 p-4 md:p-8">{children}</main>
-    </div>
+            <UserMenu />
+          </div>
+
+          <AppNav />
+        </aside>
+
+        <main className="flex-1 p-4 md:p-8">{children}</main>
+      </div>
+    </AuthGuard>
   );
 }

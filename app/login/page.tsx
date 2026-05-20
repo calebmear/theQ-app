@@ -72,7 +72,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-start justify-center bg-gray-100 px-4 pt-40 text-black">
+<div className="flex min-h-screen items-start justify-center bg-gray-100 px-4 pt-20 text-black sm:pt-32">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow">
         <div className="text-center">
           <h1 className="text-3xl font-bold">THE Q</h1>

@@ -186,12 +186,16 @@ function ProjectTable({
     <p className="mt-1 text-sm font-medium">{project.customer}</p>
   </div>
 
-  <div className="shrink-0 text-right text-sm text-gray-500">
-    <p className="font-medium">Latest service</p>
+  <div className="mt-1 shrink-0 text-right text-sm text-gray-500">
+  {project.status === 'Scheduled' && !project.latestServiceDate
+  ? 'Service start date (Est.)'
+  : 'Latest service'}
     <p className="mt-1 font-semibold text-gray-700">
-      {project.latestServiceDate
-        ? formatDate(project.latestServiceDate)
-        : 'No service yet'}
+    {project.latestServiceDate
+  ? formatDate(project.latestServiceDate)
+  : project.status === 'Scheduled' && project.startdateofservice
+  ? formatDate(project.startdateofservice)
+  : 'No service yet'}
     </p>
   </div>
 </div>

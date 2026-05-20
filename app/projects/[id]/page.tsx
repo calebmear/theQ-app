@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { Copy } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useSearchParams } from 'next/navigation';
@@ -89,6 +89,15 @@ type ProjectNote = {
   updated_profile?: { full_name: string } | null;
 };
 
+type ProjectAttachment = {
+  id: string;
+  file_name: string;
+  file_path: string;
+  file_type: string | null;
+  created_at: string;
+  signedUrl?: string;
+};
+
 type Employee = {
   id: string;
   name: string;
@@ -134,6 +143,8 @@ export default function ProjectDetailPage({
   const today = getLocalDateInputValue();
 
 const [project, setProject] = useState<ProjectDetail | null>(null);
+const [projectAttachments, setProjectAttachments] = useState<ProjectAttachment[]>([]);
+const [uploadingAttachment, setUploadingAttachment] = useState(false);
 const [loading, setLoading] = useState(true);
 const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
 const [timeForm, setTimeForm] = useState<TimeForm>({
@@ -641,7 +652,8 @@ billing_methods_updated_at: data.billing_methods_updated_at,
   
   loadTimeEntries(data.id);
   loadProjectNotes(data.id);
-  
+  loadProjectAttachments(data.id);
+
   setLoading(false);
   
     }
@@ -682,9 +694,7 @@ billing_methods_updated_at: data.billing_methods_updated_at,
     return <div className="text-black">Project not found.</div>;
   }
 
-  const mapQuery = encodeURIComponent(
-    project.project_location || project.customers?.address || ''
-  );
+  
   
 
   const serviceStartDate = project.service_start_date
@@ -1503,6 +1513,77 @@ trafficControlPricingType:
   });
 
   setEditingProject(true);
+}
+
+async function loadProjectAttachments(projectId: string) {
+  const { data, error } = await supabase
+    .from('project_attachments')
+    .select('id, file_name, file_path, file_type, uploaded_at')
+.eq('project_id', projectId)
+.order('uploaded_at', { ascending: false });
+
+  if (error) {
+    console.error('Error loading project attachments:', error);
+    return;
+  }
+
+  const attachmentsWithUrls = await Promise.all(
+    (data ?? []).map(async (attachment) => {
+      const { data: signedUrlData } = await supabase.storage
+        .from('project-attachments')
+        .createSignedUrl(attachment.file_path, 60 * 60);
+
+      return {
+        ...attachment,
+        signedUrl: signedUrlData?.signedUrl,
+      };
+    })
+  );
+
+  setProjectAttachments(attachmentsWithUrls);
+}
+
+async function uploadProjectAttachments(
+  event: ChangeEvent<HTMLInputElement>
+) {
+  if (!project || !event.target.files?.length) return;
+
+  setUploadingAttachment(true);
+
+  const files = Array.from(event.target.files);
+
+  for (const file of files) {
+    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+    const filePath = `${project.id}/${crypto.randomUUID()}-${safeFileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('project-attachments')
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error('Attachment upload failed:', uploadError);
+      alert(uploadError.message);
+      continue;
+    }
+
+    const { error: insertError } = await supabase
+      .from('project_attachments')
+      .insert({
+        project_id: project.id,
+        file_name: file.name,
+        file_path: filePath,
+        file_type: file.type,
+      });
+
+    if (insertError) {
+      console.error('Attachment save failed:', insertError);
+      alert(insertError.message);
+    }
+  }
+
+  event.target.value = '';
+  setUploadingAttachment(false);
+  await loadProjectAttachments(project.id);
 }
 
 async function saveProjectEdit() {
@@ -2895,23 +2976,42 @@ traffic_control_pricing_type:
         <div className="space-y-6">
           
 
-          <div className="rounded-2xl bg-white p-6 shadow">
-            <h2 className="text-xl font-bold">Map</h2>
+        <div className="rounded-2xl bg-white p-6 shadow">
+  <h2 className="text-xl font-bold">Project Maps / Plans</h2>
 
-            {project.customers?.address ? (
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${mapQuery}`}
-                target="_blank"
-                className="mt-4 block rounded-lg bg-black px-5 py-3 text-center text-white hover:bg-gray-800"
-              >
-                Open in Google Maps
-              </a>
-            ) : (
-              <p className="mt-4 text-sm text-gray-600">
-                Add a customer address to enable map access.
-              </p>
-            )}
-          </div>
+  <label className="mt-4 block cursor-pointer rounded-lg border border-dashed p-4 text-center text-sm font-medium text-gray-600 hover:bg-gray-50">
+    {uploadingAttachment ? 'Uploading...' : 'Upload maps, plans, or photos'}
+
+    <input
+      type="file"
+      multiple
+      accept="image/*,.pdf"
+      onChange={uploadProjectAttachments}
+      disabled={uploadingAttachment}
+      className="hidden"
+    />
+  </label>
+
+  <div className="mt-4 space-y-2">
+    {projectAttachments.map((attachment) => (
+      <a
+        key={attachment.id}
+        href={attachment.signedUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="block rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+      >
+        {attachment.file_name}
+      </a>
+    ))}
+
+    {projectAttachments.length === 0 && (
+      <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+        No maps, plans, or photos uploaded yet.
+      </div>
+    )}
+  </div>
+</div>
         </div>
       </div>
     </div>

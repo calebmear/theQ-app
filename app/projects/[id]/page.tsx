@@ -698,6 +698,17 @@ billing_methods_updated_at: data.billing_methods_updated_at,
     )
   : '';
 
+  const firstActiveServiceDate =
+  timeEntries.length > 0
+    ? [...timeEntries].map((entry) => entry.work_date).sort()[0]
+    : null;
+
+const displayedServiceStartDate = firstActiveServiceDate
+  ? formatDate(firstActiveServiceDate)
+  : project.service_start_date
+  ? formatDate(project.service_start_date)
+  : '';
+
   const latestServiceDate =
   timeEntries.length > 0 ? formatDate(timeEntries[0].work_date) : null;
 
@@ -1103,6 +1114,47 @@ async function deleteProjectNote(noteId: string) {
   loadProjectNotes(project.id);
 }
 
+async function syncProjectServiceStartDate(projectId: string) {
+  if (!project) return;
+
+  const { data, error } = await supabase
+    .from('time_entries')
+    .select('work_date')
+    .eq('project_id', projectId)
+    .is('deleted_at', null)
+    .order('work_date', { ascending: true })
+    .limit(1);
+
+  if (error) {
+    console.error('Error syncing service start date:', error);
+    return;
+  }
+
+  const nextServiceStartDate =
+    data?.[0]?.work_date ?? project.service_start_date;
+
+  const { error: updateError } = await supabase
+    .from('projects')
+    .update({
+      service_start_date: nextServiceStartDate,
+    })
+    .eq('id', projectId);
+
+  if (updateError) {
+    console.error('Error updating project service start date:', updateError);
+    return;
+  }
+
+  setProject((currentProject) =>
+    currentProject
+      ? {
+          ...currentProject,
+          service_start_date: nextServiceStartDate,
+        }
+      : currentProject
+  );
+}
+
 
 async function submitTimeEntry() {
   if (!canSubmitService) return;
@@ -1190,9 +1242,8 @@ async function submitTimeEntry() {
   setPendingServiceItems([]);
   setEditingTimeEntryId(null);
   
-    await loadTimeEntries(project.id);
-    await loadProjectNotes(project.id);
-
+  await loadTimeEntries(project.id);
+  await loadProjectNotes(project.id);
   
   
   setExpandedServiceDates((dates) =>
@@ -1291,7 +1342,9 @@ updated_by: user.id,
   }
 
   cancelInlineTimeEdit();
-  await loadTimeEntries(project.id);
+await loadTimeEntries(project.id);
+await syncProjectServiceStartDate(project.id);
+
 }
 
 async function deleteTimeEntry(entryId: string) {
@@ -1322,7 +1375,9 @@ async function deleteTimeEntry(entryId: string) {
   }
 
   await loadTimeEntries(project.id);
+  await syncProjectServiceStartDate(project.id);
 }
+
 
 
 
@@ -1758,8 +1813,8 @@ traffic_control_pricing_type:
   />
 ) : (
   <p className="mt-1 font-semibold">
-    {serviceStartDate || 'No date saved'}
-    {timeEntries.length === 0 ? ' (Est.)' : ''}
+    {displayedServiceStartDate || 'No date saved'}
+{firstActiveServiceDate ? '' : ' (Est.)'}
   </p>
 )}
 
@@ -2331,7 +2386,7 @@ traffic_control_pricing_type:
         </button>
       </div>
 
-      <div className="mt-4 max-h-[70vh] space-y-3 overflow-y-auto pr-2">
+      <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto pr-2">
 
       {groupedTimeEntries.map(([workDate, entries]) => {
   const isDateExpanded = expandedServiceDates.includes(workDate);

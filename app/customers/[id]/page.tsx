@@ -29,6 +29,7 @@ type Project = {
   status: string;
   service_start_date: string | null;
   project_location: string | null;
+  latestServiceDate: string | null;
 };
 
 const pricingOptions = {
@@ -109,16 +110,56 @@ trafficControlPricingType: data.traffic_control_pricing_type ?? '',
       });
 
       const { data: projectData, error: projectError } = await supabase
-        .from('projects')
-        .select('id, project_number, status, service_start_date, project_location')
-        .eq('customer_id', params.id)
-        .order('created_at', { ascending: false });
+  .from('projects')
+  .select('id, project_number, status, service_start_date, project_location')
+  .eq('customer_id', params.id)
+  .order('created_at', { ascending: false });
 
-      if (projectError) {
-        console.error('Error loading customer projects:', projectError);
-      }
+if (projectError) {
+  console.error('Error loading customer projects:', projectError);
+}
 
-      setProjects(projectData ?? []);
+const projectIds = (projectData ?? []).map((project) => project.id);
+
+let latestServiceByProjectId: Record<string, string | null> = {};
+
+if (projectIds.length > 0) {
+  const { data: timeEntryData, error: timeEntryError } = await supabase
+    .from('time_entries')
+    .select('project_id, work_date')
+    .in('project_id', projectIds)
+    .is('deleted_at', null)
+    .order('work_date', { ascending: false });
+
+  if (timeEntryError) {
+    console.error('Error loading customer project service dates:', timeEntryError);
+  }
+
+  console.log('Customer project IDs:', projectIds);
+console.log('Customer project time entries:', timeEntryData);
+
+  latestServiceByProjectId = (timeEntryData ?? []).reduce<
+    Record<string, string | null>
+  >((dates, entry) => {
+    if (!dates[entry.project_id]) {
+      dates[entry.project_id] = entry.work_date;
+    }
+
+    return dates;
+  }, {});
+}
+
+const formattedProjects: Project[] = (projectData ?? []).map((project) => ({
+  id: project.id,
+  project_number: project.project_number,
+  status: project.status,
+  service_start_date: project.service_start_date,
+  project_location: project.project_location,
+  latestServiceDate: latestServiceByProjectId[project.id] ?? null,
+}));
+
+setProjects(formattedProjects);
+
       setLoading(false);
     }
 
@@ -532,9 +573,11 @@ trafficControlPricingType: data.traffic_control_pricing_type ?? '',
               </div>
 
               <p className="mt-3 text-sm text-gray-600">
-                {projectView === 'active' ? 'Last service' : 'Service completed'}:{' '}
-                {formatDate(project.service_start_date)}
-              </p>
+  {projectView === 'active' ? 'Last service' : 'Service completed'}:{' '}
+  {project.latestServiceDate
+    ? formatDate(project.latestServiceDate)
+    : 'No service submitted'}
+</p>
             </Link>
           ))}
 

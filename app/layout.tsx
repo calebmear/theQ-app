@@ -2,13 +2,16 @@ import './globals.css';
 import AppShell from '../components/AppShell';
 
 export const metadata = {
-  title: 'THEQ App',
-  applicationName: 'THEQ',
+  title: 'THE Q',
+  applicationName: 'THE Q',
   description: 'Operations and revenue dashboard',
   manifest: '/manifest.webmanifest',
+  icons: {
+    apple: '/apple-touch-icon.png',
+  },
   appleWebApp: {
     capable: true,
-    title: 'THEQ',
+    title: 'THE Q',
     statusBarStyle: 'black-translucent',
   },
 };

@@ -1550,41 +1550,43 @@ async function uploadProjectAttachments(
 
   setUploadingAttachment(true);
 
-  const files = Array.from(event.target.files);
+  try {
+    const files = Array.from(event.target.files);
 
-  for (const file of files) {
-    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-    const filePath = `${project.id}/${crypto.randomUUID()}-${safeFileName}`;
+    for (const file of files) {
+      const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+      const filePath = `${project.id}/${crypto.randomUUID()}-${safeFileName}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from('project-attachments')
-      .upload(filePath, file);
+      const { error: uploadError } = await supabase.storage
+        .from('project-attachments')
+        .upload(filePath, file);
 
-    if (uploadError) {
-      console.error('Attachment upload failed:', uploadError);
-      alert(uploadError.message);
-      continue;
+      if (uploadError) {
+        alert(`Upload failed: ${uploadError.message}`);
+        continue;
+      }
+
+      const { error: insertError } = await supabase
+        .from('project_attachments')
+        .insert({
+          project_id: project.id,
+          file_name: file.name,
+          file_path: filePath,
+          file_type: file.type,
+        });
+
+      if (insertError) {
+        alert(`Attachment record failed: ${insertError.message}`);
+      }
     }
 
-    const { error: insertError } = await supabase
-      .from('project_attachments')
-      .insert({
-        project_id: project.id,
-        file_name: file.name,
-        file_path: filePath,
-        file_type: file.type,
-      });
-
-    if (insertError) {
-      console.error('Attachment save failed:', insertError);
-      alert(insertError.message);
-    }
+    await loadProjectAttachments(project.id);
+  } finally {
+    event.target.value = '';
+    setUploadingAttachment(false);
   }
-
-  event.target.value = '';
-  setUploadingAttachment(false);
-  await loadProjectAttachments(project.id);
 }
+
 
 async function saveProjectEdit() {
   if (!canManageProjects) return;
@@ -2979,18 +2981,18 @@ traffic_control_pricing_type:
         <div className="rounded-2xl bg-white p-6 shadow">
   <h2 className="text-xl font-bold">Project Maps / Plans</h2>
 
-  <label className="mt-4 block cursor-pointer rounded-lg border border-dashed p-4 text-center text-sm font-medium text-gray-600 hover:bg-gray-50">
-    {uploadingAttachment ? 'Uploading...' : 'Upload maps, plans, or photos'}
+  <label className="relative mt-4 flex min-h-[56px] cursor-pointer items-center justify-center rounded-lg border border-dashed p-4 text-center text-sm font-medium text-gray-600 hover:bg-gray-50">
+  {uploadingAttachment ? 'Uploading...' : 'Upload maps, plans, or photos'}
 
-    <input
-      type="file"
-      multiple
-      accept="image/*,.pdf"
-      onChange={uploadProjectAttachments}
-      disabled={uploadingAttachment}
-      className="hidden"
-    />
-  </label>
+  <input
+    type="file"
+    multiple
+    accept="image/*,application/pdf,.pdf"
+    onChange={uploadProjectAttachments}
+    disabled={uploadingAttachment}
+    className="absolute inset-0 cursor-pointer opacity-0"
+  />
+</label>
 
   <div className="mt-4 space-y-2">
     {projectAttachments.map((attachment) => (

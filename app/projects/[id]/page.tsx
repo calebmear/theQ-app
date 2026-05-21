@@ -94,7 +94,7 @@ type ProjectAttachment = {
   file_name: string;
   file_path: string;
   file_type: string | null;
-  created_at: string;
+  uploaded_at: string;
   signedUrl?: string;
 };
 

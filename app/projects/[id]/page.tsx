@@ -95,6 +95,8 @@ type ProjectAttachment = {
   file_path: string;
   file_type: string | null;
   uploaded_at: string;
+  uploaded_by: string | null;
+  uploaded_by_username: string | null;
   signedUrl?: string;
 };
 
@@ -1518,8 +1520,9 @@ trafficControlPricingType:
 async function loadProjectAttachments(projectId: string) {
   const { data, error } = await supabase
     .from('project_attachments')
-    .select('id, file_name, file_path, file_type, uploaded_at')
-.eq('project_id', projectId)
+    .select('id, file_name, file_path, file_type, uploaded_at, uploaded_by, uploaded_by_username')
+    .eq('project_id', projectId)
+.is('deleted_at', null)
 .order('uploaded_at', { ascending: false });
 
   if (error) {
@@ -1551,6 +1554,21 @@ async function uploadProjectAttachments(
   setUploadingAttachment(true);
 
   try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert('You must be signed in to upload attachments.');
+      return;
+    }
+
+    const { data: profile } = await supabase
+  .from('user_profiles')
+  .select('username')
+  .eq('id', user.id)
+  .single();
+
     const files = Array.from(event.target.files);
 
     for (const file of files) {
@@ -1573,6 +1591,8 @@ async function uploadProjectAttachments(
           file_name: file.name,
           file_path: filePath,
           file_type: file.type,
+          uploaded_by: user.id,
+          uploaded_by_username: profile?.username ?? null,
         });
 
       if (insertError) {
@@ -1585,6 +1605,40 @@ async function uploadProjectAttachments(
     event.target.value = '';
     setUploadingAttachment(false);
   }
+}
+
+async function deleteProjectAttachment(attachment: ProjectAttachment) {
+  if (!project) return;
+
+  const confirmed = window.confirm('Delete this attachment?');
+  if (!confirmed) return;
+
+  const { error: storageError } = await supabase.storage
+    .from('project-attachments')
+    .remove([attachment.file_path]);
+
+  if (storageError) {
+    console.error('Storage delete failed:', storageError);
+    alert(`File delete failed: ${storageError.message}`);
+    return;
+  }
+
+  const { error: recordError } = await supabase
+    .from('project_attachments')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', attachment.id);
+
+  if (recordError) {
+    console.error('Attachment record delete failed:', recordError);
+    alert(`Attachment record delete failed: ${recordError.message}`);
+    return;
+  }
+
+  setProjectAttachments((attachments) =>
+    attachments.filter((item) => item.id !== attachment.id)
+  );
+
+  await loadProjectAttachments(project.id);
 }
 
 
@@ -2995,17 +3049,33 @@ traffic_control_pricing_type:
 </label>
 
   <div className="mt-4 space-y-2">
-    {projectAttachments.map((attachment) => (
-      <a
-        key={attachment.id}
-        href={attachment.signedUrl}
-        target="_blank"
-        rel="noreferrer"
-        className="block rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+  {projectAttachments.map((attachment) => (
+  <div key={attachment.id} className="rounded-lg border px-3 py-2 text-sm">
+    <a
+      href={attachment.signedUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="block font-medium hover:underline"
+    >
+      {attachment.file_name}
+    </a>
+
+    <p className="mt-1 text-xs text-gray-500">
+    Uploaded by {attachment.uploaded_by_username || 'Unknown'} on{' '}
+      {formatTimestamp(attachment.uploaded_at)}
+    </p>
+
+    {canManageProjects && (
+      <button
+        type="button"
+        onClick={() => deleteProjectAttachment(attachment)}
+        className="mt-2 rounded-lg border px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
       >
-        {attachment.file_name}
-      </a>
-    ))}
+        Delete
+      </button>
+    )}
+  </div>
+))}
 
     {projectAttachments.length === 0 && (
       <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">

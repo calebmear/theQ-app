@@ -182,7 +182,7 @@ function ProjectTable({
           >
             <div className="flex items-start justify-between gap-3">
   <div className="min-w-0">
-    <h3 className="truncate font-bold">{project.id}</h3>
+  <h3 className="break-words font-bold">{project.id}</h3>
     <p className="mt-1 text-sm font-medium">{project.customer}</p>
   </div>
 

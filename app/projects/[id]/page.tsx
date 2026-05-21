@@ -1747,9 +1747,9 @@ traffic_control_pricing_type:
         className="mt-1 w-full rounded-lg border p-3 text-xl font-bold"
       />
     ) : (
-      <p className="mt-1 truncate text-2xl font-bold">
-        {project.project_number}
-      </p>
+      <p className="mt-1 break-all text-2xl font-bold">
+  {project.project_number}
+</p>
     )}
   </div>
 

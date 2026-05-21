@@ -187,17 +187,20 @@ function ProjectTable({
   </div>
 
   <div className="mt-1 shrink-0 text-right text-sm text-gray-500">
-  {project.status === 'Scheduled' && !project.latestServiceDate
-  ? 'Service start date (Est.)'
-  : 'Latest service'}
-    <p className="mt-1 font-semibold text-gray-700">
+  <p className="font-medium">
+    {project.status === 'Scheduled' && !project.latestServiceDate
+      ? 'Service start date (Est.)'
+      : 'Latest service'}
+  </p>
+
+  <p className="mt-1 font-semibold text-gray-700">
     {project.latestServiceDate
-  ? formatDate(project.latestServiceDate)
-  : project.status === 'Scheduled' && project.startdateofservice
-  ? formatDate(project.startdateofservice)
-  : 'No service yet'}
-    </p>
-  </div>
+      ? formatDate(project.latestServiceDate)
+      : project.status === 'Scheduled' && project.startdateofservice
+      ? formatDate(project.startdateofservice)
+      : 'No service yet'}
+  </p>
+</div>
 </div>
 
             <div className="mt-3 grid gap-1 text-sm text-gray-600">
@@ -242,8 +245,11 @@ function ProjectTable({
               <th className="p-4">Project</th>
               <th className="p-4">Customer</th>
               <th className="p-4">Assigned</th>
-              <th className="p-4">Latest Service Date</th>
-            </tr>
+              <th className="p-4">
+  {title === 'Scheduled Projects'
+    ? 'Service Start Date (Est.)'
+    : 'Latest Service Date'}
+</th>            </tr>
           </thead>
 
           <tbody>
@@ -260,10 +266,12 @@ href={`/projects/${encodeURIComponent(project.id)}?from=/activework&fromLabel=Ac
                 <td className="p-4">{project.customer}</td>
                 <td className="p-4">{project.assignedTo || 'Unassigned'}</td>
                 <td className="p-4">
-                  {project.latestServiceDate
-                    ? formatDate(project.latestServiceDate)
-                    : 'No service yet'}
-                </td>
+  {project.latestServiceDate
+    ? formatDate(project.latestServiceDate)
+    : project.status === 'Scheduled' && project.startdateofservice
+    ? formatDate(project.startdateofservice)
+    : 'No service yet'}
+</td>
               </tr>
             ))}
 

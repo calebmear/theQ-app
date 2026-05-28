@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const nodemailer = require('nodemailer');
 
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -60,45 +61,31 @@ exports.handler = async (event) => {
 
     const fileBuffer = Buffer.from(await fileBlob.arrayBuffer());
 
-    const emailResponse = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
       },
-      body: JSON.stringify({
-        from: process.env.EMAIL_FROM,
-        to: [process.env.QUICKBOOKS_RECEIPT_EMAIL],
-        subject: `Receipt from ${receipt.uploaded_by_username || 'THE Q'}`,
-        text: [
-          `Uploaded by: ${receipt.uploaded_by_username || 'Unknown'}`,
-          `Memo: ${receipt.memo || 'None'}`,
-          `File: ${receipt.file_name}`,
-        ].join('\n'),
-        attachments: [
-          {
-            filename: receipt.file_name,
-            content: fileBuffer.toString('base64'),
-          },
-        ],
-      }),
     });
 
-    const emailResult = await emailResponse.json();
-
-    if (!emailResponse.ok) {
-      await supabase
-        .from('receipts')
-        .update({
-          send_error: JSON.stringify(emailResult),
-        })
-        .eq('id', receiptId);
-
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: emailResult }),
-      };
-    }
+    await transporter.sendMail({
+      from: process.env.GMAIL_USER,
+      to: process.env.QUICKBOOKS_RECEIPT_EMAIL,
+      subject: `Receipt from ${receipt.uploaded_by_username || 'THE Q'}`,
+      text: [
+        `Uploaded by: ${receipt.uploaded_by_username || 'Unknown'}`,
+        `Memo: ${receipt.memo || 'None'}`,
+        `File: ${receipt.file_name}`,
+      ].join('\n'),
+      attachments: [
+        {
+          filename: receipt.file_name,
+          content: fileBuffer,
+          contentType: receipt.file_type || undefined,
+        },
+      ],
+    });
 
     await supabase
       .from('receipts')

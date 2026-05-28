@@ -36,11 +36,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1 p-4 md:p-8">{children}</main>
 
-<div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#009be5] text-white shadow-xl hover:bg-[#007bb8]">
-          <div className="pointer-events-auto">
-            <FloatingReceiptButton />
-          </div>
-        </div>
+        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] right-5 z-30">
+  <div className="pointer-events-auto">
+    <FloatingReceiptButton />
+  </div>
+</div>
       </div>
     </AuthGuard>
   );

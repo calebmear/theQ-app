@@ -31,12 +31,14 @@ export default function FloatingReceiptButton() {
   }
 
   useEffect(() => {
-    let scrollTimer: ReturnType<typeof window.setTimeout>;
+    let scrollTimer: number | undefined;
   
     function handleScroll() {
       setIsScrolling(true);
   
-      window.clearTimeout(scrollTimer);
+      if (scrollTimer) {
+        window.clearTimeout(scrollTimer);
+      }
   
       scrollTimer = window.setTimeout(() => {
         setIsScrolling(false);
@@ -47,7 +49,10 @@ export default function FloatingReceiptButton() {
   
     return () => {
       window.removeEventListener('scroll', handleScroll);
-      window.clearTimeout(scrollTimer);
+  
+      if (scrollTimer) {
+        window.clearTimeout(scrollTimer);
+      }
     };
   }, []);
 

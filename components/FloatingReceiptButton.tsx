@@ -2,6 +2,7 @@
 import { ReceiptText } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { supabase } from '../lib/supabaseClient';
+import imageCompression from 'browser-image-compression';
 
 export default function FloatingReceiptButton() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -90,12 +91,20 @@ export default function FloatingReceiptButton() {
         .eq('id', user.id)
         .single();
   
-      const safeFileName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
-      const filePath = `${user.id}/${crypto.randomUUID()}-${safeFileName}`;
-  
-      const { error: uploadError } = await supabase.storage
-      .from('Receipts')
-      .upload(filePath, receiptFile);
+        const compressedReceiptFile = await imageCompression(receiptFile, {
+          maxSizeMB: 0.8,
+          maxWidthOrHeight: 1600,
+          useWebWorker: true,
+        });
+        
+        const safeFileName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+        const filePath = `${user.id}/${crypto.randomUUID()}-${safeFileName}`;
+        
+        const { error: uploadError } = await supabase.storage
+          .from('Receipts')
+          .upload(filePath, compressedReceiptFile, {
+            contentType: receiptFile.type,
+          });
   
       if (uploadError) {
         alert(`Receipt upload failed: ${uploadError.message}`);

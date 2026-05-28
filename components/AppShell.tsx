@@ -5,6 +5,7 @@ import AppNav from './AppNav';
 import AppSearch from './AppSearch';
 import AuthGuard from './AuthGuard';
 import UserMenu from './UserMenu';
+import FloatingReceiptButton from './FloatingReceiptButton';
 
 const publicRoutes = ['/', '/login'];
 
@@ -34,6 +35,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <main className="flex-1 p-4 md:p-8">{children}</main>
+
+        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] right-4 z-30">
+          <div className="pointer-events-auto">
+            <FloatingReceiptButton />
+          </div>
+        </div>
       </div>
     </AuthGuard>
   );

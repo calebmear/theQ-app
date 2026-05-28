@@ -1,12 +1,16 @@
 'use client';
 import { ReceiptText } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent } from 'react';
+import { supabase } from '../lib/supabaseClient';
 
 export default function FloatingReceiptButton() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState('');
   const [isScrolling, setIsScrolling] = useState(false);
+
+  const [memo, setMemo] = useState('');
+  const [savingReceipt, setSavingReceipt] = useState(false);
 
   function openCamera() {
     fileInputRef.current?.click();
@@ -56,6 +60,67 @@ export default function FloatingReceiptButton() {
     };
   }, []);
 
+  async function saveReceipt() {
+    if (!receiptFile) return;
+  
+    setSavingReceipt(true);
+  
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+  
+      if (!user) {
+        alert('You must be signed in to save receipts.');
+        return;
+      }
+  
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('username')
+        .eq('id', user.id)
+        .single();
+  
+      const safeFileName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+      const filePath = `${user.id}/${crypto.randomUUID()}-${safeFileName}`;
+  
+      const { error: uploadError } = await supabase.storage
+      .from('Receipts')
+      .upload(filePath, receiptFile);
+  
+      if (uploadError) {
+        alert(`Receipt upload failed: ${uploadError.message}`);
+        return;
+      }
+  
+      const { error: insertError } = await supabase.from('receipts').insert({
+        uploaded_by: user.id,
+        uploaded_by_username: profile?.username ?? null,
+        memo: memo.trim() || null,
+        file_name: receiptFile.name,
+        file_path: filePath,
+        file_type: receiptFile.type,
+      });
+  
+      if (insertError) {
+        alert(`Receipt save failed: ${insertError.message}`);
+        return;
+      }
+  
+      alert('Receipt saved.');
+  
+      setReceiptFile(null);
+      setReceiptPreview('');
+      setMemo('');
+    } finally {
+      setSavingReceipt(false);
+  
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  }
+
   return (
     <>
       <input
@@ -71,7 +136,7 @@ export default function FloatingReceiptButton() {
   type="button"
   onClick={openCamera}
   aria-label="Add receipt"
-  className={`flex h-16 w-16 items-center justify-center rounded-full bg-[#009be5] text-white shadow-xl transition-opacity duration-200 hover:bg-[#007bb8] ${
+  className={`flex h-14 w-12 items-center justify-center rounded-l-full bg-[#009be5] pl-1 text-white shadow-lg transition-opacity duration-200 hover:bg-[#007bb8] ${
     isScrolling ? 'opacity-25' : 'opacity-100'
   }`}
 >
@@ -91,6 +156,14 @@ export default function FloatingReceiptButton() {
               />
             )}
 
+
+<textarea
+  value={memo}
+  onChange={(e) => setMemo(e.target.value)}
+  placeholder="Memo or note..."
+  className="mt-4 w-full rounded-lg border p-3 text-sm"
+  rows={3}
+/>
             <div className="mt-4 flex gap-3">
               <button
                 type="button"
@@ -101,14 +174,13 @@ export default function FloatingReceiptButton() {
               </button>
 
               <button
-                type="button"
-                onClick={() => {
-                  alert('Next step: add memo and send to QuickBooks.');
-                }}
-                className="flex-1 rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800"
-              >
-                Continue
-              </button>
+  type="button"
+  onClick={saveReceipt}
+  disabled={savingReceipt}
+  className="flex-1 rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60"
+>
+  {savingReceipt ? 'Saving...' : 'Save Receipt'}
+</button>
             </div>
           </div>
         </div>

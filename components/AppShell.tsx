@@ -36,7 +36,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
         <main className="flex-1 p-4 md:p-8">{children}</main>
 
-        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] right-5 z-30">
+        <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+7rem)] right-0 z-30">
   <div className="pointer-events-auto">
     <FloatingReceiptButton />
   </div>

@@ -93,21 +93,40 @@ export default function FloatingReceiptButton() {
         return;
       }
   
-      const { error: insertError } = await supabase.from('receipts').insert({
-        uploaded_by: user.id,
-        uploaded_by_username: profile?.username ?? null,
-        memo: memo.trim() || null,
-        file_name: receiptFile.name,
-        file_path: filePath,
-        file_type: receiptFile.type,
-      });
-  
-      if (insertError) {
-        alert(`Receipt save failed: ${insertError.message}`);
-        return;
-      }
-  
-      alert('Receipt saved.');
+      const { data: savedReceipt, error: insertError } = await supabase
+  .from('receipts')
+  .insert({
+    uploaded_by: user.id,
+    uploaded_by_username: profile?.username ?? null,
+    memo: memo.trim() || null,
+    file_name: receiptFile.name,
+    file_path: filePath,
+    file_type: receiptFile.type,
+  })
+  .select('id')
+  .single();
+
+if (insertError) {
+  alert(`Receipt save failed: ${insertError.message}`);
+  return;
+}
+
+const emailResponse = await fetch('/.netlify/functions/send-receipt-email', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    receiptId: savedReceipt.id,
+  }),
+});
+
+if (!emailResponse.ok) {
+  alert('Receipt saved, but email failed to send.');
+  return;
+}
+
+alert('Receipt saved and sent.');
   
       setReceiptFile(null);
       setReceiptPreview('');

@@ -11,6 +11,7 @@ export default function FloatingReceiptButton() {
 
   const [memo, setMemo] = useState('');
   const [savingReceipt, setSavingReceipt] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
   function openCamera() {
     fileInputRef.current?.click();
@@ -32,6 +33,14 @@ export default function FloatingReceiptButton() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+  }
+
+  function showToast(message: string) {
+    setToastMessage(message);
+  
+    window.setTimeout(() => {
+      setToastMessage('');
+    }, 3000);
   }
 
   useEffect(() => {
@@ -111,7 +120,13 @@ if (insertError) {
   return;
 }
 
-const emailResponse = await fetch('/.netlify/functions/send-receipt-email', {
+setReceiptFile(null);
+setReceiptPreview('');
+setMemo('');
+
+showToast('Receipt saved. Sending to QuickBooks...');
+
+fetch('/.netlify/functions/send-receipt-email', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -119,18 +134,26 @@ const emailResponse = await fetch('/.netlify/functions/send-receipt-email', {
   body: JSON.stringify({
     receiptId: savedReceipt.id,
   }),
+})
+.then(async (response) => {
+  const result = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error
+        ? typeof result.error === 'string'
+          ? result.error
+          : JSON.stringify(result.error)
+        : 'QuickBooks send failed'
+    );
+  }
+
+  showToast('Receipt sent to QuickBooks.');
+})
+.catch((error) => {
+  console.error('Receipt email failed:', error);
+  showToast(`QuickBooks failed: ${error.message}`);
 });
-
-if (!emailResponse.ok) {
-  alert('Receipt saved, but email failed to send.');
-  return;
-}
-
-alert('Receipt saved and sent.');
-  
-      setReceiptFile(null);
-      setReceiptPreview('');
-      setMemo('');
     } finally {
       setSavingReceipt(false);
   
@@ -202,6 +225,13 @@ alert('Receipt saved and sent.');
 </button>
             </div>
           </div>
+        </div>
+
+)}
+
+      {toastMessage && (
+        <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+1rem)] left-4 right-4 z-[70] rounded-xl bg-black px-4 py-3 text-center text-sm font-medium text-white shadow-lg md:left-auto md:right-6 md:w-80">
+          {toastMessage}
         </div>
       )}
     </>

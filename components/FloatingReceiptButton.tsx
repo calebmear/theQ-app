@@ -1,11 +1,12 @@
 'use client';
 import { ReceiptText } from 'lucide-react';
-import { useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 
 export default function FloatingReceiptButton() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState('');
+  const [isScrolling, setIsScrolling] = useState(false);
 
   function openCamera() {
     fileInputRef.current?.click();
@@ -29,6 +30,27 @@ export default function FloatingReceiptButton() {
     }
   }
 
+  useEffect(() => {
+    let scrollTimer: ReturnType<typeof window.setTimeout>;
+  
+    function handleScroll() {
+      setIsScrolling(true);
+  
+      window.clearTimeout(scrollTimer);
+  
+      scrollTimer = window.setTimeout(() => {
+        setIsScrolling(false);
+      }, 350);
+    }
+  
+    window.addEventListener('scroll', handleScroll, { passive: true });
+  
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.clearTimeout(scrollTimer);
+    };
+  }, []);
+
   return (
     <>
       <input
@@ -40,14 +62,16 @@ export default function FloatingReceiptButton() {
         className="hidden"
       />
 
-      <button
-        type="button"
-        onClick={openCamera}
-        aria-label="Add receipt"
-        className="flex h-11 w-11 items-center justify-center rounded-full bg-[#009be5] pb-0.5 text-2xl font-medium leading-none text-white shadow-lg hover:bg-[#007bb8]"
-        >
-  <ReceiptText size={22} strokeWidth={2.5} />
-      </button>
+<button
+  type="button"
+  onClick={openCamera}
+  aria-label="Add receipt"
+  className={`flex h-16 w-16 items-center justify-center rounded-full bg-[#009be5] text-white shadow-xl transition-opacity duration-200 hover:bg-[#007bb8] ${
+    isScrolling ? 'opacity-25' : 'opacity-100'
+  }`}
+>
+  <ReceiptText size={28} strokeWidth={2.5} />
+</button>
 
       {receiptFile && (
         <div className="fixed inset-0 z-[60] flex items-end bg-black/40 p-4">

@@ -92,8 +92,8 @@ export default function FloatingReceiptButton() {
         .single();
   
         const compressedReceiptFile = await imageCompression(receiptFile, {
-          maxSizeMB: 0.8,
-          maxWidthOrHeight: 1600,
+          maxSizeMB: 1.5,
+          maxWidthOrHeight: 2200,
           useWebWorker: true,
         });
         

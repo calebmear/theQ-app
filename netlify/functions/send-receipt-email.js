@@ -72,12 +72,8 @@ exports.handler = async (event) => {
     await transporter.sendMail({
       from: process.env.GMAIL_USER,
       to: process.env.QUICKBOOKS_RECEIPT_EMAIL,
-      subject: `Receipt from ${receipt.uploaded_by_username || 'THE Q'}`,
-      text: [
-        `Uploaded by: ${receipt.uploaded_by_username || 'Unknown'}`,
-        `Memo: ${receipt.memo || 'None'}`,
-        `File: ${receipt.file_name}`,
-      ].join('\n'),
+      subject: 'Receipt',
+text: receipt.memo || 'Receipt attached.',
       attachments: [
         {
           filename: receipt.file_name,

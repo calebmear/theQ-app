@@ -76,7 +76,7 @@ exports.handler = async (event) => {
 text: receipt.memo || 'Receipt attached.',
 attachments: [
   {
-    filename: receipt.file_name || 'receipt.jpg',
+    filename: `receipt-${receipt.id}.jpg`,
     content: fileBuffer,
     contentType: 'image/jpeg',
   },

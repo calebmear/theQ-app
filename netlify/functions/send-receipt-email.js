@@ -74,13 +74,13 @@ exports.handler = async (event) => {
       to: process.env.QUICKBOOKS_RECEIPT_EMAIL,
       subject: 'Receipt',
 text: receipt.memo || 'Receipt attached.',
-      attachments: [
-        {
-          filename: receipt.file_name,
-          content: fileBuffer,
-          contentType: receipt.file_type || undefined,
-        },
-      ],
+attachments: [
+  {
+    filename: receipt.file_name || 'receipt.jpg',
+    content: fileBuffer,
+    contentType: 'image/jpeg',
+  },
+],
     });
 
     await supabase

@@ -95,15 +95,16 @@ export default function FloatingReceiptButton() {
           maxSizeMB: 1.5,
           maxWidthOrHeight: 2200,
           useWebWorker: true,
+          fileType: 'image/jpeg',
         });
         
-        const safeFileName = receiptFile.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+        const safeFileName = `receipt-${Date.now()}.jpg`;
         const filePath = `${user.id}/${crypto.randomUUID()}-${safeFileName}`;
         
         const { error: uploadError } = await supabase.storage
           .from('Receipts')
           .upload(filePath, compressedReceiptFile, {
-            contentType: receiptFile.type,
+            contentType: 'image/jpeg',
           });
   
       if (uploadError) {

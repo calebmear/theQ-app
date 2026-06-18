@@ -85,9 +85,14 @@ type DashboardServiceEntry = {
   mainline_tests: number | null;
   flat_rate: boolean | null;
   notes: string | null;
-  projects: {
-    project_number: string;
-  } | null;
+  projects:
+  | {
+      project_number: string;
+    }
+  | {
+      project_number: string;
+    }[]
+  | null;
 };
 
 const emptyPricingModels = {
@@ -680,8 +685,7 @@ trafficControlPricingType: '',
       return;
     }
   
-    setDashboardServiceEntries((data ?? []) as DashboardServiceEntry[]);
-  }
+    setDashboardServiceEntries((data ?? []) as unknown as DashboardServiceEntry[]);  }
 
   async function saveCustomer() {
     if (
@@ -1790,15 +1794,19 @@ function DashboardServiceCalendar({
   <Link
     key={entry.id}
     href={`/projects/${encodeURIComponent(
-      entry.projects?.project_number || ''
+      (Array.isArray(entry.projects)
+  ? entry.projects[0]?.project_number
+  : entry.projects?.project_number) || ''
     )}?from=/dashboard&fromLabel=Dashboard`}
     className="block rounded-lg border bg-white p-3 text-sm hover:bg-gray-50"
   >
     <div className="flex items-start justify-between gap-3">
   <div className="min-w-0">
     <p className="text-sm font-semibold text-gray-900">
-      {entry.projects?.project_number || 'Unknown Project'}
-    </p>
+      {(Array.isArray(entry.projects)
+  ? entry.projects[0]?.project_number
+  : entry.projects?.project_number) || 'Unknown Project'}
+    </p>1
 
     <p className="mt-1 text-xs text-gray-500">
       {entry.work_completed || 'No work type selected'}

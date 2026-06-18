@@ -159,6 +159,9 @@ const [timeForm, setTimeForm] = useState<TimeForm>({
   notes: '',
 });
 
+const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+
 const searchParams = useSearchParams();
 const from = searchParams.get('from') ?? '/projects';
 const fromLabel = searchParams.get('fromLabel') ?? 'Projects';
@@ -686,6 +689,22 @@ billing_methods_updated_at: data.billing_methods_updated_at,
   
     loadCurrentUser();
   }, []);
+
+  useEffect(() => {
+    if (timeEntries.length === 0) return;
+  
+    const sortedDates = [...timeEntries]
+      .map((entry) => entry.work_date)
+      .sort();
+  
+    const latestEntryDate = sortedDates[sortedDates.length - 1];
+  
+    if (!latestEntryDate) return;
+  
+    const [year, month] = latestEntryDate.split('-').map(Number);
+  
+    setCalendarMonth(new Date(year, month - 1, 1));
+  }, [timeEntries]);
   
 
   if (loading) {
@@ -883,7 +902,68 @@ const displayedServiceStartDate = firstActiveServiceDate
   
   const serviceSummary = projectServiceSummary(timeEntries);
   
-
+  function dateKey(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+  
+    return `${year}-${month}-${day}`;
+  }
+  
+  function changeCalendarMonth(direction: number) {
+    setCalendarMonth(
+      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + direction, 1)
+    );
+    setSelectedCalendarDate(null);
+  }
+  
+  const calendarMonthLabel = calendarMonth.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+  
+  const serviceCountByDate = timeEntries.reduce<Record<string, number>>(
+    (counts, entry) => {
+      counts[entry.work_date] = (counts[entry.work_date] ?? 0) + 1;
+      return counts;
+    },
+    {}
+  );
+  
+  const selectedCalendarEntries = selectedCalendarDate
+    ? timeEntries.filter((entry) => entry.work_date === selectedCalendarDate)
+    : [];
+  
+  const calendarFirstDay = new Date(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth(),
+    1
+  );
+  
+  const calendarDaysInMonth = new Date(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth() + 1,
+    0
+  ).getDate();
+  
+  const calendarBlankDays = Array.from({ length: calendarFirstDay.getDay() });
+  
+  const calendarDays = Array.from({ length: calendarDaysInMonth }, (_, index) => {
+    const day = index + 1;
+    const dayDate = new Date(
+      calendarMonth.getFullYear(),
+      calendarMonth.getMonth(),
+      day
+    );
+    const key = dateKey(dayDate);
+  
+    return {
+      day,
+      key,
+      serviceCount: serviceCountByDate[key] ?? 0,
+      isToday: key === today,
+    };
+  });
 
   async function loadTimeEntries(projectId: string) {
     const { data, error } = await supabase
@@ -2483,28 +2563,132 @@ traffic_control_pricing_type:
 )}
 
 </div>
+  <div className="rounded-2xl bg-white p-6 shadow">
+  <div>
+  <h2 className="text-xl font-bold">Service Calendar</h2>
+  <p className="mt-1 text-sm text-gray-600">
+    Highlighted days have submitted service for this project.
+  </p>
+</div>
 
-<div className="rounded-2xl bg-white p-6 shadow">
-
-<div>
+<div className="mt-4 flex items-center justify-center gap-3">
   <button
     type="button"
-    onClick={() => setShowServiceLog(!showServiceLog)}
-    className="flex w-full items-center justify-between gap-4 text-left"
+    onClick={() => changeCalendarMonth(-1)}
+    aria-label="Previous month"
+    className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
   >
-    <div>
-    <h2 className="text-xl font-bold">Service History</h2>
-  <p className="mt-1 text-sm text-gray-600">
-    View submitted service entries.
-  </p>
-    </div>
+    ‹
+  </button>
 
-    <span className="text-2xl leading-none text-gray-500">
-      {showServiceLog ? '⌄' : '›'}
-    </span>
+  <p className="min-w-[10rem] text-center text-sm font-bold text-gray-800">    {calendarMonthLabel}
+  </p>
+
+  <button
+    type="button"
+    onClick={() => changeCalendarMonth(1)}
+    aria-label="Next month"
+    className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
+  >
+    ›
   </button>
 </div>
 
+  <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase text-gray-500">
+    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+      <div key={day}>{day}</div>
+    ))}
+  </div>
+
+  <div className="mt-2 grid grid-cols-7 gap-1">
+    {calendarBlankDays.map((_, index) => (
+      <div key={`blank-${index}`} className="aspect-square" />
+    ))}
+
+    {calendarDays.map((day) => {
+      const hasService = day.serviceCount > 0;
+      const isSelected = selectedCalendarDate === day.key;
+
+      return (
+        <button
+          key={day.key}
+          type="button"
+          onClick={() => setSelectedCalendarDate(isSelected ? null : day.key)}
+          className={`relative flex aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
+            hasService
+              ? 'bg-[#009be5] text-white shadow-sm'
+              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+          } ${isSelected ? 'ring-2 ring-black ring-offset-2' : ''} ${
+            day.isToday && !isSelected ? 'ring-2 ring-[#009be5] ring-offset-1' : ''
+          }`}
+        >
+          {day.day}
+
+          {day.serviceCount > 1 && (
+            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-black px-1 text-[10px] leading-none text-white">
+              {day.serviceCount}
+            </span>
+          )}
+        </button>
+      );
+    })}
+  </div>
+
+  {selectedCalendarDate && (
+    <div className="mt-4 rounded-xl border bg-gray-50 p-3">
+      <p className="text-sm font-bold text-gray-900">
+        {formatDate(selectedCalendarDate)}
+      </p>
+
+      <div className="mt-3 space-y-2">
+        {selectedCalendarEntries.map((entry) => (
+          <div key={entry.id} className="rounded-lg bg-white p-3 text-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-gray-900">
+                  {entry.work_completed || 'Service'}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  {entry.service_vehicle || 'No vehicle selected'}
+                </p>
+              </div>
+
+              <p className="shrink-0 font-semibold text-gray-700">
+                {quantityLabelForEntry(entry)}
+              </p>
+            </div>
+
+            {entry.notes && (
+              <p className="mt-2 rounded-lg bg-gray-50 p-2 text-gray-700">
+                {entry.notes}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
+
+<div className="rounded-2xl bg-white p-6 shadow">
+  <div>
+    <button
+      type="button"
+      onClick={() => setShowServiceLog(!showServiceLog)}
+      className="flex w-full items-center justify-between gap-4 text-left"
+    >
+      <div>
+        <h2 className="text-xl font-bold">Service History</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          View submitted service entries.
+        </p>
+      </div>
+
+      <span className="text-2xl leading-none text-gray-500">
+        {showServiceLog ? '⌄' : '›'}
+      </span>
+    </button>
+  </div>
 {showServiceLog && (
   <>
 

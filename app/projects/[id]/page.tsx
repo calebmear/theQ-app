@@ -185,9 +185,8 @@ const [projectNotes, setProjectNotes] = useState<ProjectNote[]>([]);
 const [newProjectNote, setNewProjectNote] = useState('');
 
 const [showServiceSubmission, setShowServiceSubmission] = useState(false);
-const [showServiceLog, setShowServiceLog] = useState(true);
-const [showNotes, setShowNotes] = useState(true);
-
+const [showServiceLog, setShowServiceLog] = useState(false);
+const [showNotes, setShowNotes] = useState(false);
 
 
 const [expandedTimeEntryId, setExpandedTimeEntryId] = useState<string | null>(
@@ -274,6 +273,7 @@ const canManageHistory =
   normalizedRole === 'admin' || normalizedRole === 'management';
 
 
+  
 function canManageEntry(entry: TimeEntry) {
   if (canManageHistory) return true;
   return normalizedRole === 'field' && entry.created_by === currentUserId;
@@ -2590,19 +2590,20 @@ traffic_control_pricing_type:
   </p>
 </div>
 
-<div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs font-medium text-gray-600">
-  <div className="flex items-center gap-2">
-    <span className="h-4 w-4 rounded bg-[#009be5]" />
-    <span>Serviced</span>
+<div className="mt-4 grid grid-cols-3 items-center gap-2 text-[11px] font-medium text-gray-600">
+  <div className="flex min-w-0 items-center justify-center gap-1">
+    <span className="h-3.5 w-3.5 shrink-0 rounded bg-[#009be5]" />
+    <span className="whitespace-nowrap">Serviced</span>
   </div>
 
-  <div className="flex items-center gap-2">
-  <span className="h-4 w-4 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_4px,#8fd8f7_4px,#8fd8f7_6px)]" />    <span>Holiday / Unable to Service</span>
+  <div className="flex min-w-0 items-center justify-center gap-1">
+    <span className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_3px,#8fd8f7_3px,#8fd8f7_5px)]" />
+    <span className="whitespace-nowrap">Holiday/Unable</span>
   </div>
 
-  <div className="flex items-center gap-2">
-    <span className="h-4 w-4 rounded border bg-gray-50" />
-    <span>No Service</span>
+  <div className="flex min-w-0 items-center justify-center gap-1">
+    <span className="h-3.5 w-3.5 shrink-0 rounded border bg-gray-50" />
+    <span className="whitespace-nowrap">No Service</span>
   </div>
 </div>
 
@@ -2662,11 +2663,28 @@ traffic_control_pricing_type:
         >
           {day.day}
 
-          {day.serviceCount > 1 && (
-            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-black px-1 text-[10px] leading-none text-white">
-              {day.serviceCount}
-            </span>
-          )}
+          {day.serviceCount > 0 && (
+  <span className="absolute bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-0.5">
+    {Array.from({ length: Math.min(day.serviceCount, 3) }).map((_, index) => (
+      <span
+        key={index}
+        className={`h-1 w-1 rounded-full ${
+          hasService ? 'bg-white' : 'bg-[#007bb8]'
+        }`}
+      />
+    ))}
+
+    {day.serviceCount > 3 && (
+      <span
+        className={`ml-0.5 text-[9px] leading-none ${
+          hasService ? 'text-white' : 'text-[#007bb8]'
+        }`}
+      >
+        +
+      </span>
+    )}
+  </span>
+)}
         </button>
       );
     })}

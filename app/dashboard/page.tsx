@@ -73,6 +73,23 @@ type RecentService = {
   quantity: string;
 };
 
+type DashboardServiceEntry = {
+  id: string;
+  work_date: string;
+  work_completed: string | null;
+  service_vehicle: string | null;
+  hours: number | null;
+  feet: number | null;
+  laterals: number | null;
+  residences: number | null;
+  mainline_tests: number | null;
+  flat_rate: boolean | null;
+  notes: string | null;
+  projects: {
+    project_number: string;
+  } | null;
+};
+
 const emptyPricingModels = {
   MAIN: '',
   LAT: '',
@@ -363,7 +380,7 @@ export default function DashboardPage() {
   const [confirmedTotalRevenue, setConfirmedTotalRevenue] = useState(0);
 
   const [recentServices, setRecentServices] = useState<RecentService[]>([]);
-
+  const [dashboardServiceEntries, setDashboardServiceEntries] = useState<DashboardServiceEntry[]>([]);
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
@@ -632,8 +649,39 @@ trafficControlPricingType: '',
   
     loadProjects();
     loadRecentServices();
+    loadDashboardServiceEntries();
     testBillingSheetConnection();
   }, [canViewDashboard]);
+
+  async function loadDashboardServiceEntries() {
+    const { data, error } = await supabase
+      .from('time_entries')
+      .select(`
+        id,
+        work_date,
+        work_completed,
+        service_vehicle,
+        hours,
+        feet,
+        laterals,
+        residences,
+        mainline_tests,
+        flat_rate,
+        notes,
+        projects (
+          project_number
+        )
+      `)
+      .is('deleted_at', null)
+      .order('work_date', { ascending: false });
+  
+    if (error) {
+      console.error('Error loading dashboard service calendar:', error);
+      return;
+    }
+  
+    setDashboardServiceEntries((data ?? []) as DashboardServiceEntry[]);
+  }
 
   async function saveCustomer() {
     if (
@@ -772,7 +820,9 @@ traffic_control_pricing_type:
     setProjectCustomerSearch('');
     setShowProjectForm(false);
     loadProjects();
-    loadRecentServices();
+loadRecentServices();
+loadDashboardServiceEntries();
+testBillingSheetConnection();
 
   }
 
@@ -913,9 +963,12 @@ onClick={() => {
 
 
 
+<DashboardServiceCalendar
+  entries={dashboardServiceEntries}
+  formatDate={formatDate}
+/>
+
 <RecentActivity services={recentServices} formatDate={formatDate} />
-
-
 
       {showCustomerForm && (
   <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
@@ -1506,6 +1559,271 @@ function NeedsAttention({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function DashboardServiceCalendar({
+  entries,
+  formatDate,
+}: {
+  entries: DashboardServiceEntry[];
+  formatDate: (value: string | undefined) => string;
+}) {
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (entries.length === 0) return;
+  
+    const sortedDates = [...entries]
+      .map((entry) => entry.work_date)
+      .sort();
+  
+    const latestEntryDate = sortedDates[sortedDates.length - 1];
+  
+    if (!latestEntryDate) return;
+  
+    const [year, month] = latestEntryDate.split('-').map(Number);
+  
+    setCalendarMonth(new Date(year, month - 1, 1));
+  }, [entries]);
+
+  function dateKey(date: Date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
+  }
+
+  function changeCalendarMonth(direction: number) {
+    setCalendarMonth(
+      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + direction, 1)
+    );
+    setSelectedCalendarDate(null);
+  }
+
+  const calendarMonthLabel = calendarMonth.toLocaleDateString('en-US', {
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const serviceCountByDate = entries.reduce<Record<string, number>>(
+    (counts, entry) => {
+      counts[entry.work_date] = (counts[entry.work_date] ?? 0) + 1;
+      return counts;
+    },
+    {}
+  );
+
+  function quantityLabelForEntry(entry: DashboardServiceEntry) {
+    if (entry.hours !== null && entry.hours !== undefined) {
+      return `${entry.hours} hrs`;
+    }
+  
+    if (entry.feet !== null && entry.feet !== undefined) {
+      return `${entry.feet} ft`;
+    }
+  
+    if (entry.laterals !== null && entry.laterals !== undefined) {
+      return `${entry.laterals} laterals`;
+    }
+  
+    if (entry.residences !== null && entry.residences !== undefined) {
+      return `${entry.residences} residences`;
+    }
+  
+    if (entry.mainline_tests !== null && entry.mainline_tests !== undefined) {
+      return `${entry.mainline_tests} tests`;
+    }
+  
+    if (entry.flat_rate) {
+      return 'Flat rate';
+    }
+  
+    return 'No quantity';
+  }
+
+  const serviceHasZeroQuantityByDate = entries.reduce<Record<string, boolean>>(
+    (dates, entry) => {
+      const hasZeroQuantity =
+        entry.hours === 0 ||
+        entry.feet === 0 ||
+        entry.laterals === 0 ||
+        entry.residences === 0 ||
+        entry.mainline_tests === 0;
+
+      if (hasZeroQuantity) {
+        dates[entry.work_date] = true;
+      }
+
+      return dates;
+    },
+    {}
+  );
+
+  const selectedCalendarEntries = selectedCalendarDate
+    ? entries.filter((entry) => entry.work_date === selectedCalendarDate)
+    : [];
+
+  const calendarFirstDay = new Date(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth(),
+    1
+  );
+
+  const calendarDaysInMonth = new Date(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth() + 1,
+    0
+  ).getDate();
+
+  const calendarBlankDays = Array.from({ length: calendarFirstDay.getDay() });
+
+  const calendarDays = Array.from({ length: calendarDaysInMonth }, (_, index) => {
+    const day = index + 1;
+    const dayDate = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+    const key = dateKey(dayDate);
+
+    return {
+      day,
+      key,
+      serviceCount: serviceCountByDate[key] ?? 0,
+      hasZeroQuantity: serviceHasZeroQuantityByDate[key] ?? false,
+      isToday: key === dateKey(new Date()),
+    };
+  });
+
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow md:p-6">
+      <div>
+        <h2 className="text-xl font-bold">Service Calendar</h2>
+        <p className="mt-1 text-sm text-gray-600">
+          Monthly view of service submissions across all projects.
+        </p>
+      </div>
+
+      <div className="mt-4 grid grid-cols-3 items-center gap-2 text-[11px] font-medium text-gray-600">
+        <div className="flex min-w-0 items-center justify-center gap-1">
+          <span className="h-3.5 w-3.5 shrink-0 rounded bg-[#009be5]" />
+          <span className="whitespace-nowrap">Serviced</span>
+        </div>
+
+        <div className="flex min-w-0 items-center justify-center gap-1">
+          <span className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_3px,#8fd8f7_3px,#8fd8f7_5px)]" />
+          <span className="whitespace-nowrap">Holiday/Unable</span>
+        </div>
+
+        <div className="flex min-w-0 items-center justify-center gap-1">
+          <span className="h-3.5 w-3.5 shrink-0 rounded border bg-gray-50" />
+          <span className="whitespace-nowrap">No Service</span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => changeCalendarMonth(-1)}
+          className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
+        >
+          &lt;
+        </button>
+
+        <p className="min-w-[10rem] text-center text-sm font-bold text-gray-800">
+          {calendarMonthLabel}
+        </p>
+
+        <button
+          type="button"
+          onClick={() => changeCalendarMonth(1)}
+          className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
+        >
+          &gt;
+        </button>
+      </div>
+
+      <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase text-gray-500">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+          <div key={day}>{day}</div>
+        ))}
+      </div>
+
+      <div className="mt-2 grid grid-cols-7 gap-1">
+        {calendarBlankDays.map((_, index) => (
+          <div key={`blank-${index}`} className="aspect-square" />
+        ))}
+
+        {calendarDays.map((day) => {
+          const hasService = day.serviceCount > 0;
+          const isSelected = selectedCalendarDate === day.key;
+
+          return (
+            <button
+              key={day.key}
+              type="button"
+              onClick={() => setSelectedCalendarDate(isSelected ? null : day.key)}
+              className={`relative flex aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
+                day.hasZeroQuantity
+                  ? 'bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_7px,#8fd8f7_7px,#8fd8f7_9px)] text-[#005f8f] shadow-sm'
+                  : hasService
+                  ? 'bg-[#009be5] text-white shadow-sm'
+                  : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+              } ${isSelected ? 'ring-2 ring-black ring-offset-2' : ''} ${
+                day.isToday && !isSelected ? 'ring-2 ring-[#009be5] ring-offset-1' : ''
+              }`}
+            >
+              {day.day}
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedCalendarDate && (
+        <div className="mt-4 rounded-xl border bg-gray-50 p-3">
+          <p className="text-sm font-bold text-gray-900">
+            {formatDate(selectedCalendarDate)}
+          </p>
+
+          <div className="mt-3 space-y-2">
+          {selectedCalendarEntries.map((entry) => (
+  <Link
+    key={entry.id}
+    href={`/projects/${encodeURIComponent(
+      entry.projects?.project_number || ''
+    )}?from=/dashboard&fromLabel=Dashboard`}
+    className="block rounded-lg border bg-white p-3 text-sm hover:bg-gray-50"
+  >
+    <div className="flex items-start justify-between gap-3">
+  <div className="min-w-0">
+    <p className="text-sm font-semibold text-gray-900">
+      {entry.projects?.project_number || 'Unknown Project'}
+    </p>
+
+    <p className="mt-1 text-xs text-gray-500">
+      {entry.work_completed || 'No work type selected'}
+    </p>
+
+    <p className="mt-1 text-xs text-gray-500">
+      {entry.service_vehicle || 'No vehicle selected'}
+    </p>
+  </div>
+
+  <p className="shrink-0 text-right text-sm font-semibold text-gray-700">
+    {quantityLabelForEntry(entry)}
+  </p>
+</div>
+
+{entry.notes && (
+  <p className="mt-3 rounded-lg bg-gray-50 p-2 text-sm text-gray-700">
+    {entry.notes}
+  </p>
+)}
+  </Link>
+))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

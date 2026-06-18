@@ -929,6 +929,24 @@ const displayedServiceStartDate = firstActiveServiceDate
     },
     {}
   );
+
+  const serviceHasZeroQuantityByDate = timeEntries.reduce<Record<string, boolean>>(
+    (dates, entry) => {
+      const hasZeroQuantity =
+        entry.hours === 0 ||
+        entry.feet === 0 ||
+        entry.laterals === 0 ||
+        entry.residences === 0 ||
+        entry.mainline_tests === 0;
+  
+      if (hasZeroQuantity) {
+        dates[entry.work_date] = true;
+      }
+  
+      return dates;
+    },
+    {}
+  );
   
   const selectedCalendarEntries = selectedCalendarDate
     ? timeEntries.filter((entry) => entry.work_date === selectedCalendarDate)
@@ -961,6 +979,7 @@ const displayedServiceStartDate = firstActiveServiceDate
       day,
       key,
       serviceCount: serviceCountByDate[key] ?? 0,
+      hasZeroQuantity: serviceHasZeroQuantityByDate[key] ?? false,
       isToday: key === today,
     };
   });
@@ -2567,8 +2586,24 @@ traffic_control_pricing_type:
   <div>
   <h2 className="text-xl font-bold">Service Calendar</h2>
   <p className="mt-1 text-sm text-gray-600">
-    Highlighted days have submitted service for this project.
+    Monthly view of services completed for this project.
   </p>
+</div>
+
+<div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs font-medium text-gray-600">
+  <div className="flex items-center gap-2">
+    <span className="h-4 w-4 rounded bg-[#009be5]" />
+    <span>Serviced</span>
+  </div>
+
+  <div className="flex items-center gap-2">
+  <span className="h-4 w-4 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_4px,#8fd8f7_4px,#8fd8f7_6px)]" />    <span>Holiday / Unable to Service</span>
+  </div>
+
+  <div className="flex items-center gap-2">
+    <span className="h-4 w-4 rounded border bg-gray-50" />
+    <span>No Service</span>
+  </div>
 </div>
 
 <div className="mt-4 flex items-center justify-center gap-3">
@@ -2607,6 +2642,7 @@ traffic_control_pricing_type:
 
     {calendarDays.map((day) => {
       const hasService = day.serviceCount > 0;
+      const hasZeroQuantity = day.hasZeroQuantity;
       const isSelected = selectedCalendarDate === day.key;
 
       return (
@@ -2615,9 +2651,11 @@ traffic_control_pricing_type:
           type="button"
           onClick={() => setSelectedCalendarDate(isSelected ? null : day.key)}
           className={`relative flex aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
-            hasService
-              ? 'bg-[#009be5] text-white shadow-sm'
-              : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+            hasZeroQuantity
+    ? 'bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_7px,#8fd8f7_7px,#8fd8f7_9px)] text-[#005f8f] shadow-sm'
+    : hasService
+    ? 'bg-[#009be5] text-white shadow-sm'
+    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
           } ${isSelected ? 'ring-2 ring-black ring-offset-2' : ''} ${
             day.isToday && !isSelected ? 'ring-2 ring-[#009be5] ring-offset-1' : ''
           }`}

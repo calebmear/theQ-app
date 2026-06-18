@@ -1806,7 +1806,7 @@ function DashboardServiceCalendar({
       {(Array.isArray(entry.projects)
   ? entry.projects[0]?.project_number
   : entry.projects?.project_number) || 'Unknown Project'}
-    </p>1
+    </p>
 
     <p className="mt-1 text-xs text-gray-500">
       {entry.work_completed || 'No work type selected'}

@@ -53,7 +53,7 @@ const pricingModelOptions = [
   {
     code: 'SMK',
     label: 'Smoke',
-    choices: ['Per Hour', 'Per Mainline Test', 'Per Residence'],
+    choices: ['Per Hour', 'Per Mainline Test + Per Residence'],
   },
   { code: 'TRFC', label: 'Traffic Control', choices: ['Flat Rate'] },
 ] as const;

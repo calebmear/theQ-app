@@ -37,7 +37,7 @@ const pricingOptions = {
   lateralPricingType: ['Per Hour', 'Per Lateral'],
   jetPricingType: ['Per Hour', 'Per Foot'],
   dyePricingType: ['Per Hour'],
-  smokePricingType: ['Per Hour', 'Per Mainline Test','Per Residence'],
+  smokePricingType: ['Per Hour', 'Per Mainline Test + Per Residence'],
   trafficControlPricingType: ['Flat Rate'],
 
 };

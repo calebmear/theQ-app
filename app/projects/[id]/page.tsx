@@ -56,7 +56,8 @@ type TimeEntry = {
   feet: number | null;
   laterals: number | null;
   mainline_tests: number | null;
-  residences: number | null;  flat_rate: boolean | null;
+  residences: number | null;  
+  flat_rate: boolean | null;
   notes: string | null;
   created_at: string;
   updated_at: string | null;
@@ -449,20 +450,20 @@ function quantityLabelForEntry(entry: TimeEntry) {
 
   if (entry.mainline_tests !== null && entry.mainline_tests !== undefined) {
     if (
-      entry.service_connections !== null &&
-      entry.service_connections !== undefined
+      entry.residences !== null &&
+      entry.residences !== undefined
     ) {
-      return `${entry.mainline_tests} segments • ${entry.service_connections} connections`;
+      return `${entry.mainline_tests} segments • ${entry.residences} connections`;
     }
   
     return `${entry.mainline_tests} segments`;
   }
   
   if (
-    entry.service_connections !== null &&
-    entry.service_connections !== undefined
+    entry.residences !== null &&
+    entry.residences !== undefined
   ) {
-    return `${entry.service_connections} connections`;
+    return `${entry.residences} connections`;
   }
 
   if (entry.flat_rate) {

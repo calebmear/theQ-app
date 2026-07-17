@@ -55,9 +55,8 @@ type TimeEntry = {
   hours: number | null;
   feet: number | null;
   laterals: number | null;
-  residences: number | null;
   mainline_tests: number | null;
-  flat_rate: boolean | null;
+  residences: number | null;  flat_rate: boolean | null;
   notes: string | null;
   created_at: string;
   updated_at: string | null;
@@ -110,6 +109,7 @@ type PendingServiceItem = {
   serviceType: string;
   billingMethod: string;
   quantity: string;
+  serviceConnections: string;
   serviceVehicle: string;
   note: string;
 };
@@ -168,6 +168,10 @@ const fromLabel = searchParams.get('fromLabel') ?? 'Projects';
 
 const [selectedServiceTypes, setSelectedServiceTypes] = useState<string[]>([]);
 const [serviceQuantities, setServiceQuantities] = useState<
+  Record<string, string>
+>({});
+
+const [serviceConnections, setServiceConnections] = useState<
   Record<string, string>
 >({});
 
@@ -284,13 +288,18 @@ function canManageNote(note: ProjectNote) {
   return normalizedRole === 'field' && note.created_by === currentUserId;
 }
 
+function isSmokePackage(serviceType: string) {
+  if (serviceType !== 'Smoke') return false;
+
+  return billingMethodForService(serviceType) !== 'Per Hour';
+}
 
 const standardBillingMethods = {
   main: 'Per Foot',
   lateral: 'Per Lateral',
   jet: 'Per Foot',
   dye: 'Per Hour',
-  smoke: 'Per Residence',
+  smoke: 'Per Mainline Segment + Per Connection',
   trafficControl: 'Flat Rate',
 };
 
@@ -323,7 +332,7 @@ const billingTypeOptions = [
     code: 'SMK',
     label: 'Smoke',
     field: 'smokePricingType',
-    choices: ['Per Hour', 'Per Mainline Test', 'Per Residence'],
+    choices: ['Per Hour', 'Per Mainline Segments + Connections'],
   },
   {
     code: 'TRFC',
@@ -373,7 +382,11 @@ function billingMethodForService(serviceType: string) {
   if (serviceType === 'Lateral') return billingMethods.lateral;
   if (serviceType === 'Jetter') return billingMethods.jet;
   if (serviceType === 'Dye') return billingMethods.dye;
-  if (serviceType === 'Smoke') return billingMethods.smoke;
+  if (serviceType === 'Smoke') {
+    return billingMethods.smoke === 'Per Hour'
+      ? 'Per Hour'
+      : 'Per Mainline Segment + Per Connection';
+  }
   if (serviceType === 'Traffic Control') return billingMethods.trafficControl;
 
   return '';
@@ -398,12 +411,18 @@ function entryQuantityDetails(entry: TimeEntry) {
     details.push({ label: 'Laterals', value: entry.laterals });
   }
 
-  if (entry.residences !== null && entry.residences !== undefined) {
-    details.push({ label: 'Residences', value: entry.residences });
+  if (entry.mainline_tests !== null && entry.mainline_tests !== undefined) {
+    details.push({ label: 'Mainline Segments', value: entry.mainline_tests });
   }
 
-  if (entry.mainline_tests !== null && entry.mainline_tests !== undefined) {
-    details.push({ label: 'Mainline Tests', value: entry.mainline_tests });
+  if (
+    entry.residences !== null &&
+    entry.residences !== undefined
+  ) {
+    details.push({
+      label: 'Service Connections',
+      value: entry.residences,
+    });
   }
 
   if (entry.flat_rate) {
@@ -428,12 +447,22 @@ function quantityLabelForEntry(entry: TimeEntry) {
     return `${entry.laterals} laterals`;
   }
 
-  if (entry.residences !== null && entry.residences !== undefined) {
-    return `${entry.residences} residences`;
-  }
-
   if (entry.mainline_tests !== null && entry.mainline_tests !== undefined) {
-    return `${entry.mainline_tests} tests`;
+    if (
+      entry.service_connections !== null &&
+      entry.service_connections !== undefined
+    ) {
+      return `${entry.mainline_tests} segments • ${entry.service_connections} connections`;
+    }
+  
+    return `${entry.mainline_tests} segments`;
+  }
+  
+  if (
+    entry.service_connections !== null &&
+    entry.service_connections !== undefined
+  ) {
+    return `${entry.service_connections} connections`;
   }
 
   if (entry.flat_rate) {
@@ -464,8 +493,7 @@ function quantityLabelForService(serviceType: string) {
   if (billingMethod === 'Per Hour') return 'Hours Worked';
   if (billingMethod === 'Per Foot') return 'Feet Serviced';
   if (billingMethod === 'Per Lateral') return 'Laterals Serviced';
-  if (billingMethod === 'Per Residence') return 'Residences Tested';
-  if (billingMethod === 'Per Mainline Test') return 'Mainline Tests';
+  if (billingMethod === 'Per Mainline Segments') return 'Mainline Segments';
 
   return '';
 }
@@ -476,8 +504,7 @@ function quantityPlaceholderForService(serviceType: string) {
   if (billingMethod === 'Per Hour') return 'Enter hours';
   if (billingMethod === 'Per Foot') return 'Enter feet';
   if (billingMethod === 'Per Lateral') return 'Enter laterals';
-  if (billingMethod === 'Per Residence') return 'Enter residences';
-  if (billingMethod === 'Per Mainline Test') return 'Enter tests';
+  if (billingMethod === 'Per Mainline Segments') return 'Enter Segments';
 
   return '';
 }
@@ -501,6 +528,7 @@ function clearServiceSubmissionForm() {
 
   setSelectedServiceTypes([]);
   setServiceQuantities({});
+  setServiceConnections({});
   setServiceNotes({});
 
   setPendingServiceItems([]);
@@ -522,7 +550,9 @@ function addSelectedServicesToSubmission() {
 
   const missingQuantity = selectedServiceTypes.some(
     (serviceType) =>
-      serviceNeedsQuantity(serviceType) && !serviceQuantities[serviceType]
+      serviceNeedsQuantity(serviceType) &&
+      !isSmokePackage(serviceType) &&
+      !serviceQuantities[serviceType]
   );
 
   if (missingQuantity) {
@@ -540,6 +570,7 @@ function addSelectedServicesToSubmission() {
       serviceType,
       billingMethod,
       quantity: serviceQuantities[serviceType] ?? '',
+      serviceConnections: serviceConnections[serviceType] ?? '',
       serviceVehicle: timeForm.serviceVehicle,
       note: serviceNotes[serviceType] ?? '',
     };
@@ -548,6 +579,7 @@ function addSelectedServicesToSubmission() {
   setPendingServiceItems([...pendingServiceItems, ...newItems]);
   setSelectedServiceTypes([]);
   setServiceQuantities({});
+  setServiceConnections({});
   setServiceNotes({});
 
   setTimeForm({
@@ -567,8 +599,17 @@ function quantityLabelForPendingItem(item: PendingServiceItem) {
   if (item.billingMethod === 'Per Hour') return `${item.quantity} hrs`;
   if (item.billingMethod === 'Per Foot') return `${item.quantity} ft`;
   if (item.billingMethod === 'Per Lateral') return `${item.quantity} laterals`;
-  if (item.billingMethod === 'Per Residence') return `${item.quantity} residences`;
-  if (item.billingMethod === 'Per Mainline Test') return `${item.quantity} tests`;
+  if (item.billingMethod === 'Per Mainline Segment') return `${item.quantity} Segments`;
+  if (item.billingMethod === 'Per Mainline Segment + Per Connection') {
+    const parts = [];
+  
+    if (item.quantity) parts.push(`${item.quantity} Segments`);
+    if (item.serviceConnections) {
+      parts.push(`${item.serviceConnections} connections`);
+    }
+  
+    return parts.length > 0 ? parts.join(' / ') : 'No quantity';
+  }
   if (item.billingMethod === 'Flat Rate') return 'Flat rate';
 
   return 'No quantity';
@@ -761,9 +802,9 @@ const displayedServiceStartDate = firstActiveServiceDate
           hours: number;
           feet: number;
           laterals: number;
-          residences: number;
           mainlineTests: number;
-          flatRates: number;
+serviceConnections: number;
+flatRates: number;
         }
       >
     >((summary, entry) => {
@@ -775,33 +816,64 @@ const displayedServiceStartDate = firstActiveServiceDate
           hours: 0,
           feet: 0,
           laterals: 0,
-          residences: 0,
           mainlineTests: 0,
-          flatRates: 0,
+serviceConnections: 0,
+flatRates: 0,
         };
       }
   
       if (billingMethod === 'Per Hour') summary[serviceType].hours += entry.hours ?? 0;
       if (billingMethod === 'Per Foot') summary[serviceType].feet += entry.feet ?? 0;
       if (billingMethod === 'Per Lateral') summary[serviceType].laterals += entry.laterals ?? 0;
-      if (billingMethod === 'Per Residence') summary[serviceType].residences += entry.residences ?? 0;
-      if (billingMethod === 'Per Mainline Test') summary[serviceType].mainlineTests += entry.mainline_tests ?? 0;
+      if (billingMethod === 'Per Mainline Segment') summary[serviceType].mainlineTests += entry.mainline_tests ?? 0;
       if (billingMethod === 'Flat Rate' || entry.flat_rate) summary[serviceType].flatRates += 1;
   
       return summary;
     }, {});
   
-    const services = Object.entries(serviceTotals).map(([serviceType, totals]) => {
+    const services = Object.entries(serviceTotals).flatMap(([serviceType, totals]) => {
+      const isSmoke = serviceType.toLowerCase().includes('smoke');
+    
+      if (isSmoke) {
+        const smokeServices = [];
+    
+        if (totals.hours > 0) {
+          smokeServices.push({
+            serviceType: 'Smoke',
+            summary: `${totals.hours} hrs`,
+          });
+        }
+        
+        if (totals.mainlineTests > 0) {
+          smokeServices.push({
+            serviceType: 'Smoke',
+            summary: `${totals.mainlineTests} segments`,
+          });
+        }
+        
+        if (totals.serviceConnections > 0) {
+          smokeServices.push({
+            serviceType: 'Smoke',
+            summary: `${totals.serviceConnections} connections`,
+          });
+        }
+    
+        return smokeServices.length > 0
+          ? smokeServices
+          : [{ serviceType: 'Smoke', summary: 'No quantity' }];
+      }
+    
       const quantities = [];
-  
+    
       if (totals.hours > 0) quantities.push(`${totals.hours} hrs`);
       if (totals.feet > 0) quantities.push(`${totals.feet} ft`);
       if (totals.laterals > 0) quantities.push(`${totals.laterals} laterals`);
-      if (totals.residences > 0) quantities.push(`${totals.residences} residences`);
-      if (totals.mainlineTests > 0) quantities.push(`${totals.mainlineTests} tests`);
-      if (totals.flatRates > 0) quantities.push('Flat rate');
-  
-      return `${serviceType}: ${quantities.join(' • ') || 'No quantity'}`;
+      if (totals.flatRates > 0) quantities.push(`${totals.flatRates} flat rate`);
+    
+      return {
+        serviceType,
+        summary: quantities.join(' • ') || 'No quantity',
+      };
     });
   
     return {
@@ -832,8 +904,8 @@ const displayedServiceStartDate = firstActiveServiceDate
           hours: number;
           feet: number;
           laterals: number;
-          residences: number;
           mainlineTests: number;
+          serviceConnections: number;
           flatRates: number;
         }
       >
@@ -845,8 +917,8 @@ const displayedServiceStartDate = firstActiveServiceDate
           hours: 0,
           feet: 0,
           laterals: 0,
-          residences: 0,
           mainlineTests: 0,
+          serviceConnections: 0,
           flatRates: 0,
         };
       }
@@ -854,8 +926,10 @@ const displayedServiceStartDate = firstActiveServiceDate
       summary[serviceType].hours += Number(entry.hours ?? 0);
       summary[serviceType].feet += Number(entry.feet ?? 0);
       summary[serviceType].laterals += Number(entry.laterals ?? 0);
-      summary[serviceType].residences += Number(entry.residences ?? 0);
       summary[serviceType].mainlineTests += Number(entry.mainline_tests ?? 0);
+      summary[serviceType].serviceConnections += Number(
+        entry.residences ?? 0
+      );
   
       if (entry.flat_rate) {
         summary[serviceType].flatRates += 1;
@@ -864,16 +938,41 @@ const displayedServiceStartDate = firstActiveServiceDate
       return summary;
     }, {});
   
-    const services = Object.entries(serviceTotals).map(([serviceType, totals]) => {
+    const services = Object.entries(serviceTotals).flatMap(([serviceType, totals]) => {
+      const isSmoke = serviceType.toLowerCase().includes('smoke');
+    
+      if (isSmoke) {
+        const smokeQuantities = [];
+      
+        if (totals.hours > 0) {
+          smokeQuantities.push(`${totals.hours} hrs`);
+        }
+      
+        if (totals.mainlineTests > 0) {
+          smokeQuantities.push(`${totals.mainlineTests} segments`);
+        }
+      
+        if (totals.serviceConnections > 0) {
+          smokeQuantities.push(`${totals.serviceConnections} connections`);
+        }
+      
+        return [
+          {
+            serviceType: 'Smoke',
+            summary: smokeQuantities.length > 0
+              ? smokeQuantities.join('\n')
+              : 'No quantity',
+          },
+        ];
+      }
+    
       const quantities = [];
-  
+    
       if (totals.hours > 0) quantities.push(`${totals.hours} hrs`);
       if (totals.feet > 0) quantities.push(`${totals.feet} ft`);
       if (totals.laterals > 0) quantities.push(`${totals.laterals} laterals`);
-      if (totals.residences > 0) quantities.push(`${totals.residences} residences`);
-      if (totals.mainlineTests > 0) quantities.push(`${totals.mainlineTests} tests`);
       if (totals.flatRates > 0) quantities.push(`${totals.flatRates} flat rate`);
-  
+    
       return {
         serviceType,
         summary: quantities.join(' • ') || 'No quantity',
@@ -995,9 +1094,9 @@ const displayedServiceStartDate = firstActiveServiceDate
         hours,
         feet,
         laterals,
-        residences,
         mainline_tests,
-        flat_rate,
+        residences,
+                flat_rate,
         notes,
         created_at,
         updated_at,
@@ -1292,9 +1391,21 @@ async function submitTimeEntry() {
     hours: item.billingMethod === 'Per Hour' ? Number(item.quantity) : null,
     feet: item.billingMethod === 'Per Foot' ? Number(item.quantity) : null,
     laterals: item.billingMethod === 'Per Lateral' ? Number(item.quantity) : null,
-    residences: item.billingMethod === 'Per Residence' ? Number(item.quantity) : null,
-    mainline_tests: item.billingMethod === 'Per Mainline Test' ? Number(item.quantity) : null,
-    flat_rate: item.billingMethod === 'Flat Rate',
+    residences:
+  item.billingMethod === 'Per Residence'
+    ? Number(item.quantity)
+    : item.billingMethod === 'Per Mainline Segment + Per Connection' &&
+      item.serviceConnections
+    ? Number(item.serviceConnections)
+    : null,
+mainline_tests:
+  item.billingMethod === 'Per Mainline Segment'
+    ? Number(item.quantity)
+    : item.billingMethod === 'Per Mainline Segment + Per Connection' &&
+      item.quantity
+    ? Number(item.quantity)
+    : null,
+flat_rate: item.billingMethod === 'Flat Rate',
     notes: item.note,
     created_by: user.id,
     updated_by: user.id,
@@ -1427,7 +1538,7 @@ async function saveInlineTimeEntry(entryId: string) {
 const inlineShowsFeet = inlineBillingMethod === 'Per Foot';
 const inlineShowsLaterals = inlineBillingMethod === 'Per Lateral';
 const inlineShowsResidences = inlineBillingMethod === 'Per Residence';
-const inlineShowsMainlineTests = inlineBillingMethod === 'Per Mainline Test';
+const inlineShowsMainlineTests = inlineBillingMethod === 'Per Mainline Segment';
 const inlineShowsFlatRate = inlineBillingMethod === 'Flat Rate';
 
   const { error } = await supabase
@@ -2353,6 +2464,10 @@ traffic_control_pricing_type:
                   const nextQuantities = { ...serviceQuantities };
                   delete nextQuantities[serviceType];
                   setServiceQuantities(nextQuantities);
+
+                  const nextConnections = { ...serviceConnections };
+                  delete nextConnections[serviceType];
+                  setServiceConnections(nextConnections);
                 
                   const nextNotes = { ...serviceNotes };
                   delete nextNotes[serviceType];
@@ -2380,6 +2495,60 @@ traffic_control_pricing_type:
       <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
         {selectedServiceTypes.map((serviceType) => {
           const billingMethod = billingMethodForService(serviceType);
+
+          if (isSmokePackage(serviceType)) {
+            return (
+              <div key={serviceType} className="rounded-lg border p-3 md:col-span-2">
+                <p className="text-sm font-medium">Smoke</p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Per Mainline Segment + Connection
+                </p>
+          
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Mainline segments"
+                    value={serviceQuantities[serviceType] ?? ''}
+                    onChange={(e) =>
+                      setServiceQuantities({
+                        ...serviceQuantities,
+                        [serviceType]: e.target.value,
+                      })
+                    }
+                    className="block w-full rounded-lg border p-3"
+                  />
+          
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Service connections"
+                    value={serviceConnections[serviceType] ?? ''}
+                    onChange={(e) =>
+                      setServiceConnections({
+                        ...serviceConnections,
+                        [serviceType]: e.target.value,
+                      })
+                    }
+                    className="block w-full rounded-lg border p-3"
+                  />
+                </div>
+          
+                <textarea
+                  placeholder="Add note for Smoke..."
+                  value={serviceNotes[serviceType] ?? ''}
+                  onChange={(e) =>
+                    setServiceNotes({
+                      ...serviceNotes,
+                      [serviceType]: e.target.value,
+                    })
+                  }
+                  className="mt-3 w-full rounded-lg border p-3 text-sm"
+                  rows={3}
+                />
+              </div>
+            );
+          }
 
           if (billingMethod === 'Flat Rate') {
             return (
@@ -2559,19 +2728,18 @@ traffic_control_pricing_type:
   </div>
 
   <div className="space-y-2">
-    {serviceSummary.services.map((service) => (
-      <div
-        key={service.serviceType}
-        className="rounded-lg border bg-white px-3 py-2"
-      >
-        <div className="flex items-start justify-between gap-3 text-sm">
-          <span className="font-semibold text-gray-800">
+  {serviceSummary.services.map((service, index) => (
+  <div
+    key={`${service.serviceType}-${service.summary}-${index}`}
+    className="rounded-lg border bg-white px-3 py-2"
+  >
+<div className="flex items-center justify-between gap-3 text-sm">          <span className="font-semibold text-gray-800">
             {service.serviceType}
           </span>
 
-          <span className="text-right font-medium text-gray-600">
-            {service.summary}
-          </span>
+          <span className="whitespace-pre-line text-right font-medium text-gray-600">
+  {service.summary}
+</span>
         </div>
       </div>
     ))}
@@ -2877,9 +3045,7 @@ traffic_control_pricing_type:
           ? 'ft'
           : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Lateral'
           ? 'laterals'
-          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Residence'
-          ? 'residences'
-          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Mainline Test'
+          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Mainline Segment'
           ? 'tests'
           : ''}
       </span>
@@ -2904,7 +3070,7 @@ traffic_control_pricing_type:
                   hours:
                     nextBillingMethod === 'Per Hour' ||
                     nextBillingMethod === 'Per Residence' ||
-                    nextBillingMethod === 'Per Mainline Test'
+                    nextBillingMethod === 'Per Mainline Segment'
                       ? inlineTimeForm.hours
                       : '',
                   feet: nextBillingMethod === 'Per Foot' ? inlineTimeForm.feet : '',

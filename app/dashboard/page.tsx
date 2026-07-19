@@ -128,7 +128,7 @@ const pricingModelOptions = [
   {
     code: 'SMK',
     label: 'Smoke',
-    choices: ['Per Hour', 'Per Mainline Test', 'Per Residence'],
+    choices: ['Per Hour', 'Per Mainline Segment + Per Connection'],
   },
   {
     code: 'TRFC',

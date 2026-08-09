@@ -142,6 +142,11 @@ export default function ProjectDetailPage({
     });
   }
   
+  function formatFeet(value: number) {
+    return Number(value.toFixed(2)).toLocaleString('en-US', {
+      maximumFractionDigits: 2,
+    });
+  }
   
   const today = getLocalDateInputValue();
 
@@ -785,6 +790,7 @@ const displayedServiceStartDate = firstActiveServiceDate
   const latestServiceDate =
   timeEntries.length > 0 ? formatDate(timeEntries[0].work_date) : null;
 
+
   function serviceDateSummary(entries: TimeEntry[]) {
     const vehicles = Array.from(
       new Set(
@@ -867,7 +873,7 @@ flatRates: 0,
       const quantities = [];
     
       if (totals.hours > 0) quantities.push(`${totals.hours} hrs`);
-      if (totals.feet > 0) quantities.push(`${totals.feet} ft`);
+      if (totals.feet > 0) quantities.push(`${formatFeet(totals.feet)} ft`);
       if (totals.laterals > 0) quantities.push(`${totals.laterals} laterals`);
       if (totals.flatRates > 0) quantities.push(`${totals.flatRates} flat rate`);
     
@@ -970,7 +976,7 @@ flatRates: 0,
       const quantities = [];
     
       if (totals.hours > 0) quantities.push(`${totals.hours} hrs`);
-      if (totals.feet > 0) quantities.push(`${totals.feet} ft`);
+      if (totals.feet > 0) quantities.push(`${formatFeet(totals.feet)} ft`);
       if (totals.laterals > 0) quantities.push(`${totals.laterals} laterals`);
       if (totals.flatRates > 0) quantities.push(`${totals.flatRates} flat rate`);
     

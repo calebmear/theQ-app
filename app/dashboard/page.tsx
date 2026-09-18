@@ -389,6 +389,9 @@ export default function DashboardPage() {
 
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showProjectForm, setShowProjectForm] = useState(false);
+  const [duplicateProjectId, setDuplicateProjectId] = useState(false);
+  const [checkingProjectId, setCheckingProjectId] = useState(false);
+  const [projectIdCheckError, setProjectIdCheckError] = useState('');
   const [showCustomerBillingMethods, setShowCustomerBillingMethods] =
   useState(false);
 
@@ -758,10 +761,32 @@ trafficControlPricingType: '',
   }
 
   async function saveProject() {
-    if (!newProject.id.trim() || !newProject.customerId) return;
-
+    const projectId = newProject.id.trim();
+  
+    if (!projectId || !newProject.customerId) return;
+  
+    setCheckingProjectId(true);
+    setProjectIdCheckError('');
+  
+    try {
+      const exists = await projectIdExists(projectId);
+  
+      if (exists) {
+        setDuplicateProjectId(true);
+        return;
+      }
+    } catch (error) {
+      console.error('Error checking project ID before save:', error);
+      setProjectIdCheckError(
+        'Could not verify this project ID. Please try again.'
+      );
+      return;
+    } finally {
+      setCheckingProjectId(false);
+    }
+  
     const { error } = await supabase.from('projects').insert({
-      project_number: newProject.id,
+      project_number: projectId,
       customer_id: newProject.customerId,
       assigned_to: newProject.assignedToId || null,
       status: newProject.status,
@@ -829,6 +854,64 @@ loadDashboardServiceEntries();
 testBillingSheetConnection();
 
   }
+
+  async function projectIdExists(projectId: string) {
+    const normalizedId = projectId.trim();
+  
+    if (!normalizedId) return false;
+  
+    const { data, error } = await supabase
+      .from('projects')
+      .select('id')
+      .ilike('project_number', normalizedId)
+      .limit(1);
+  
+    if (error) throw error;
+  
+    return (data?.length ?? 0) > 0;
+  }
+  
+  useEffect(() => {
+    const projectId = newProject.id.trim();
+  
+    if (!showProjectForm || !projectId) {
+      setDuplicateProjectId(false);
+      setCheckingProjectId(false);
+      setProjectIdCheckError('');
+      return;
+    }
+  
+    let cancelled = false;
+  
+    const timeoutId = window.setTimeout(async () => {
+      setCheckingProjectId(true);
+      setProjectIdCheckError('');
+  
+      try {
+        const exists = await projectIdExists(projectId);
+  
+        if (!cancelled) {
+          setDuplicateProjectId(exists);
+        }
+      } catch (error) {
+        console.error('Error checking project ID:', error);
+  
+        if (!cancelled) {
+          setDuplicateProjectId(false);
+          setProjectIdCheckError('Could not verify this project ID.');
+        }
+      } finally {
+        if (!cancelled) {
+          setCheckingProjectId(false);
+        }
+      }
+    }, 400);
+  
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [newProject.id, showProjectForm]);
 
   
   async function loadRecentServices() {
@@ -1178,19 +1261,53 @@ onClick={() => {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium">
-                  Project ID / PO Number
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter project ID or PO number"
-                  value={newProject.id}
-                  onChange={(e) =>
-                    setNewProject({ ...newProject, id: e.target.value })
-                  }
-                  className="w-full rounded-lg border p-3"
-                />
-              </div>
+  <label className="mb-2 block text-sm font-medium">
+    Project ID / PO Number
+  </label>
+
+  <input
+    type="text"
+    placeholder="Enter project ID or PO number"
+    value={newProject.id}
+    onChange={(e) =>
+      setNewProject({ ...newProject, id: e.target.value })
+    }
+    aria-invalid={duplicateProjectId}
+    aria-describedby="project-id-message"
+    className={`w-full rounded-lg border p-3 outline-none ${
+      duplicateProjectId
+        ? 'border-red-500 bg-red-50 focus:ring-2 focus:ring-red-200'
+        : 'focus:ring-2 focus:ring-blue-200'
+    }`}
+  />
+
+  <div id="project-id-message" className="mt-2 min-h-5 text-sm">
+    {checkingProjectId && (
+      <p className="text-gray-500">Checking project ID...</p>
+    )}
+
+    {!checkingProjectId && duplicateProjectId && (
+      <p className="font-medium text-red-600">
+        This project ID already exists. Enter a unique ID before saving.
+      </p>
+    )}
+
+    {!checkingProjectId && projectIdCheckError && (
+      <p className="font-medium text-red-600">
+        {projectIdCheckError}
+      </p>
+    )}
+
+    {!checkingProjectId &&
+      newProject.id.trim() &&
+      !duplicateProjectId &&
+      !projectIdCheckError && (
+        <p className="font-medium text-green-700">
+          Project ID is available.
+        </p>
+      )}
+  </div>
+</div>
 
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-medium">
@@ -1341,12 +1458,18 @@ onClick={() => {
               </button>
 
               <button
-                type="button"
-                onClick={saveProject}
-                className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
-              >
-                Save Project
-              </button>
+  type="button"
+  onClick={saveProject}
+  disabled={
+    duplicateProjectId ||
+    checkingProjectId ||
+    !newProject.id.trim() ||
+    !newProject.customerId
+  }
+  className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
+>
+  {checkingProjectId ? 'Checking...' : 'Save Project'}
+</button>
             </div>
           </div>
         </div>

@@ -3691,7 +3691,7 @@ function ProjectSubmissionActions({ projectId, projectNumber, onRecordService, o
   const modalTitleId = useId();
   const [open, setOpen] = useState(false);
   const [date, setDate] = useState('');
-  const [reason, setReason] = useState<'Holiday' | 'Unable to Service'>('Holiday');
+  const [reason, setReason] = useState<'Holiday' | 'Unable to Service'>('Unable to Service');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -3790,26 +3790,43 @@ function ProjectSubmissionActions({ projectId, projectNumber, onRecordService, o
       </div>
       <dialog ref={dialog} aria-labelledby={modalTitleId}
         onCancel={(event) => { event.preventDefault(); if (!busy.current) setOpen(false); }}
+        style={{ width: 'calc(100% - 2rem)', maxWidth: '48rem', boxSizing: 'border-box' }}
         onClose={() => setOpen(false)}
-        className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl border-0 bg-white p-6 text-black shadow-xl backdrop:bg-black/40">
-        <h2 id={modalTitleId} className="text-xl font-bold">Record Holiday / Unable to Service</h2>
-        <p className="mt-1 text-sm text-gray-500">Project {projectNumber}</p>
-        <form onSubmit={submit} className="mt-5 space-y-4">
-          <label className="block text-sm font-medium">Date
-            <input type="date" required value={date} disabled={saving} onChange={(event) => setDate(event.target.value)} className="mt-2 block w-full rounded-lg border p-3" />
+        className="m-auto max-h-[90dvh] max-w-3xl overflow-y-auto rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b bg-white px-6 py-4">
+          <div className="min-w-0">
+            <h2 id={modalTitleId} className="text-xl font-bold">Record Holiday / Unable to Service</h2>
+            <p className="mt-1 break-words text-sm text-gray-600">Project {projectNumber}</p>
+          </div>
+          <button type="button" disabled={saving} onClick={() => setOpen(false)}
+            className="shrink-0 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">Close</button>
+        </div>
+        <form onSubmit={submit} className="min-w-0 space-y-4 p-6">
+          <label className="block min-w-0 text-sm font-medium">Date
+            <input type="date" required value={date} disabled={saving} onChange={(event) => setDate(event.target.value)} className="mt-2 block box-border min-w-0 w-full max-w-full appearance-none rounded-lg border border-black bg-white p-3 text-sm font-normal [&::-webkit-date-and-time-value]:min-w-0 [&::-webkit-date-and-time-value]:text-left" />
           </label>
-          <label className="block text-sm font-medium">Reason
-            <select value={reason} disabled={saving} onChange={(event) => setReason(event.target.value as 'Holiday' | 'Unable to Service')} className="mt-2 block w-full rounded-lg border p-3">
-              <option>Holiday</option><option>Unable to Service</option>
-            </select>
-          </label>
-          <label className="block text-sm font-medium">Note <span className="font-normal text-gray-500">(optional)</span>
-            <textarea rows={3} maxLength={2000} value={note} disabled={saving} onChange={(event) => setNote(event.target.value)} placeholder="Add any details..." className="mt-2 block w-full rounded-lg border p-3" />
+          <fieldset disabled={saving} className="min-w-0">
+            <legend className="mb-2 text-sm font-normal">Reason</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(['Unable to Service', 'Holiday'] as const).map((option) => (
+                <button key={option} type="button" aria-pressed={reason === option}
+                  onClick={() => setReason(option)}
+                  className={`min-h-11 min-w-0 rounded-lg border px-3 py-3 text-sm font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#009be5] focus-visible:ring-offset-2 disabled:opacity-50 ${
+                    reason === option
+                      ? 'border-black bg-black text-white'
+                      : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}>
+                  {option}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <label className="block min-w-0 text-sm font-medium">Note <span className="font-normal text-gray-500">(optional)</span>
+            <textarea rows={3} maxLength={2000} value={note} disabled={saving} onChange={(event) => setNote(event.target.value)} placeholder="Add any details..." className="mt-2 block box-border min-w-0 w-full max-w-full rounded-lg border bg-white p-3 text-sm font-normal" />
           </label>
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" disabled={saving} onClick={() => setOpen(false)} className="rounded-lg border px-5 py-3 text-sm hover:bg-gray-50 disabled:opacity-50">Cancel</button>
-            <button type="submit" disabled={saving || !date} className="rounded-lg bg-black px-5 py-3 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save Update'}</button>
+          <div className="grid gap-3">
+            <button type="submit" disabled={saving || !date} className="w-full rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50">{saving ? 'Saving...' : 'Save Update'}</button>
           </div>
         </form>
       </dialog>
@@ -3875,7 +3892,7 @@ function ProjectDayHistoryEntry({ entry, projectId, managing, canEdit, canDelete
           </label>
           <label className="block text-sm font-medium">Reason
             <select disabled={busy} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-2 block w-full rounded-lg border p-3 text-sm">
-              <option>Holiday</option><option>Unable to Service</option>
+              <option>Unable to Service</option><option>Holiday</option>
             </select>
           </label>
           <label className="block text-sm font-medium md:col-span-2">Note (optional)

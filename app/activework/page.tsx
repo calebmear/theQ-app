@@ -552,13 +552,17 @@ function ShopWorkCard() {
           event.preventDefault();
           closeShopWork();
         }}
+        style={{ width: 'calc(100% - 2rem)', maxWidth: '48rem', boxSizing: 'border-box' }}
         onClose={() => setShowShopWorkForm(false)}
-        className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-2xl rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
-        <div className="flex max-h-[calc(100dvh-2rem)] flex-col p-6">
-          <h2 id="shop-work-modal-title" className="text-2xl font-bold">Log Shop Work</h2>
-      <form onSubmit={submitShopWork} className="mt-4 flex min-h-0 flex-1 flex-col">
-        <div className="space-y-4 overflow-y-auto pr-1">
-        <div className="max-w-xs">
+        className="m-auto max-h-[90dvh] max-w-3xl overflow-y-auto rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b bg-white px-6 py-4">
+          <h2 id="shop-work-modal-title" className="min-w-0 text-xl font-bold">Log Shop Work</h2>
+          <button type="button" disabled={saving} onClick={closeShopWork}
+            className="shrink-0 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">Close</button>
+        </div>
+      <form onSubmit={submitShopWork} className="min-w-0 p-6">
+        <div className="min-w-0 space-y-4">
+        <div className="min-w-0">
           <label htmlFor="shop-work-date" className="mb-2 block text-sm font-medium">Work date</label>
           <input id="shop-work-date" type="date" required value={workDate} disabled={saving}
             onChange={(event) => {
@@ -566,9 +570,9 @@ function ShopWorkCard() {
               setSuccess('');
               setSaveError('');
             }}
-            className="min-w-0 w-full rounded-lg border p-3 text-base disabled:bg-gray-50" />
+            className="block box-border min-w-0 w-full max-w-full appearance-none rounded-lg border border-black bg-white p-3 text-sm font-normal disabled:bg-gray-50 [&::-webkit-date-and-time-value]:min-w-0 [&::-webkit-date-and-time-value]:text-left" />
         </div>
-        <fieldset disabled={saving}>
+        <fieldset disabled={saving} className="min-w-0">
           <legend className="mb-2 text-sm font-medium">Work area <span className="font-normal text-gray-500">(select at least one)</span></legend>
           <div className="grid grid-cols-3 gap-2">
             {shopWorkCategories.map((category) => (
@@ -589,20 +593,17 @@ function ShopWorkCard() {
             value={description} disabled={saving}
             onChange={(event) => { setDescription(event.target.value); setSuccess(''); }}
             placeholder="Describe the shop work you completed..."
-            className="block w-full resize-y rounded-lg border p-3 text-base disabled:bg-gray-50" />
+            className="block w-full resize-y rounded-lg border p-3 text-sm font-normal disabled:bg-gray-50" />
         </div>
         {saveError && <p role="alert" className="text-sm text-red-700">{saveError}</p>}
         </div>
-        <div className="mt-6 flex shrink-0 flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button type="button" disabled={saving} onClick={closeShopWork}
-            className="min-h-11 rounded-lg border px-5 py-3 hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+        <div className="mt-4 grid gap-3">
         <button type="submit" disabled={saving || !workDate || !description.trim() || categories.length === 0}
-          className="min-h-11 rounded-lg bg-black px-5 py-3 font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">
+          className="w-full rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50">
           {saving ? 'Saving...' : 'Submit Shop Work'}
         </button>
         </div>
       </form>
-        </div>
       </dialog>
 
       <ShopWorkHistory refreshKey={historyRevision} onAddForDate={(date) => {

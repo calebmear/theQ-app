@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { Wrench } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserProfile } from '../../lib/useUserProfile';
@@ -26,8 +27,10 @@ type BillingMethodCodes = {
   MAIN?: string;
   LAT?: string;
   JET?: string;
+  PUSH?: string;
   DYE?: string;
   SMK?: string;
+  LABOR?: string;
   TRFC?: string;
 };
 
@@ -99,8 +102,10 @@ const emptyPricingModels = {
   MAIN: '',
   LAT: '',
   JET: '',
+  PUSH: '',
   DYE: '',
   SMK: '',
+  LABOR: '',
   TRFC: '',
 };
 
@@ -121,6 +126,11 @@ const pricingModelOptions = [
     choices: ['Per Hour', 'Per Foot'],
   },
   {
+    code: 'PUSH',
+    label: 'Push Rod',
+    choices: ['Per Hour'],
+  },
+  {
     code: 'DYE',
     label: 'Dye',
     choices: ['Per Hour'],
@@ -129,6 +139,11 @@ const pricingModelOptions = [
     code: 'SMK',
     label: 'Smoke',
     choices: ['Per Hour', 'Per Mainline Segment + Per Connection'],
+  },
+  {
+    code: 'LABOR',
+    label: 'Laborer',
+    choices: ['Per Hour'],
   },
   {
     code: 'TRFC',
@@ -432,8 +447,10 @@ billingMethodSource: 'customer',
 mainPricingType: '',
 lateralPricingType: '',
 jetPricingType: '',
+pushRodPricingType: '',
 dyePricingType: '',
 smokePricingType: '',
+laborerPricingType: '',
 trafficControlPricingType: '',
   });
 
@@ -598,7 +615,7 @@ trafficControlPricingType: '',
       const { data, error } = await supabase
         .from('customers')
         .select(
-          'id, name, contact_name, phone, email, address, main_pricing_type, lateral_pricing_type, jet_pricing_type, dye_pricing_type, smoke_pricing_type, traffic_control_pricing_type, notes'
+          'id, name, contact_name, phone, email, address, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type, notes'
         )        
         .order('name');
 
@@ -618,8 +635,10 @@ trafficControlPricingType: '',
           MAIN: customer.main_pricing_type ?? '',
           LAT: customer.lateral_pricing_type ?? '',
           JET: customer.jet_pricing_type ?? '',
+          PUSH: customer.push_rod_pricing_type ?? '',
           DYE: customer.dye_pricing_type ?? '',
           SMK: customer.smoke_pricing_type ?? '',
+          LABOR: customer.laborer_pricing_type ?? '',
           TRFC: customer.traffic_control_pricing_type ?? '',
         },
         notes: customer.notes ?? '',
@@ -714,8 +733,10 @@ trafficControlPricingType: '',
         main_pricing_type: newCustomer.pricingModels.MAIN,
         lateral_pricing_type: newCustomer.pricingModels.LAT,
         jet_pricing_type: newCustomer.pricingModels.JET,
+        push_rod_pricing_type: newCustomer.pricingModels.PUSH,
         dye_pricing_type: newCustomer.pricingModels.DYE,
         smoke_pricing_type: newCustomer.pricingModels.SMK,
+        laborer_pricing_type: newCustomer.pricingModels.LABOR,
         traffic_control_pricing_type: newCustomer.pricingModels.TRFC,
       })
       .select()
@@ -738,8 +759,10 @@ trafficControlPricingType: '',
         MAIN: data.main_pricing_type ?? '',
         LAT: data.lateral_pricing_type ?? '',
         JET: data.jet_pricing_type ?? '',
+        PUSH: data.push_rod_pricing_type ?? '',
         DYE: data.dye_pricing_type ?? '',
         SMK: data.smoke_pricing_type ?? '',
+        LABOR: data.laborer_pricing_type ?? '',
         TRFC: data.traffic_control_pricing_type ?? '',
       },
       notes: data.notes ?? '',
@@ -807,6 +830,10 @@ jet_pricing_type:
   newProject.billingMethodSource === 'project'
     ? newProject.jetPricingType
     : null,
+push_rod_pricing_type:
+  newProject.billingMethodSource === 'project'
+    ? newProject.pushRodPricingType
+    : null,
 dye_pricing_type:
   newProject.billingMethodSource === 'project'
     ? newProject.dyePricingType
@@ -814,6 +841,10 @@ dye_pricing_type:
 smoke_pricing_type:
   newProject.billingMethodSource === 'project'
     ? newProject.smokePricingType
+    : null,
+laborer_pricing_type:
+  newProject.billingMethodSource === 'project'
+    ? newProject.laborerPricingType
     : null,
 traffic_control_pricing_type:
   newProject.billingMethodSource === 'project'
@@ -841,8 +872,10 @@ traffic_control_pricing_type:
       mainPricingType: '',
       lateralPricingType: '',
       jetPricingType: '',
+      pushRodPricingType: '',
       dyePricingType: '',
       smokePricingType: '',
+      laborerPricingType: '',
       trafficControlPricingType: '',
     });
 
@@ -1401,8 +1434,10 @@ onClick={() => {
           MAIN: 'mainPricingType',
           LAT: 'lateralPricingType',
           JET: 'jetPricingType',
+          PUSH: 'pushRodPricingType',
           DYE: 'dyePricingType',
           SMK: 'smokePricingType',
+          LABOR: 'laborerPricingType',
           TRFC: 'trafficControlPricingType',
         } as const;
 
@@ -1697,24 +1732,78 @@ function DashboardServiceCalendar({
   entries: DashboardServiceEntry[];
   formatDate: (value: string | undefined) => string;
 }) {
-  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(`${dashboardShopToday()}T00:00:00`));
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(dashboardShopToday);
+  const [calendarView, setCalendarView] = useState<'all' | 'service' | 'shop'>('all');
+  const [shopEntries, setShopEntries] = useState<DashboardShopEntry[]>([]);
+  const [shopLoading, setShopLoading] = useState(true);
+  const [shopError, setShopError] = useState('');
+  const [shopRevision, setShopRevision] = useState(0);
+  const [loadedShopMonth, setLoadedShopMonth] = useState('');
+  const shopMonth = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}`;
+  const showService = calendarView !== 'shop';
+  const showShop = calendarView !== 'service';
+  const shopReady = loadedShopMonth === shopMonth && !shopLoading && !shopError;
 
   useEffect(() => {
-    if (entries.length === 0) return;
-  
-    const sortedDates = [...entries]
-      .map((entry) => entry.work_date)
-      .sort();
-  
-    const latestEntryDate = sortedDates[sortedDates.length - 1];
-  
-    if (!latestEntryDate) return;
-  
-    const [year, month] = latestEntryDate.split('-').map(Number);
-  
-    setCalendarMonth(new Date(year, month - 1, 1));
-  }, [entries]);
+    let cancelled = false;
+    async function load() {
+      setShopLoading(true);
+      setShopError('');
+      setShopEntries([]);
+      try {
+        const range = dashboardShopMonth(shopMonth);
+        const { data, error } = await supabase.rpc('get_dashboard_shop_work', {
+          p_start: range.start, p_end: range.end,
+        });
+        if (error) throw error;
+        if (!cancelled) {
+          setShopEntries((data ?? []) as DashboardShopEntry[]);
+          setLoadedShopMonth(shopMonth);
+        }
+      } catch (error) {
+        if (!cancelled) setShopError(error instanceof Error ? error.message :
+          (error as { message?: string })?.message || 'Could not load shop work.');
+      } finally {
+        if (!cancelled) setShopLoading(false);
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [shopMonth, shopRevision]);
+
+  useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => setShopRevision((value) => value + 1), 250);
+    };
+    const channel = supabase.channel('dashboard-shop-calendar')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'shop_work_entries' }, refresh)
+      .subscribe((status) => {
+        // Also catch changes made before subscription or during a reconnect.
+        if (status === 'SUBSCRIBED') refresh();
+      });
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearTimeout(debounceTimer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const visibleShopEntries = shopReady ? shopEntries : [];
+  const shopCountByDate = visibleShopEntries.reduce<Record<string, number>>((counts, entry) => {
+    counts[entry.work_date] = (counts[entry.work_date] ?? 0) + 1;
+    return counts;
+  }, {});
+  const shopAreas = shopAreasByDate(visibleShopEntries);
+  const selectedShopEntries = showShop
+    ? visibleShopEntries.filter((entry) => entry.work_date === selectedCalendarDate)
+    : [];
 
   function dateKey(date: Date) {
     const year = date.getFullYear();
@@ -1790,7 +1879,7 @@ function DashboardServiceCalendar({
     {}
   );
 
-  const selectedCalendarEntries = selectedCalendarDate
+  const selectedCalendarEntries = showService && selectedCalendarDate
     ? entries.filter((entry) => entry.work_date === selectedCalendarDate)
     : [];
 
@@ -1816,41 +1905,58 @@ function DashboardServiceCalendar({
     return {
       day,
       key,
-      serviceCount: serviceCountByDate[key] ?? 0,
-      hasZeroQuantity: serviceHasZeroQuantityByDate[key] ?? false,
-      isToday: key === dateKey(new Date()),
+      serviceCount: showService ? serviceCountByDate[key] ?? 0 : 0,
+      shopCount: showShop ? shopCountByDate[key] ?? 0 : 0,
+      areas: showShop ? shopAreas[key] ?? [] : [],
+      hasZeroQuantity: showService && (serviceHasZeroQuantityByDate[key] ?? false),
+      isToday: key === dashboardShopToday(),
     };
   });
 
   return (
     <div className="rounded-2xl bg-white p-4 shadow md:p-6">
       <div>
-        <h2 className="text-xl font-bold">Service Calendar</h2>
+        <h2 className="text-xl font-bold">Work Calendar</h2>
         <p className="mt-1 text-sm text-gray-600">
-          Monthly view of service submissions across all projects.
+          View project services and shop work in one calendar.
         </p>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 items-center gap-2 text-[11px] font-medium text-gray-600">
-        <div className="flex min-w-0 items-center justify-center gap-1">
-          <span className="h-3.5 w-3.5 shrink-0 rounded bg-[#009be5]" />
-          <span className="whitespace-nowrap">Serviced</span>
-        </div>
-
-        <div className="flex min-w-0 items-center justify-center gap-1">
-          <span className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_3px,#8fd8f7_3px,#8fd8f7_5px)]" />
-          <span className="whitespace-nowrap">Holiday/Unable</span>
-        </div>
-
-        <div className="flex min-w-0 items-center justify-center gap-1">
-          <span className="h-3.5 w-3.5 shrink-0 rounded border bg-gray-50" />
-          <span className="whitespace-nowrap">No Service</span>
-        </div>
+      <div role="group" aria-label="Calendar work filter" className="mt-4 grid grid-cols-3 gap-2">
+        {([{ value: 'all', label: 'All Work' }, { value: 'service', label: 'Service' }, { value: 'shop', label: 'Shop' }] as const).map((view) => (
+          <button key={view.value} type="button" aria-pressed={calendarView === view.value}
+            onClick={() => setCalendarView(view.value)}
+            className={`min-h-11 rounded-lg border px-2 py-2 text-sm font-medium ${calendarView === view.value
+              ? 'border-[#8fd8f7] bg-[#e8f7ff] text-[#007bb5]' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'}`}>
+            {view.label}
+          </button>
+        ))}
       </div>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] font-medium text-gray-600">
+        {showService && <>
+          <span className="flex items-center gap-1"><span className="h-3.5 w-3.5 rounded bg-[#009be5]" />Serviced</span>
+          <span className="flex items-center gap-1"><span className="h-3.5 w-3.5 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_3px,#8fd8f7_3px,#8fd8f7_5px)]" />Holiday/Unable</span>
+        </>}
+        {showShop && <span className="flex items-center gap-1 text-[#16324f]"><span className="h-3.5 w-3.5 rounded bg-[#16324f]" />Shop Work</span>}
+        <span className="flex items-center gap-1"><span className="h-3.5 w-3.5 rounded border bg-gray-50" />No submissions</span>
+      </div>
+      {showShop && (!shopReady || shopError) && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+          {shopLoading || (!shopError && !shopReady)
+            ? <p role="status" className="text-gray-500">Loading shop submissions…</p>
+            : shopError ? <p role="alert" className="text-red-700">Shop submissions unavailable: {shopError}</p>
+            : null}
+          {shopError && <button type="button" disabled={shopLoading} onClick={() => setShopRevision((value) => value + 1)}
+            className="rounded-lg border px-3 py-2 font-medium hover:bg-gray-50 disabled:opacity-50">
+            Retry shop
+          </button>}
+        </div>
+      )}
 
       <div className="mt-4 flex items-center justify-center gap-3">
         <button
           type="button"
+          aria-label="Previous month"
           onClick={() => changeCalendarMonth(-1)}
           className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
         >
@@ -1863,6 +1969,7 @@ function DashboardServiceCalendar({
 
         <button
           type="button"
+          aria-label="Next month"
           onClick={() => changeCalendarMonth(1)}
           className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
         >
@@ -1883,24 +1990,32 @@ function DashboardServiceCalendar({
 
         {calendarDays.map((day) => {
           const hasService = day.serviceCount > 0;
+          const hasShop = day.shopCount > 0;
           const isSelected = selectedCalendarDate === day.key;
 
           return (
             <button
               key={day.key}
               type="button"
+              aria-pressed={isSelected}
+              aria-label={`${day.key}${showService ? `: ${day.serviceCount} service submissions` : ''}${showShop ? shopReady ? `; ${day.shopCount} shop submissions${day.areas.length ? `; ${day.areas.join(', ')}` : ''}` : '; shop submissions not loaded' : ''}`}
               onClick={() => setSelectedCalendarDate(isSelected ? null : day.key)}
-              className={`relative flex aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
-                day.hasZeroQuantity
+              style={hasService && hasShop ? {
+                backgroundImage: day.hasZeroQuantity
+                  ? 'linear-gradient(135deg, transparent 50%, #16324f 50%), repeating-linear-gradient(135deg, #f1faff 0, #f1faff 7px, #8fd8f7 7px, #8fd8f7 9px)'
+                  : 'linear-gradient(135deg, #009be5 50%, #16324f 50%)',
+              } : undefined}
+              className={`relative flex min-h-11 aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
+                hasService && hasShop ? 'text-white shadow-sm' : day.hasZeroQuantity
                   ? 'bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_7px,#8fd8f7_7px,#8fd8f7_9px)] text-[#005f8f] shadow-sm'
                   : hasService
                   ? 'bg-[#009be5] text-white shadow-sm'
-                  : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                  : hasShop ? 'bg-[#16324f] text-white shadow-sm' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
               } ${isSelected ? 'ring-2 ring-black ring-offset-2' : ''} ${
                 day.isToday && !isSelected ? 'ring-2 ring-[#009be5] ring-offset-1' : ''
               }`}
             >
-              {day.day}
+              <span className={hasShop && day.hasZeroQuantity ? 'rounded bg-[#16324f] px-1' : undefined}>{day.day}</span>
             </button>
           );
         })}
@@ -1913,6 +2028,7 @@ function DashboardServiceCalendar({
           </p>
 
           <div className="mt-3 space-y-2">
+          {selectedCalendarEntries.length > 0 && <h3 className="text-xs font-semibold uppercase text-[#007bb5]">Service</h3>}
           {selectedCalendarEntries.map((entry) => (
   <Link
     key={entry.id}
@@ -1952,6 +2068,24 @@ function DashboardServiceCalendar({
 )}
   </Link>
 ))}
+            {selectedShopEntries.length > 0 && <h3 className="pt-2 text-xs font-semibold uppercase text-[#16324f]">Shop Work</h3>}
+            {selectedShopEntries.map((entry) => (
+              <div key={`shop-${entry.id}`} className="rounded-lg border border-slate-200 bg-white p-3">
+                {shopWorkCategories.some((area) => entry.categories?.includes(area)) && (
+                  <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-xs font-medium text-[#16324f]">
+                    {shopWorkCategories.filter((area) => entry.categories?.includes(area)).map((area) => (
+                      <span key={area} className="inline-flex items-center gap-1"><ShopAreaIcon area={area} className="h-4 w-4" />{area}</span>
+                    ))}
+                  </div>
+                )}
+                <p className="whitespace-pre-wrap break-words text-sm text-gray-700">{entry.description}</p>
+                <p className="mt-2 text-xs text-gray-500">Submitted by {entry.technician_name} · {new Date(entry.created_at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'short', timeStyle: 'short' })} ET</p>
+              </div>
+            ))}
+            {selectedCalendarEntries.length === 0 && selectedShopEntries.length === 0 && (!showShop || shopReady) && (
+              <p className="text-sm text-gray-500">No {calendarView === 'all' ? 'work' : calendarView} submissions for this day.</p>
+            )}
+            {showShop && !shopReady && <p className="text-sm text-gray-500">{shopError ? 'Shop work could not be loaded. Retry above.' : 'Shop work is loading.'}</p>}
           </div>
         </div>
       )}
@@ -2152,3 +2286,68 @@ function ProjectTable({
     </div>
   );
 }
+
+type DashboardShopEntry = {
+  id: string;
+  categories: string[];
+  work_date: string;
+  description: string;
+  created_by: string;
+  technician_name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+function dashboardShopToday() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(new Date());
+}
+
+function dashboardShopMonth(month: string) {
+  const [year, number] = month.split('-').map(Number);
+  const next = new Date(year, number, 1);
+  return {
+    start: `${month}-01`,
+    end: `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-01`,
+    blanks: new Date(year, number - 1, 1).getDay(),
+    days: new Date(year, number, 0).getDate(),
+    label: new Date(year, number - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+  };
+}
+
+
+const shopWorkCategories = ['Van', 'Truck', 'Misc'] as const;
+type ShopWorkCategory = typeof shopWorkCategories[number];
+
+function ShopAreaIcon({ area, className }: { area: ShopWorkCategory; className: string }) {
+  if (area === 'Misc') return <Wrench aria-hidden="true" className={className} />;
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      {area === 'Van' ? (
+        <>
+          <path d="M2 16V4h12v12M14 8h4l4 5v5h-2M2 18h2M8 18h8M14 13h8" />
+          <circle cx="6" cy="18" r="2" /><circle cx="18" cy="18" r="2" />
+        </>
+      ) : (
+        <>
+          <path d="M2 17v-6h7V7h7l3 6h3v4h-2M8 17h8M2 17h2M9 11v2h10M13 7v6M2 13h7" />
+          <circle cx="6" cy="17" r="2" /><circle cx="18" cy="17" r="2" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+function shopAreasByDate(entries: { work_date: string; categories?: string[] | null }[]) {
+  const areas: Record<string, Set<string>> = {};
+  for (const entry of entries) {
+    const dayAreas = areas[entry.work_date] ??= new Set<string>();
+    for (const area of entry.categories ?? []) dayAreas.add(area);
+  }
+  return Object.fromEntries(Object.entries(areas).map(([date, dayAreas]) => [
+    date, shopWorkCategories.filter((area) => dayAreas.has(area)),
+  ]));
+}
+
+

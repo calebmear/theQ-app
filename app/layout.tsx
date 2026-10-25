@@ -20,6 +20,8 @@ export const viewport = {
   themeColor: '#f3f4f6',
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: 'cover',
 };
 
@@ -30,7 +32,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-gray-100">
+      <body
+        className="bg-gray-100">
+      
         <AppShell>{children}</AppShell>
       </body>
     </html>

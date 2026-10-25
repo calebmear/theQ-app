@@ -17,8 +17,10 @@ type Customer = {
   mainPricingType: string;
   lateralPricingType: string;
   jetPricingType: string;
+  pushRodPricingType: string;
   dyePricingType: string;
 smokePricingType: string;
+laborerPricingType: string;
 trafficControlPricingType: string;
 
 };
@@ -36,8 +38,10 @@ const pricingOptions = {
   mainPricingType: ['Per Hour', 'Per Foot'],
   lateralPricingType: ['Per Hour', 'Per Lateral'],
   jetPricingType: ['Per Hour', 'Per Foot'],
+  pushRodPricingType: ['Per Hour'],
   dyePricingType: ['Per Hour'],
   smokePricingType: ['Per Hour', 'Per Mainline Test + Per Residence'],
+  laborerPricingType: ['Per Hour'],
   trafficControlPricingType: ['Flat Rate'],
 
 };
@@ -66,8 +70,10 @@ export default function CustomerDetailPage({
     mainPricingType: '',
     lateralPricingType: '',
     jetPricingType: '',
+    pushRodPricingType: '',
     dyePricingType: '',
     smokePricingType: '',
+    laborerPricingType: '',
     trafficControlPricingType: '',
 
   });
@@ -77,7 +83,7 @@ export default function CustomerDetailPage({
       const { data, error } = await supabase
         .from('customers')
         .select(
-          'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, dye_pricing_type, smoke_pricing_type, traffic_control_pricing_type'
+          'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type'
 
           )
         
@@ -101,8 +107,10 @@ export default function CustomerDetailPage({
         mainPricingType: data.main_pricing_type ?? '',
 lateralPricingType: data.lateral_pricing_type ?? '',
 jetPricingType: data.jet_pricing_type ?? '',
+pushRodPricingType: data.push_rod_pricing_type ?? '',
 dyePricingType: data.dye_pricing_type ?? '',
 smokePricingType: data.smoke_pricing_type ?? '',
+laborerPricingType: data.laborer_pricing_type ?? '',
 trafficControlPricingType: data.traffic_control_pricing_type ?? '',
 
 
@@ -201,8 +209,10 @@ setProjects(formattedProjects);
       mainPricingType: customer.mainPricingType,
       lateralPricingType: customer.lateralPricingType,
       jetPricingType: customer.jetPricingType,
+      pushRodPricingType: customer.pushRodPricingType,
       dyePricingType: customer.dyePricingType,
       smokePricingType: customer.smokePricingType,
+      laborerPricingType: customer.laborerPricingType,
       trafficControlPricingType: customer.trafficControlPricingType,
     });
   
@@ -221,8 +231,10 @@ setProjects(formattedProjects);
       customerEditForm.mainPricingType !== customer.mainPricingType ||
       customerEditForm.lateralPricingType !== customer.lateralPricingType ||
       customerEditForm.jetPricingType !== customer.jetPricingType ||
+      customerEditForm.pushRodPricingType !== customer.pushRodPricingType ||
       customerEditForm.dyePricingType !== customer.dyePricingType ||
       customerEditForm.smokePricingType !== customer.smokePricingType ||
+      customerEditForm.laborerPricingType !== customer.laborerPricingType ||
       customerEditForm.trafficControlPricingType !==
         customer.trafficControlPricingType;
   
@@ -237,8 +249,10 @@ setProjects(formattedProjects);
         main_pricing_type: customerEditForm.mainPricingType,
         lateral_pricing_type: customerEditForm.lateralPricingType,
         jet_pricing_type: customerEditForm.jetPricingType,
+        push_rod_pricing_type: customerEditForm.pushRodPricingType,
         dye_pricing_type: customerEditForm.dyePricingType,
         smoke_pricing_type: customerEditForm.smokePricingType,
+        laborer_pricing_type: customerEditForm.laborerPricingType,
         traffic_control_pricing_type: customerEditForm.trafficControlPricingType,
         ...(pricingChanged && {
           pricing_updated_at: new Date().toISOString(),
@@ -262,8 +276,10 @@ setProjects(formattedProjects);
       mainPricingType: customerEditForm.mainPricingType,
       lateralPricingType: customerEditForm.lateralPricingType,
       jetPricingType: customerEditForm.jetPricingType,
+      pushRodPricingType: customerEditForm.pushRodPricingType,
       dyePricingType: customerEditForm.dyePricingType,
       smokePricingType: customerEditForm.smokePricingType,
+      laborerPricingType: customerEditForm.laborerPricingType,
       trafficControlPricingType: customerEditForm.trafficControlPricingType,
     });
   
@@ -387,20 +403,6 @@ setProjects(formattedProjects);
   />
 
   <PricingSelect
-    code="DYE"
-    editing={editingCustomer}
-    value={customerEditForm.dyePricingType}
-    displayValue={customer.dyePricingType || 'Not set'}
-    choices={pricingOptions.dyePricingType}
-    onChange={(value) =>
-      setCustomerEditForm({
-        ...customerEditForm,
-        dyePricingType: value,
-      })
-    }
-  />
-
-  <PricingSelect
     code="LAT"
     editing={editingCustomer}
     value={customerEditForm.lateralPricingType}
@@ -410,6 +412,48 @@ setProjects(formattedProjects);
       setCustomerEditForm({
         ...customerEditForm,
         lateralPricingType: value,
+      })
+    }
+  />
+
+  <PricingSelect
+    code="JET"
+    editing={editingCustomer}
+    value={customerEditForm.jetPricingType}
+    displayValue={customer.jetPricingType || 'Not set'}
+    choices={pricingOptions.jetPricingType}
+    onChange={(value) =>
+      setCustomerEditForm({
+        ...customerEditForm,
+        jetPricingType: value,
+      })
+    }
+  />
+
+  <PricingSelect
+    code="PUSH"
+    editing={editingCustomer}
+    value={customerEditForm.pushRodPricingType}
+    displayValue={customer.pushRodPricingType || 'Not set'}
+    choices={pricingOptions.pushRodPricingType}
+    onChange={(value) =>
+      setCustomerEditForm({
+        ...customerEditForm,
+        pushRodPricingType: value,
+      })
+    }
+  />
+
+  <PricingSelect
+    code="DYE"
+    editing={editingCustomer}
+    value={customerEditForm.dyePricingType}
+    displayValue={customer.dyePricingType || 'Not set'}
+    choices={pricingOptions.dyePricingType}
+    onChange={(value) =>
+      setCustomerEditForm({
+        ...customerEditForm,
+        dyePricingType: value,
       })
     }
   />
@@ -429,21 +473,20 @@ setProjects(formattedProjects);
   />
 
   <PricingSelect
-    code="JET"
+    code="LABOR"
     editing={editingCustomer}
-    value={customerEditForm.jetPricingType}
-    displayValue={customer.jetPricingType || 'Not set'}
-    choices={pricingOptions.jetPricingType}
+    value={customerEditForm.laborerPricingType}
+    displayValue={customer.laborerPricingType || 'Not set'}
+    choices={pricingOptions.laborerPricingType}
     onChange={(value) =>
       setCustomerEditForm({
         ...customerEditForm,
-        jetPricingType: value,
+        laborerPricingType: value,
       })
     }
   />
 
-
-<PricingSelect
+  <PricingSelect
   code="TRFC"
   editing={editingCustomer}
   value={customerEditForm.trafficControlPricingType}
@@ -641,8 +684,8 @@ function PricingSelect({
   onChange: (value: string) => void;
 }) {
   return (
-<div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[40px_minmax(0,1fr)] sm:items-center sm:gap-x-2">
-      <span className="font-semibold">{code}</span>
+<div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-center sm:gap-x-2">
+      <span className="whitespace-nowrap font-semibold">{code}</span>
 
       {editing ? (
         <select
@@ -663,7 +706,7 @@ function PricingSelect({
           ))}
         </select>
       ) : (
-        <span className="text-gray-600">{displayValue}</span>
+        <span className="min-w-0 break-words text-gray-600">{displayValue}</span>
       )}
     </div>
   );

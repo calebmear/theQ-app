@@ -1,12 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState, type ChangeEvent } from 'react';
-import { Copy } from 'lucide-react';
+import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { Copy, ChevronDown } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useSearchParams } from 'next/navigation';
 import { useUserProfile } from '../../../lib/useUserProfile';
 
+
+type ProjectDayUpdate = {
+  id: string;
+  work_date: string;
+  reason: string;
+  note: string;
+  created_at: string;
+  technician: string;
+  created_by: string;
+  updated_at: string;
+};
 
 type ProjectDetail = {
   id: string;
@@ -20,8 +31,10 @@ type ProjectDetail = {
   main_pricing_type: string | null;
   lateral_pricing_type: string | null;
   jet_pricing_type: string | null;
+  push_rod_pricing_type: string | null;
   dye_pricing_type: string | null;
   smoke_pricing_type: string | null;
+  laborer_pricing_type: string | null;
   traffic_control_pricing_type: string | null;
   billing_methods_updated_at: string | null;
 
@@ -36,8 +49,10 @@ type ProjectDetail = {
     main_pricing_type: string | null;
     lateral_pricing_type: string | null;
     jet_pricing_type: string | null;
+    push_rod_pricing_type: string | null;
     dye_pricing_type: string | null;
     smoke_pricing_type: string | null;
+    laborer_pricing_type: string | null;
     traffic_control_pricing_type: string | null;
 
   } | null;
@@ -151,6 +166,43 @@ export default function ProjectDetailPage({
   const today = getLocalDateInputValue();
 
 const [project, setProject] = useState<ProjectDetail | null>(null);
+const [dayUpdates, setDayUpdates] = useState<ProjectDayUpdate[]>([]);
+const [dayUpdatesError, setDayUpdatesError] = useState('');
+const [dayUpdatesLoading, setDayUpdatesLoading] = useState(false);
+const [dayRevision, setDayRevision] = useState(0);
+const [dayUpdateNotice, setDayUpdateNotice] = useState('');
+
+useEffect(() => {
+  const projectId = project?.id;
+  if (!projectId) return;
+  let cancelled = false;
+  async function loadDayUpdates() {
+    setDayUpdatesLoading(true);
+    setDayUpdatesError('');
+    try {
+      const { data, error } = await supabase.from('project_day_updates')
+        .select('id, work_date, reason, note, created_at, created_by, updated_at, created_profile:user_profiles!project_day_updates_created_by_fkey(full_name)')
+        .eq('project_id', projectId).is('deleted_at', null).order('work_date', { ascending: false });
+      if (error) throw error;
+      if (!cancelled) setDayUpdates((data ?? []).map((entry) => {
+        const profile = Array.isArray(entry.created_profile) ? entry.created_profile[0] : entry.created_profile;
+        return { id: entry.id, work_date: entry.work_date, reason: entry.reason,
+          note: entry.note ?? '', created_at: entry.created_at,
+          created_by: entry.created_by, updated_at: entry.updated_at,
+          technician: profile?.full_name || 'Unknown technician' };
+      }));
+    } catch (failure) {
+      if (!cancelled) setDayUpdatesError(failure instanceof Error ? failure.message :
+        (failure as { message?: string })?.message || 'Could not load Holiday/Unable updates.');
+    } finally {
+      if (!cancelled) setDayUpdatesLoading(false);
+    }
+  }
+  setDayUpdates([]);
+  void loadDayUpdates();
+  return () => { cancelled = true; };
+}, [project?.id, dayRevision]);
+
 const [projectAttachments, setProjectAttachments] = useState<ProjectAttachment[]>([]);
 const [uploadingAttachment, setUploadingAttachment] = useState(false);
 const [loading, setLoading] = useState(true);
@@ -238,8 +290,10 @@ const [projectEditForm, setProjectEditForm] = useState({
   mainPricingType: '',
   lateralPricingType: '',
   jetPricingType: '',
+  pushRodPricingType: '',
   dyePricingType: '',
   smokePricingType: '',
+  laborerPricingType: '',
   trafficControlPricingType: '',
 });
 const [editingTimeEntryId, setEditingTimeEntryId] = useState<string | null>(
@@ -304,8 +358,10 @@ const standardBillingMethods = {
   main: 'Per Foot',
   lateral: 'Per Lateral',
   jet: 'Per Foot',
+  pushRod: 'Per Hour',
   dye: 'Per Hour',
   smoke: 'Per Mainline Segment + Per Connection',
+  laborer: 'Per Hour',
   trafficControl: 'Flat Rate',
 };
 
@@ -329,6 +385,12 @@ const billingTypeOptions = [
     choices: ['Per Hour', 'Per Foot'],
   },
   {
+    code: 'PUSH',
+    label: 'Push Rod',
+    field: 'pushRodPricingType',
+    choices: ['Per Hour'],
+  },
+  {
     code: 'DYE',
     label: 'Dye',
     field: 'dyePricingType',
@@ -339,6 +401,12 @@ const billingTypeOptions = [
     label: 'Smoke',
     field: 'smokePricingType',
     choices: ['Per Hour', 'Per Mainline Segments + Connections'],
+  },
+  {
+    code: 'LABOR',
+    label: 'Laborer',
+    field: 'laborerPricingType',
+    choices: ['Per Hour'],
   },
   {
     code: 'TRFC',
@@ -356,8 +424,12 @@ function getProjectBillingMethods() {
       main: project.main_pricing_type || standardBillingMethods.main,
       lateral: project.lateral_pricing_type || standardBillingMethods.lateral,
       jet: project.jet_pricing_type || standardBillingMethods.jet,
+      pushRod: project.push_rod_pricing_type || standardBillingMethods.pushRod,
       dye: project.dye_pricing_type || standardBillingMethods.dye,
       smoke: project.smoke_pricing_type || standardBillingMethods.smoke,
+      laborer:
+        project.laborer_pricing_type ||
+        standardBillingMethods.laborer,
       trafficControl:
         project.traffic_control_pricing_type ||
         standardBillingMethods.trafficControl,
@@ -373,8 +445,12 @@ function getProjectBillingMethods() {
     lateral:
       project.customers?.lateral_pricing_type || standardBillingMethods.lateral,
     jet: project.customers?.jet_pricing_type || standardBillingMethods.jet,
+    pushRod: project.customers?.push_rod_pricing_type || standardBillingMethods.pushRod,
     dye: project.customers?.dye_pricing_type || standardBillingMethods.dye,
     smoke: project.customers?.smoke_pricing_type || standardBillingMethods.smoke,
+    laborer:
+      project.customers?.laborer_pricing_type ||
+      standardBillingMethods.laborer,
     trafficControl:
       project.customers?.traffic_control_pricing_type ||
       standardBillingMethods.trafficControl,
@@ -387,12 +463,14 @@ function billingMethodForService(serviceType: string) {
   if (serviceType === 'Mainline') return billingMethods.main;
   if (serviceType === 'Lateral') return billingMethods.lateral;
   if (serviceType === 'Jetter') return billingMethods.jet;
+  if (serviceType === 'Push Rod') return billingMethods.pushRod;
   if (serviceType === 'Dye') return billingMethods.dye;
   if (serviceType === 'Smoke') {
     return billingMethods.smoke === 'Per Hour'
       ? 'Per Hour'
       : 'Per Mainline Segment + Per Connection';
   }
+  if (serviceType === 'Laborer') return billingMethods.laborer;
   if (serviceType === 'Traffic Control') return billingMethods.trafficControl;
 
   return '';
@@ -484,8 +562,10 @@ const serviceTypeOptions = [
   'Mainline',
   'Lateral',
   'Jetter',
+  'Push Rod',
   'Dye',
   'Smoke',
+  'Laborer',
   'Traffic Control',
 ] as const;
 
@@ -639,8 +719,10 @@ billing_method_source,
 main_pricing_type,
 lateral_pricing_type,
 jet_pricing_type,
+push_rod_pricing_type,
 dye_pricing_type,
 smoke_pricing_type,
+laborer_pricing_type,
 traffic_control_pricing_type,
 billing_methods_updated_at,
 assigned_to,
@@ -654,8 +736,10 @@ customers (
   main_pricing_type,
   lateral_pricing_type,
   jet_pricing_type,
+  push_rod_pricing_type,
   dye_pricing_type,
   smoke_pricing_type,
+  laborer_pricing_type,
   traffic_control_pricing_type
 ),
           employees (
@@ -691,8 +775,10 @@ const employee = Array.isArray(data.employees)
 main_pricing_type: data.main_pricing_type,
 lateral_pricing_type: data.lateral_pricing_type,
 jet_pricing_type: data.jet_pricing_type,
+push_rod_pricing_type: data.push_rod_pricing_type,
 dye_pricing_type: data.dye_pricing_type,
 smoke_pricing_type: data.smoke_pricing_type,
+laborer_pricing_type: data.laborer_pricing_type,
 traffic_control_pricing_type: data.traffic_control_pricing_type,
 billing_methods_updated_at: data.billing_methods_updated_at,
 
@@ -1007,6 +1093,16 @@ flatRates: 0,
   );
   
   const serviceSummary = projectServiceSummary(timeEntries);
+  const submissionDates = Array.from(new Set([
+    ...timeEntries.map((entry) => entry.work_date),
+    ...dayUpdates.map((entry) => entry.work_date),
+  ])).sort().reverse();
+  const groupedSubmissionHistory = submissionDates.map((date) => ({
+    workDate: date,
+    entries: timeEntries.filter((entry) => entry.work_date === date),
+    dayEntries: dayUpdates.filter((entry) => entry.work_date === date),
+  }));
+
   
   function dateKey(date: Date) {
     const year = date.getFullYear();
@@ -1054,6 +1150,9 @@ flatRates: 0,
     {}
   );
   
+  const interruptedDates = new Set(dayUpdates.map((entry) => entry.work_date));
+  const selectedDayUpdates = dayUpdates.filter((entry) => entry.work_date === selectedCalendarDate);
+
   const selectedCalendarEntries = selectedCalendarDate
     ? timeEntries.filter((entry) => entry.work_date === selectedCalendarDate)
     : [];
@@ -1724,8 +1823,11 @@ function startProjectEdit() {
 mainPricingType: project.main_pricing_type ?? billingMethods.main,
 lateralPricingType: project.lateral_pricing_type ?? billingMethods.lateral,
 jetPricingType: project.jet_pricing_type ?? billingMethods.jet,
+pushRodPricingType: project.push_rod_pricing_type ?? billingMethods.pushRod,
 dyePricingType: project.dye_pricing_type ?? billingMethods.dye,
 smokePricingType: project.smoke_pricing_type ?? billingMethods.smoke,
+laborerPricingType:
+  project.laborer_pricing_type ?? billingMethods.laborer,
 trafficControlPricingType:
   project.traffic_control_pricing_type ?? billingMethods.trafficControl,
 
@@ -1876,8 +1978,11 @@ async function saveProjectEdit() {
   projectEditForm.lateralPricingType !==
     (project.lateral_pricing_type ?? '') ||
   projectEditForm.jetPricingType !== (project.jet_pricing_type ?? '') ||
+  projectEditForm.pushRodPricingType !== (project.push_rod_pricing_type ?? '') ||
   projectEditForm.dyePricingType !== (project.dye_pricing_type ?? '') ||
   projectEditForm.smokePricingType !== (project.smoke_pricing_type ?? '') ||
+  projectEditForm.laborerPricingType !==
+    (project.laborer_pricing_type ?? '') ||
   projectEditForm.trafficControlPricingType !==
     (project.traffic_control_pricing_type ?? '');
 
@@ -1912,6 +2017,10 @@ jet_pricing_type:
   projectEditForm.billingMethodSource === 'project'
     ? projectEditForm.jetPricingType
     : null,
+push_rod_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.pushRodPricingType
+    : null,
 dye_pricing_type:
   projectEditForm.billingMethodSource === 'project'
     ? projectEditForm.dyePricingType
@@ -1919,6 +2028,10 @@ dye_pricing_type:
 smoke_pricing_type:
   projectEditForm.billingMethodSource === 'project'
     ? projectEditForm.smokePricingType
+    : null,
+laborer_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.laborerPricingType
     : null,
 traffic_control_pricing_type:
   projectEditForm.billingMethodSource === 'project'
@@ -1960,6 +2073,10 @@ jet_pricing_type:
   projectEditForm.billingMethodSource === 'project'
     ? projectEditForm.jetPricingType
     : null,
+push_rod_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.pushRodPricingType
+    : null,
 dye_pricing_type:
   projectEditForm.billingMethodSource === 'project'
     ? projectEditForm.dyePricingType
@@ -1967,6 +2084,10 @@ dye_pricing_type:
 smoke_pricing_type:
   projectEditForm.billingMethodSource === 'project'
     ? projectEditForm.smokePricingType
+    : null,
+laborer_pricing_type:
+  projectEditForm.billingMethodSource === 'project'
+    ? projectEditForm.laborerPricingType
     : null,
 traffic_control_pricing_type:
   projectEditForm.billingMethodSource === 'project'
@@ -2318,6 +2439,11 @@ traffic_control_pricing_type:
     <span className="min-w-0 break-words text-gray-600">
       {billingMethods.jet}
     </span>
+
+    <span className="font-semibold">PUSH</span>
+    <span className="min-w-0 break-words text-gray-600">
+      {billingMethods.pushRod}
+    </span>
   </div>
 
   <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
@@ -2331,6 +2457,10 @@ traffic_control_pricing_type:
       {billingMethods.smoke}
     </span>
 
+    <span className="font-semibold">LABOR</span>
+    <span className="min-w-0 break-words text-gray-600">
+      {billingMethods.laborer}
+    </span>
     <span className="font-semibold">TRFC</span>
     <span className="min-w-0 break-words text-gray-600">
       {billingMethods.trafficControl}
@@ -2372,14 +2502,17 @@ traffic_control_pricing_type:
   <div className="min-w-0 space-y-6">
 
   {canSubmitService && (
-  <button
-  type="button"
-  onClick={() => setShowServiceSubmission(true)}
-  className="w-full rounded-lg border border-[#009be5] bg-[#eaf7fe] px-5 py-3 text-sm font-semibold text-[#007bb8] shadow-sm hover:bg-[#d8f0fc]"
->
-  + Record Service
-</button>
-)}
+    <ProjectSubmissionActions projectId={project.id} projectNumber={project.project_number}
+      onRecordService={() => setShowServiceSubmission(true)}
+      onDayRecorded={(date) => {
+        setDayRevision((value) => value + 1);
+        setSelectedCalendarDate(date);
+        const [year, month] = date.split('-').map(Number);
+        setCalendarMonth(new Date(year, month - 1, 1));
+        setDayUpdateNotice('Project update saved. It is shown in the calendar below.');
+      }} />
+  )}
+  {dayUpdateNotice && <p role="status" className="text-sm text-green-700">{dayUpdateNotice}</p>}
 
 {canSubmitService && showServiceSubmission && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -2811,6 +2944,8 @@ traffic_control_pricing_type:
     ))}
   </div>
 
+  {dayUpdatesLoading && <p role="status" className="mt-2 text-xs text-gray-500">Loading Holiday/Unable updates…</p>}
+  {dayUpdatesError && <div className="mt-2"><p role="alert" className="text-sm text-red-700">Holiday/Unable updates unavailable: {dayUpdatesError}</p><button type="button" onClick={() => setDayRevision((value) => value + 1)} className="mt-1 rounded-lg border px-3 py-2 text-sm">Retry</button></div>}
   <div className="mt-2 grid grid-cols-7 gap-1">
     {calendarBlankDays.map((_, index) => (
       <div key={`blank-${index}`} className="aspect-square" />
@@ -2819,6 +2954,7 @@ traffic_control_pricing_type:
     {calendarDays.map((day) => {
       const hasService = day.serviceCount > 0;
       const hasZeroQuantity = day.hasZeroQuantity;
+      const hasDayUpdate = interruptedDates.has(day.key);
       const isSelected = selectedCalendarDate === day.key;
 
       return (
@@ -2827,7 +2963,7 @@ traffic_control_pricing_type:
           type="button"
           onClick={() => setSelectedCalendarDate(isSelected ? null : day.key)}
           className={`relative flex aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
-            hasZeroQuantity
+            (hasZeroQuantity || (hasDayUpdate && !hasService))
     ? 'bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_7px,#8fd8f7_7px,#8fd8f7_9px)] text-[#005f8f] shadow-sm'
     : hasService
     ? 'bg-[#009be5] text-white shadow-sm'
@@ -2837,6 +2973,7 @@ traffic_control_pricing_type:
           }`}
         >
           {day.day}
+          {hasDayUpdate && hasService && <span aria-label="Holiday or unable-to-work update also recorded" className="absolute right-1 top-1 h-2.5 w-2.5 rounded border border-white bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_2px,#8fd8f7_2px,#8fd8f7_4px)]" />}
 
           {day.serviceCount > 0 && (
   <span className="absolute bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-0.5">
@@ -2870,8 +3007,32 @@ traffic_control_pricing_type:
       <p className="text-sm font-bold text-gray-900">
         {formatDate(selectedCalendarDate)}
       </p>
+      {canSubmitService && (
+        <div className="mt-3">
+          <ProjectSubmissionActions projectId={project.id} projectNumber={project.project_number}
+            defaultDate={selectedCalendarDate} buttonLabel="+ Add entry for this date"
+            onRecordService={() => {
+              setTimeForm((current) => ({ ...current, workDate: selectedCalendarDate }));
+              setShowServiceSubmission(true);
+            }}
+            onDayRecorded={(date) => {
+              setDayRevision((value) => value + 1);
+              setSelectedCalendarDate(date);
+              const [year, month] = date.split('-').map(Number);
+              setCalendarMonth(new Date(year, month - 1, 1));
+              setDayUpdateNotice('Project update saved.');
+            }} />
+        </div>
+      )}
 
       <div className="mt-3 space-y-2">
+        {selectedDayUpdates.map((entry) => (
+          <div key={`day-${entry.id}`} className="rounded-lg border border-blue-100 bg-white p-3 text-sm">
+            <p className="font-semibold text-[#005f8f]">{entry.reason}</p>
+            {entry.note && <p className="mt-2 whitespace-pre-wrap break-words text-gray-700">{entry.note}</p>}
+            <p className="mt-2 text-xs text-gray-500">Submitted by {entry.technician} · {new Date(entry.created_at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'short', timeStyle: 'short' })} ET</p>
+          </div>
+        ))}
         {selectedCalendarEntries.map((entry) => (
           <div key={entry.id} className="rounded-lg bg-white p-3 text-sm">
             <div className="flex items-start justify-between gap-3">
@@ -2911,7 +3072,7 @@ traffic_control_pricing_type:
       <div>
         <h2 className="text-xl font-bold">Service History</h2>
         <p className="mt-1 text-sm text-gray-600">
-          View submitted service entries.
+          View service, holiday, and unable-to-service submissions.
         </p>
       </div>
 
@@ -2938,9 +3099,10 @@ traffic_control_pricing_type:
         </button>
       </div>
 
+      {dayUpdatesError && <p role="alert" className="mt-3 text-sm text-red-700">Holiday/Unable history unavailable: {dayUpdatesError}</p>}
       <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto pr-2">
 
-      {groupedTimeEntries.map(([workDate, entries]) => {
+      {groupedSubmissionHistory.map(({ workDate, entries, dayEntries }) => {
   const isDateExpanded = expandedServiceDates.includes(workDate);
   const summary = serviceDateSummary(entries);
 
@@ -2964,13 +3126,13 @@ traffic_control_pricing_type:
       </p>
 
       <p className="mt-1 truncate text-sm text-gray-600">
-  {serviceNamesForEntries(entries)}
+  {[...(entries.length ? [serviceNamesForEntries(entries)] : []), ...Array.from(new Set(dayEntries.map((entry) => entry.reason)))].join(', ')}
 </p>
     </div>
 
     <div className="shrink-0 text-right">
       <p className="text-xs font-medium text-gray-500">
-        {entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+        {entries.length + dayEntries.length} {entries.length + dayEntries.length === 1 ? 'entry' : 'entries'}
       </p>
 
       <span className="mt-1 block text-xl leading-none text-gray-400">
@@ -2984,6 +3146,19 @@ traffic_control_pricing_type:
 
 {isDateExpanded && (
   <div className="max-h-[60vh] space-y-2 overflow-y-auto border-t bg-gray-50 p-3 pr-2 md:max-h-none md:overflow-visible md:pr-3">
+    {dayEntries.map((entry) => (
+      <ProjectDayHistoryEntry key={`day-${entry.id}`} entry={entry} projectId={project.id}
+        managing={managingTimeEntries}
+        canEdit={canManageHistory || (normalizedRole === 'field' && entry.created_by === currentUserId)}
+        canDelete={canManageHistory}
+        onSaved={(date) => {
+          setDayRevision((value) => value + 1);
+          setExpandedServiceDates((dates) => dates.includes(date) ? dates : [...dates, date]);
+          setSelectedCalendarDate(date);
+          const [year, month] = date.split('-').map(Number);
+          setCalendarMonth(new Date(year, month - 1, 1));
+        }} />
+    ))}
     {entries.map((entry) => {
   const isEditing = inlineEditingTimeEntryId === entry.id;
 
@@ -3090,8 +3265,10 @@ traffic_control_pricing_type:
               <option>Mainline</option>
               <option>Lateral</option>
               <option>Jetter</option>
+              <option>Push Rod</option>
               <option>Dye</option>
               <option>Smoke</option>
+              <option>Laborer</option>
               <option>Traffic Control</option>
             </select>
           </div>
@@ -3222,9 +3399,9 @@ traffic_control_pricing_type:
   );
 })}
 
-{timeEntries.length === 0 && (
+{timeEntries.length === 0 && dayUpdates.length === 0 && !dayUpdatesLoading && !dayUpdatesError && (
     <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-      No time entries submitted yet.
+      No submissions yet.
     </div>
   )}
       </div>
@@ -3499,6 +3676,232 @@ traffic_control_pricing_type:
 </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ProjectSubmissionActions({ projectId, projectNumber, onRecordService, onDayRecorded, defaultDate, buttonLabel = '+ Record Service' }: {
+  projectId: string;
+  projectNumber: string;
+  onRecordService: () => void;
+  onDayRecorded: (date: string) => void;
+  defaultDate?: string;
+  buttonLabel?: string;
+}) {
+  const modalTitleId = useId();
+  const [open, setOpen] = useState(false);
+  const [date, setDate] = useState('');
+  const [reason, setReason] = useState<'Holiday' | 'Unable to Service'>('Holiday');
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const dialog = useRef<HTMLDialogElement>(null);
+  const menu = useRef<HTMLDetailsElement>(null);
+  const busy = useRef(false);
+  const request = useRef<{ id: string; signature: string } | null>(null);
+
+  useEffect(() => {
+    function dismiss(event: PointerEvent) {
+      if (menu.current && !menu.current.contains(event.target as Node)) menu.current.open = false;
+    }
+    document.addEventListener('pointerdown', dismiss);
+    return () => document.removeEventListener('pointerdown', dismiss);
+  }, []);
+
+  useEffect(() => {
+    if (!dialog.current) return;
+    if (!open) {
+      if (dialog.current.open) dialog.current.close();
+      return;
+    }
+    if (!dialog.current.open) dialog.current.showModal();
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; };
+  }, [open]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy.current) return;
+    setError('');
+    if (!date || note.trim().length > 2000) {
+      setError('Choose a date and keep the note under 2,000 characters.');
+      return;
+    }
+    busy.current = true;
+    setSaving(true);
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error('Please sign in to record this update.');
+      const signature = JSON.stringify([projectId, user.id, date, reason, note.trim()]);
+      if (request.current?.signature !== signature) request.current = { id: crypto.randomUUID(), signature };
+      const id = request.current.id;
+      const { error: saveError } = await supabase.from('project_day_updates').insert({
+        id, project_id: projectId, work_date: date, reason, note: note.trim(), created_by: user.id,
+      });
+      if (saveError) {
+        if (saveError.code !== '23505') throw saveError;
+        const { data: saved, error: lookupError } = await supabase.from('project_day_updates')
+          .select('id').eq('id', id).eq('created_by', user.id).eq('project_id', projectId).maybeSingle();
+        if (lookupError || !saved) throw lookupError || saveError;
+      }
+      request.current = null;
+      setNote('');
+      setOpen(false);
+      onDayRecorded(date);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message :
+        (failure as { message?: string })?.message || 'Could not save the update. Please retry.');
+    } finally {
+      busy.current = false;
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="relative flex w-full rounded-lg border border-[#009be5] bg-[#eaf7fe] text-[#007bb8] shadow-sm">
+        <button type="button" onClick={() => { if (menu.current) menu.current.open = false; onRecordService(); }}
+          className="min-h-12 min-w-0 flex-1 rounded-l-lg px-3 py-3 text-sm font-semibold hover:bg-[#d8f0fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#009be5]">
+          {buttonLabel}
+        </button>
+        <details ref={menu} className="group" onKeyDown={(event) => {
+          if (event.key === 'Escape' && menu.current) {
+            menu.current.open = false;
+            menu.current.querySelector('summary')?.focus();
+          }
+        }}>
+          <summary aria-label="More project recording options"
+            className="flex h-full min-h-12 w-12 cursor-pointer list-none items-center justify-center gap-2 rounded-r-lg border-l border-[#009be5] px-3 py-3 text-sm font-semibold hover:bg-[#d8f0fc] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#009be5] [&::-webkit-details-marker]:hidden">
+            <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none group-open:rotate-180" />
+          </summary>
+          <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-xl border border-gray-200 bg-white p-2 text-gray-800 shadow-lg">
+            <button type="button" onClick={() => {
+              if (menu.current) menu.current.open = false;
+              setDate(defaultDate ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
+              setError('');
+              setOpen(true);
+            }} className="min-h-12 w-full rounded-lg px-3 py-3 text-left text-sm font-semibold hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#009be5]">
+              Record Holiday / Unable to Service
+            </button>
+          </div>
+        </details>
+      </div>
+      <dialog ref={dialog} aria-labelledby={modalTitleId}
+        onCancel={(event) => { event.preventDefault(); if (!busy.current) setOpen(false); }}
+        onClose={() => setOpen(false)}
+        className="m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-2xl border-0 bg-white p-6 text-black shadow-xl backdrop:bg-black/40">
+        <h2 id={modalTitleId} className="text-xl font-bold">Record Holiday / Unable to Service</h2>
+        <p className="mt-1 text-sm text-gray-500">Project {projectNumber}</p>
+        <form onSubmit={submit} className="mt-5 space-y-4">
+          <label className="block text-sm font-medium">Date
+            <input type="date" required value={date} disabled={saving} onChange={(event) => setDate(event.target.value)} className="mt-2 block w-full rounded-lg border p-3" />
+          </label>
+          <label className="block text-sm font-medium">Reason
+            <select value={reason} disabled={saving} onChange={(event) => setReason(event.target.value as 'Holiday' | 'Unable to Service')} className="mt-2 block w-full rounded-lg border p-3">
+              <option>Holiday</option><option>Unable to Service</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium">Note <span className="font-normal text-gray-500">(optional)</span>
+            <textarea rows={3} maxLength={2000} value={note} disabled={saving} onChange={(event) => setNote(event.target.value)} placeholder="Add any details..." className="mt-2 block w-full rounded-lg border p-3" />
+          </label>
+          {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" disabled={saving} onClick={() => setOpen(false)} className="rounded-lg border px-5 py-3 text-sm hover:bg-gray-50 disabled:opacity-50">Cancel</button>
+            <button type="submit" disabled={saving || !date} className="rounded-lg bg-black px-5 py-3 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Saving...' : 'Save Update'}</button>
+          </div>
+        </form>
+      </dialog>
+    </div>
+  );
+}
+
+function ProjectDayHistoryEntry({ entry, projectId, managing, canEdit, canDelete, onSaved }: {
+  entry: ProjectDayUpdate;
+  projectId: string;
+  managing: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  onSaved: (date: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [date, setDate] = useState(entry.work_date);
+  const [reason, setReason] = useState(entry.reason);
+  const [note, setNote] = useState(entry.note);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const lock = useRef(false);
+  useEffect(() => { if (!managing) { setEditing(false); setError(''); } }, [managing]);
+
+  async function save(remove: boolean) {
+    if (lock.current || (remove ? !canDelete : !canEdit)) return;
+    setError('');
+    if (!remove && (!date || note.trim().length > 2000)) {
+      setError('Choose a date and keep the note under 2,000 characters.');
+      return;
+    }
+    if (remove && !window.confirm('Delete this Holiday/Unable to Service submission?')) return;
+    lock.current = true;
+    setBusy(true);
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError) throw authError;
+      if (!user) throw new Error('Please sign in to change this submission.');
+      const values = remove ? { deleted_at: new Date().toISOString() }
+        : { work_date: date, reason, note: note.trim() };
+      const { data, error: saveError } = await supabase.from('project_day_updates')
+        .update(values).eq('id', entry.id).eq('project_id', projectId)
+        .eq('updated_at', entry.updated_at).is('deleted_at', null).select('id').maybeSingle();
+      if (saveError) throw saveError;
+      if (!data) throw new Error('This submission changed or is unavailable. Refresh the page before trying again.');
+      setEditing(false);
+      onSaved(remove ? entry.work_date : date);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message :
+        (failure as { message?: string })?.message || 'Could not update this submission.');
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-white p-3">
+      {editing ? (
+        <form onSubmit={(event) => { event.preventDefault(); void save(false); }} className="grid gap-4 md:grid-cols-2">
+          <label className="block text-sm font-medium">Date
+            <input type="date" required disabled={busy} value={date} onChange={(event) => setDate(event.target.value)} className="mt-2 block w-full rounded-lg border p-3 text-sm" />
+          </label>
+          <label className="block text-sm font-medium">Reason
+            <select disabled={busy} value={reason} onChange={(event) => setReason(event.target.value)} className="mt-2 block w-full rounded-lg border p-3 text-sm">
+              <option>Holiday</option><option>Unable to Service</option>
+            </select>
+          </label>
+          <label className="block text-sm font-medium md:col-span-2">Note (optional)
+            <textarea rows={3} maxLength={2000} disabled={busy} value={note} onChange={(event) => setNote(event.target.value)} className="mt-2 block w-full rounded-lg border p-3 text-sm" />
+          </label>
+          <div className="flex gap-2 md:col-span-2">
+            <button type="submit" disabled={busy} className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-50">{busy ? 'Saving...' : 'Save'}</button>
+            <button type="button" disabled={busy} onClick={() => { setEditing(false); setError(''); }} className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50">Cancel</button>
+            {canDelete && <button type="button" disabled={busy} onClick={() => void save(true)} className="ml-auto rounded-lg border px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">Delete</button>}
+          </div>
+        </form>
+      ) : (
+        <>
+          <p className="text-sm font-semibold text-[#005f8f]">{entry.reason}</p>
+          {entry.note && <p className="mt-2 whitespace-pre-wrap break-words text-sm text-gray-700">{entry.note}</p>}
+          <p className="mt-2 text-xs text-gray-500">Submitted by {entry.technician} · {new Date(entry.created_at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'short', timeStyle: 'short' })} ET</p>
+          {entry.updated_at !== entry.created_at && <p className="mt-1 text-xs text-gray-500">Updated {new Date(entry.updated_at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'short', timeStyle: 'short' })} ET</p>}
+          {managing && (canEdit || canDelete) && (
+            <div className="mt-3 flex gap-2">
+              {canEdit && <button type="button" disabled={busy} onClick={() => { setDate(entry.work_date); setReason(entry.reason); setNote(entry.note); setError(''); setEditing(true); }} className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">Edit</button>}
+              {canDelete && <button type="button" disabled={busy} onClick={() => void save(true)} className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">Delete</button>}
+            </div>
+          )}
+        </>
+      )}
+      {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
     </div>
   );
 }

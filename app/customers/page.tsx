@@ -10,8 +10,10 @@ type PricingModels = {
   MAIN: string;
   LAT: string;
   JET: string;
+  PUSH: string;
   DYE: string;
   SMK: string;
+  LABOR: string;
   TRFC: string;
 };
 
@@ -40,8 +42,10 @@ const emptyPricingModels: PricingModels = {
   MAIN: '',
   LAT: '',
   JET: '',
+  PUSH: '',
   DYE: '',
   SMK: '',
+  LABOR: '',
   TRFC: '',
 };
 
@@ -49,12 +53,14 @@ const pricingModelOptions = [
   { code: 'MAIN', label: 'Mainline', choices: ['Per Hour', 'Per Foot'] },
   { code: 'LAT', label: 'Lateral', choices: ['Per Hour', 'Per Lateral'] },
   { code: 'JET', label: 'Jetter', choices: ['Per Hour', 'Per Foot'] },
+  { code: 'PUSH', label: 'Push Rod', choices: ['Per Hour'] },
   { code: 'DYE', label: 'Dye', choices: ['Per Hour'] },
   {
     code: 'SMK',
     label: 'Smoke',
     choices: ['Per Hour', 'Per Mainline Test + Per Residence'],
   },
+  { code: 'LABOR', label: 'Laborer', choices: ['Flat Rate'] },
   { code: 'TRFC', label: 'Traffic Control', choices: ['Flat Rate'] },
 ] as const;
 
@@ -91,7 +97,7 @@ const canManageCustomers =
     const { data, error } = await supabase
       .from('customers')
       .select(
-        'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, dye_pricing_type, smoke_pricing_type, traffic_control_pricing_type'
+        'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type'
       )
       .order('name');
 
@@ -113,8 +119,10 @@ const canManageCustomers =
         MAIN: customer.main_pricing_type ?? '',
         LAT: customer.lateral_pricing_type ?? '',
         JET: customer.jet_pricing_type ?? '',
+        PUSH: customer.push_rod_pricing_type ?? '',
         DYE: customer.dye_pricing_type ?? '',
         SMK: customer.smoke_pricing_type ?? '',
+        LABOR: customer.laborer_pricing_type ?? '',
         TRFC: customer.traffic_control_pricing_type ?? '',
       },
     }));
@@ -164,8 +172,10 @@ const canManageCustomers =
         main_pricing_type: newCustomer.pricingModels.MAIN,
         lateral_pricing_type: newCustomer.pricingModels.LAT,
         jet_pricing_type: newCustomer.pricingModels.JET,
+        push_rod_pricing_type: newCustomer.pricingModels.PUSH,
         dye_pricing_type: newCustomer.pricingModels.DYE,
         smoke_pricing_type: newCustomer.pricingModels.SMK,
+        laborer_pricing_type: newCustomer.pricingModels.LABOR,
         traffic_control_pricing_type: newCustomer.pricingModels.TRFC,
       })
       .select()
@@ -189,8 +199,10 @@ const canManageCustomers =
         MAIN: data.main_pricing_type ?? '',
         LAT: data.lateral_pricing_type ?? '',
         JET: data.jet_pricing_type ?? '',
+        PUSH: data.push_rod_pricing_type ?? '',
         DYE: data.dye_pricing_type ?? '',
         SMK: data.smoke_pricing_type ?? '',
+        LABOR: data.laborer_pricing_type ?? '',
         TRFC: data.traffic_control_pricing_type ?? '',
       },
     };

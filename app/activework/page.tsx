@@ -618,6 +618,8 @@ function ShopWorkCard() {
 
 type ShopWorkEntry = {
   id: string;
+  created_by: string;
+  technician_name: string;
   categories: string[];
   work_date: string;
   description: string;
@@ -638,6 +640,7 @@ function shopMonthBounds(month: string) {
 }
 
 function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onAddForDate: (date: string) => void }) {
+  const [viewerId, setViewerId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [month, setMonth] = useState(() => shopWorkToday().slice(0, 7));
   const [selectedDate, setSelectedDate] = useState<string | null>(shopWorkToday);
@@ -666,13 +669,10 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
       try {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         if (authError) throw authError;
-        if (!user) throw new Error('Please sign in to view your shop work.');
+        if (!user) throw new Error('Please sign in to view shop work.');
+        if (!cancelled) setViewerId(user.id);
         const { start, end } = shopMonthBounds(month);
-        const { data, error } = await supabase.from('shop_work_entries')
-          .select('id, work_date, description, categories, created_at, updated_at')
-          .eq('created_by', user.id).is('deleted_at', null)
-          .gte('work_date', start).lt('work_date', end)
-          .order('created_at', { ascending: false });
+        const { data, error } = await supabase.rpc('get_team_shop_work', { p_start: start, p_end: end });
         if (error) throw error;
         if (!cancelled) setEntries(data ?? []);
       } catch (error) {
@@ -684,6 +684,14 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
     void load();
     return () => { cancelled = true; };
   }, [expanded, month, refreshKey, revision]);
+
+  useEffect(() => {
+    if (!expanded || editingId || busy) return;
+    const refresh = () => { if (document.visibilityState === 'visible') setRevision((value) => value + 1); };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [expanded, editingId, busy]);
 
   function discardEdit() {
     if (busyRef.current) return false;
@@ -709,6 +717,7 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
 
   async function changeEntry(entry: ShopWorkEntry, remove: boolean) {
     if (busyRef.current) return;
+    if (entry.created_by !== viewerId) { setActionError('You can only edit or delete your own shop entries.'); return; }
     setActionError('');
     setNotice('');
     if (!remove && (!editDate || !editDescription.trim() || editDescription.trim().length > 2000)) {
@@ -814,7 +823,7 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
                       + Add entry for this date
                     </button>
                     {selectedEntries.length === 0 && <p className="mt-2 text-sm text-gray-500">No shop work submitted for this day.</p>}
-                    {selectedEntries.length > 0 && (
+                    {selectedEntries.some((entry) => entry.created_by === viewerId) && (
                       <div className="mt-4 flex justify-end">
                         <button type="button" disabled={busy} aria-pressed={managingEntries}
                           onClick={() => {
@@ -830,7 +839,7 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
                     )}
                     <div className="mt-3 space-y-2">
                       {selectedEntries.map((entry) => <div key={entry.id} className="rounded-lg border bg-white p-3">
-                        {editingId === entry.id ? (
+                        {editingId === entry.id && entry.created_by === viewerId ? (
                           <form onSubmit={(event) => { event.preventDefault(); void changeEntry(entry, false); }} className="space-y-3">
                             <label className="block text-sm font-medium">Work date
                               <input type="date" required value={editDate} disabled={busy} onChange={(event) => setEditDate(event.target.value)} className="mt-1 block min-w-0 w-full rounded-lg border p-2 text-base" />
@@ -868,7 +877,8 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
                               </div>
                             )}
                             <p className="whitespace-pre-wrap break-words text-sm text-gray-700">{entry.description}</p>
-                            {managingEntries && (
+                            <p className="mt-2 text-xs text-gray-500">Submitted {new Date(entry.created_at).toLocaleString('en-US')} by {entry.technician_name}{entry.created_by === viewerId ? ' (you)' : ''}</p>
+                            {managingEntries && entry.created_by === viewerId && (
                               <div className="mt-3 flex gap-2">
                                 <button type="button" disabled={busy} onClick={() => { if (!discardEdit()) return; setEditCategories(shopWorkCategories.filter((area) => entry.categories?.includes(area))); setEditingId(entry.id); setEditDate(entry.work_date); setEditDescription(entry.description); setActionError(''); }} className="min-h-11 rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">Edit</button>
                                 <button type="button" disabled={busy} onClick={() => void changeEntry(entry, true)} className="min-h-11 rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">Delete</button>

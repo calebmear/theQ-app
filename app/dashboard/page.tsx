@@ -1042,6 +1042,8 @@ onClick={() => {
       </div>
     </div>
 
+    <AppRevenueSnapshot />
+
     <div>
     <div className="rounded-2xl bg-white p-4 shadow md:p-6">
     <div className="flex items-center justify-between gap-3">
@@ -2351,3 +2353,113 @@ function shopAreasByDate(entries: { work_date: string; categories?: string[] | n
 }
 
 
+
+type AppRevenueSnapshotData = {
+  total: number;
+  services: { service: string; amount: number; pending: number }[];
+  issues: { entry_id: string; project_id: string; project_name: string; work_date: string; service: string; issue: string }[];
+  available_years: number[];
+  priced_count: number;
+  excluded_count: number;
+  calculated_at: string;
+};
+const appRevenueServiceNames = ['Mainline', 'Lateral', 'Jetter', 'Push Rod', 'Dye', 'Smoke', 'Laborer', 'Traffic Control'];
+function appRevenueCurrency(amount: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(amount));
+}
+function AppRevenueSnapshot() {
+  const [today] = useState(() => {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
+    return { year: parts.find((part) => part.type === 'year')!.value, month: String(Number(parts.find((part) => part.type === 'month')!.value)) };
+  });
+  const [year, setYear] = useState(today.year);
+  const [month, setMonth] = useState('');
+  const [data, setData] = useState<AppRevenueSnapshotData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  const [showIssues, setShowIssues] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    let inFlight = false;
+    async function load(background = false) {
+      if (inFlight) return;
+      inFlight = true;
+      if (!background) setLoading(true);
+      try {
+        const response = await supabase.rpc('get_dashboard_app_revenue', { p_year: year ? Number(year) : null, p_month: year && month ? Number(month) : null });
+        if (response.error) throw response.error;
+        if (!response.data || !Array.isArray(response.data.services) || !Array.isArray(response.data.issues)) throw new Error('The revenue response was incomplete. Please retry.');
+        if (!cancelled) { setData(response.data as AppRevenueSnapshotData); setError(''); }
+      } catch (failure) {
+        if (!cancelled) setError((failure as { message?: string }).message || 'App revenue is unavailable.');
+      } finally {
+        inFlight = false;
+        if (!cancelled) setLoading(false);
+      }
+    }
+    void load();
+    const refresh = () => { if (document.visibilityState === 'visible') void load(true); };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [year, month, revision]);
+  const years = Array.from(new Set([Number(today.year), ...(data?.available_years ?? []), ...(year ? [Number(year)] : [])])).sort((a, b) => b - a);
+  const months = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString('en-US', { month: 'long' }));
+  const names = [...appRevenueServiceNames, ...(data?.services.map((row) => row.service).filter((name) => !appRevenueServiceNames.includes(name)) ?? [])].filter((name) => data?.services.some((row) => row.service === name));
+  const period = year ? `${month ? `${months[Number(month) - 1]} ` : ''}${year}` : 'All service dates';
+  return <section aria-labelledby="app-revenue-heading" className="rounded-2xl bg-white p-4 shadow md:p-6">
+    <h2 id="app-revenue-heading" className="text-xl font-bold">App Revenue Snapshot</h2>
+    <p className="mt-1 text-sm text-gray-600">Estimated revenue from app submissions and rates applicable to each service date.</p>
+    <div className="mt-4 grid grid-cols-2 gap-3">
+      <label className="min-w-0 text-sm font-medium">Year
+        <select value={year} onChange={(event) => { setYear(event.target.value); if (!event.target.value) setMonth(''); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-base">
+          <option value="">All years</option>{years.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </label>
+      <label className="min-w-0 text-sm font-medium">Month
+        <select disabled={!year} value={month} onChange={(event) => { setMonth(event.target.value); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-base disabled:bg-gray-50 disabled:text-gray-500">
+          <option value="">All months</option>{months.map((name, index) => ({ name, value: String(index + 1) })).reverse().map(({ name, value }) => <option key={value} value={value}>{name}</option>)}
+        </select>
+      </label>
+    </div>
+    {loading ? <p role="status" className="mt-4 text-sm text-gray-600">Calculating app revenue…</p> : error ? <div className="mt-4">
+      <p role="alert" className="break-words text-sm text-red-700">{error}</p>
+      <button type="button" onClick={() => setRevision((value) => value + 1)} className="mt-2 min-h-11 rounded-lg border px-3 py-2 text-sm">Retry</button>
+    </div> : data && <>
+      <div className="mt-4 rounded-xl bg-[#e8f7ff] p-4">
+        <p className="text-xs font-medium uppercase text-gray-600">Estimated Billable Revenue · {period}</p>
+        <p className="mt-1 break-words text-3xl font-bold">{appRevenueCurrency(data.total)}</p>
+        {data.issues.length > 0 ? <p className="mt-2 text-sm text-amber-900">Partial estimate · {data.issues.length} {data.issues.length === 1 ? 'submission needs' : 'submissions need'} pricing or review. These submissions are excluded from revenue.</p> : data.priced_count === 0 && <p className="mt-2 text-sm text-gray-600">No priced service submissions for this period.</p>}
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {names.map((name) => {
+          const row = data.services.find((service) => service.service === name);
+          return <div key={name} className="flex min-w-0 items-start justify-between gap-3 rounded-lg border px-3 py-3 text-sm">
+            <span className="min-w-0 break-words font-medium">{name}</span>
+            <div className="min-w-0 text-right"><p className="break-words font-semibold">{appRevenueCurrency(row?.amount ?? 0)}</p>{!!row?.pending && <p className="mt-1 text-xs text-amber-800">Partial · {row.pending} need review</p>}</div>
+          </div>;
+        })}
+      </div>
+      {data.issues.length > 0 && <div className="mt-3">
+        <button type="button" aria-expanded={showIssues} aria-controls="app-revenue-issues" onClick={() => setShowIssues((value) => !value)} className="min-h-11 w-full rounded-lg px-3 py-2 text-sm font-semibold text-[#007bb5] hover:bg-[#e8f7ff]">
+          {showIssues ? 'Hide' : 'View'} pricing issues ({data.issues.length}) {showIssues ? '▴' : '▾'}
+        </button>
+        {showIssues && <ul id="app-revenue-issues" className="mt-2 space-y-2">
+          {data.issues.map((issue) => <li key={issue.entry_id} className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+            <Link href={`/projects/${issue.project_id}`} className="inline-flex min-h-11 items-center break-words font-semibold text-[#007bb5] underline">{issue.project_name || 'Open project'}</Link>
+            <p className="font-medium">{new Date(`${issue.work_date}T00:00:00`).toLocaleDateString('en-US')} · {issue.service}</p>
+            <p className="mt-1 break-words text-amber-900">{issue.issue || 'Review this submission’s quantity and applicable rate.'}</p>
+          </li>)}
+        </ul>}
+      </div>}
+      <p className="mt-3 text-xs text-gray-500">Updated {new Date(data.calculated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · Updates automatically while this page is open.</p>
+    </>}
+  </section>;
+}

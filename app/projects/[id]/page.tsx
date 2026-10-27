@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Copy, ChevronDown } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useSearchParams } from 'next/navigation';
@@ -20,6 +20,7 @@ type ProjectDayUpdate = {
 };
 
 type ProjectDetail = {
+  project_type: string | null;
   id: string;
   project_number: string;
   status: string;
@@ -42,6 +43,7 @@ type ProjectDetail = {
   notes: string | null;
   customers: {
     id: string;
+    customer_type: string | null;
     name: string;
     address: string | null;
     phone: string | null;
@@ -171,6 +173,28 @@ const [dayUpdatesError, setDayUpdatesError] = useState('');
 const [dayUpdatesLoading, setDayUpdatesLoading] = useState(false);
 const [dayRevision, setDayRevision] = useState(0);
 const [dayUpdateNotice, setDayUpdateNotice] = useState('');
+const [nonbillableEntries, setNonbillableEntries] = useState<NonbillableEntry[]>([]);
+const [nonbillableError, setNonbillableError] = useState('');
+const [nonbillableLoading, setNonbillableLoading] = useState(false);
+const [nonbillableRevision, setNonbillableRevision] = useState(0);
+const [nonbillableModal, setNonbillableModal] = useState<{date:string;entry:NonbillableEntry|null}|null>(null);
+useEffect(() => {
+ const projectId=project?.id;if(!projectId)return;let cancelled=false;
+ async function load(){
+  setNonbillableLoading(true);setNonbillableError('');
+  try{
+   const {data,error}=await supabase.from('project_nonbillable_work').select('*, created_profile:user_profiles!project_nonbillable_work_created_by_fkey(full_name)').eq('project_id',projectId).is('deleted_at',null).order('work_date',{ascending:false});
+   if(error)throw error;
+   if(!cancelled)setNonbillableEntries((data??[]).map(entry=>{
+    const profile=Array.isArray(entry.created_profile)?entry.created_profile[0]:entry.created_profile;
+    return {...entry,technician:profile?.full_name||'Unknown user'} as NonbillableEntry;
+   }));
+  }catch(e){if(!cancelled)setNonbillableError((e as {message?:string}).message||'Could not load non-billable work.');}
+  finally{if(!cancelled)setNonbillableLoading(false);}
+ }
+ void load();return()=>{cancelled=true;};
+},[project?.id,nonbillableRevision]);
+
 
 useEffect(() => {
   const projectId = project?.id;
@@ -280,7 +304,13 @@ const serviceNoteHistory = Object.entries(
 const [managingProjectNotes, setManagingProjectNotes] = useState(false);
 
 const [editingProject, setEditingProject] = useState(false);
+const [billingExpanded, setBillingExpanded] = useState(false);
+const [projectPricingRevision, setProjectPricingRevision] = useState(0);
+const [projectSaveError, setProjectSaveError] = useState('');
+const [projectSaving, setProjectSaving] = useState(false);
+const projectSavingRef = useRef(false);
 const [projectEditForm, setProjectEditForm] = useState({
+  projectType: '',
   projectNumber: '',
   projectLocation: '',
   serviceStartDate: '',
@@ -710,6 +740,7 @@ function quantityLabelForPendingItem(item: PendingServiceItem) {
         .select(`
   id,
   project_number,
+  project_type,
   status,
   progress,
   service_start_date,
@@ -730,6 +761,7 @@ notes,
 customers (
   id,
   name,
+  customer_type,
   address,
   phone,
   email,
@@ -766,6 +798,7 @@ const employee = Array.isArray(data.employees)
   setProject({
     id: data.id,
     project_number: data.project_number,
+    project_type: data.project_type ?? null,
     status: data.status,
     progress: data.progress,
     service_start_date: data.service_start_date,
@@ -1096,11 +1129,13 @@ flatRates: 0,
   const submissionDates = Array.from(new Set([
     ...timeEntries.map((entry) => entry.work_date),
     ...dayUpdates.map((entry) => entry.work_date),
+    ...nonbillableEntries.map((entry) => entry.work_date),
   ])).sort().reverse();
   const groupedSubmissionHistory = submissionDates.map((date) => ({
     workDate: date,
     entries: timeEntries.filter((entry) => entry.work_date === date),
     dayEntries: dayUpdates.filter((entry) => entry.work_date === date),
+    nonbillable: nonbillableEntries.filter((entry) => entry.work_date === date),
   }));
 
   
@@ -1814,6 +1849,7 @@ function startProjectEdit() {
   if (!project) return;
 
   setProjectEditForm({
+    projectType: project.project_type ?? '',
     projectNumber: project.project_number,
     projectLocation: project.project_location ?? '',
     serviceStartDate: project.service_start_date ?? '',
@@ -1962,7 +1998,8 @@ async function deleteProjectAttachment(attachment: ProjectAttachment) {
 
 
 async function saveProjectEdit() {
-  if (!canManageProjects) return;
+  if (!canManageProjects || projectSavingRef.current) return;
+  setProjectSaveError('');
   if (!project || !projectEditForm.projectNumber.trim()) {
     return;
   }
@@ -1971,132 +2008,49 @@ async function saveProjectEdit() {
     employees.find((employee) => employee.id === projectEditForm.assignedToId) ??
     null;
 
-    const billingChanged =
-  projectEditForm.billingMethodSource !==
-    (project.billing_method_source ?? 'customer') ||
-  projectEditForm.mainPricingType !== (project.main_pricing_type ?? '') ||
-  projectEditForm.lateralPricingType !==
-    (project.lateral_pricing_type ?? '') ||
-  projectEditForm.jetPricingType !== (project.jet_pricing_type ?? '') ||
-  projectEditForm.pushRodPricingType !== (project.push_rod_pricing_type ?? '') ||
-  projectEditForm.dyePricingType !== (project.dye_pricing_type ?? '') ||
-  projectEditForm.smokePricingType !== (project.smoke_pricing_type ?? '') ||
-  projectEditForm.laborerPricingType !==
-    (project.laborer_pricing_type ?? '') ||
-  projectEditForm.trafficControlPricingType !==
-    (project.traffic_control_pricing_type ?? '');
-
-const billingMethodsUpdatedAt = billingChanged
-  ? new Date().toISOString()
-  : project.billing_methods_updated_at;
-
-
-  const { error } = await supabase
+  projectSavingRef.current = true;
+  setProjectSaving(true);
+  try {
+  const { data: savedProject, error } = await supabase
     .from('projects')
     .update({
       project_number: projectEditForm.projectNumber,
+      project_type: projectEditForm.projectType || null,
       project_location: projectEditForm.projectLocation,
       ...(timeEntries.length === 0 && {
         service_start_date: projectEditForm.serviceStartDate,
       }),
-      pricing_type: projectEditForm.pricingType,
       assigned_to: projectEditForm.assignedToId || null,
-billing_method_source: projectEditForm.billingMethodSource,
-billing_methods_updated_at: billingMethodsUpdatedAt,
-
-main_pricing_type:
-
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.mainPricingType
-    : null,
-lateral_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.lateralPricingType
-    : null,
-jet_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.jetPricingType
-    : null,
-push_rod_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.pushRodPricingType
-    : null,
-dye_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.dyePricingType
-    : null,
-smoke_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.smokePricingType
-    : null,
-laborer_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.laborerPricingType
-    : null,
-traffic_control_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.trafficControlPricingType
-    : null,
-
     })
     
-    .eq('id', project.id);
+    .eq('id', project.id).select('id').maybeSingle();
 
   if (error) {
-    console.error('Error updating project:', error);
-    return;
+    throw error;
   }
+
+  if (!savedProject) throw new Error('The project was not updated. Reload the page and check your access before retrying.');
 
   setProject({
     ...project,
     project_number: projectEditForm.projectNumber,
+    project_type: projectEditForm.projectType || null,
     project_location: projectEditForm.projectLocation,
     service_start_date:
   timeEntries.length === 0
     ? projectEditForm.serviceStartDate
     : project.service_start_date,
-    pricing_type: projectEditForm.pricingType,
     assigned_to: projectEditForm.assignedToId || null,
     employees: assignedEmployee ? { name: assignedEmployee.name } : null,
-    billing_method_source: projectEditForm.billingMethodSource,
-    billing_methods_updated_at: billingMethodsUpdatedAt,
-
-main_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.mainPricingType
-    : null,
-lateral_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.lateralPricingType
-    : null,
-jet_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.jetPricingType
-    : null,
-push_rod_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.pushRodPricingType
-    : null,
-dye_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.dyePricingType
-    : null,
-smoke_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.smokePricingType
-    : null,
-laborer_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.laborerPricingType
-    : null,
-traffic_control_pricing_type:
-  projectEditForm.billingMethodSource === 'project'
-    ? projectEditForm.trafficControlPricingType
-    : null,
-
   });
 
   setEditingProject(false);
+  } catch (error) {
+    setProjectSaveError((error as { message?: string }).message || 'Could not save project. Please retry.');
+  } finally {
+    projectSavingRef.current = false;
+    setProjectSaving(false);
+  }
 }
 
 
@@ -2115,13 +2069,14 @@ traffic_control_pricing_type:
 </div>
 
 
-<div className="rounded-2xl bg-white p-6 shadow">
+<div className="rounded-2xl bg-white p-4 shadow sm:p-6">
   {editingProject && (
     <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm font-medium text-yellow-800">
       Editing project details
     </div>
   )}
 
+{editingProject && <div className="mb-4"><ProjectTypePicker value={projectEditForm.projectType} onChange={(value)=>setProjectEditForm({...projectEditForm,projectType:value})} disabled={projectSaving}/></div>}
 <div className="border-b pb-3">
 <div className="flex items-start justify-between gap-3">
   <div className="min-w-0">
@@ -2141,9 +2096,7 @@ traffic_control_pricing_type:
         className="mt-1 w-full rounded-lg border p-3 text-xl font-bold"
       />
     ) : (
-      <p className="mt-1 break-all text-2xl font-bold">
-  {project.project_number}
-</p>
+      <div className="mt-1 flex min-w-0 items-center gap-2"><ProjectTypeIcon value={project.project_type}/><p className="min-w-0 break-words text-2xl font-bold">{project.project_number}</p></div>
     )}
   </div>
 
@@ -2332,13 +2285,15 @@ traffic_control_pricing_type:
   {project.customers?.id ? (
     <Link
       href={`/customers/${project.customers.id}`}
-      className="mt-1 inline-block text-lg font-semibold hover:underline"
+      className="mt-1 inline-flex max-w-full items-center gap-2 text-lg font-semibold hover:underline"
     >
-      {project.customers.name}
+      <CustomerTypeBadge value={project.customers.customer_type} />
+      <span className="min-w-0 break-words">{project.customers.name}</span>
     </Link>
   ) : (
     <p className="mt-1 text-lg font-semibold">No customer saved</p>
   )}
+
 
   <p className="mt-1 text-sm text-gray-600">
     {formatPhone(project.customers?.phone)}
@@ -2349,7 +2304,7 @@ traffic_control_pricing_type:
   <div className="flex w-full items-center justify-between gap-3">
   <div>
     <p className="text-xs font-medium uppercase text-gray-500">
-      Billing Methods
+      {canManageProjects ? 'Billing & Rates' : 'Billing Methods'}
     </p>
 
     {project.billing_methods_updated_at && (
@@ -2367,106 +2322,32 @@ traffic_control_pricing_type:
 
 
 
-{editingProject && canManageProjects && (
-  <div className="mt-3 space-y-3">
-    <select
-      value={projectEditForm.billingMethodSource}
-      onChange={(e) =>
-        setProjectEditForm({
-          ...projectEditForm,
-          billingMethodSource: e.target.value,
-        })
-      }
-      className="w-full rounded-lg border p-2 text-sm"
-    >
-      <option value="customer">Customer</option>
-      <option value="standard">Standard</option>
-      <option value="project">Project Override</option>
-    </select>
-
-    {projectEditForm.billingMethodSource === 'project' && (
-      <div className="grid gap-3 rounded-lg border p-3 md:grid-cols-2">
-        {billingTypeOptions.map((option) => (
-          <div key={option.code} className="grid gap-2">
-            <div className="flex items-baseline gap-2">
-              <p className="font-medium">{option.label}</p>
-              <p className="text-xs font-medium text-gray-500">
-                {option.code}
-              </p>
-            </div>
-
-            <select
-              value={projectEditForm[option.field]}
-              onChange={(e) =>
-                setProjectEditForm({
-                  ...projectEditForm,
-                  [option.field]: e.target.value,
-                })
-              }
-              className="rounded-lg border p-2 text-sm"
-            >
-              <option value="" disabled hidden>
-                Select billing method
-              </option>
-
-              {option.choices.map((choice) => (
-                <option key={choice} value={choice}>
-                  {choice}
-                </option>
-              ))}
-            </select>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-)}
+{canManageProjects && <ProjectBillingManager project={project}
+  effectiveMethods={{MAIN: billingMethods.main, LAT: billingMethods.lateral, JET: billingMethods.jet, PUSH: billingMethods.pushRod, DYE: billingMethods.dye, SMK: billingMethods.smoke, LABOR: billingMethods.laborer, TRFC: billingMethods.trafficControl}}
+  onSaved={(patch) => { setProject((current) => current ? { ...current, ...patch } : current); setProjectPricingRevision((value) => value + 1); }} />}
+<button type="button" aria-expanded={billingExpanded} aria-controls="project-billing-details"
+  onClick={() => setBillingExpanded((value) => !value)}
+  className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-[#007bb5] focus-visible:ring-2 focus-visible:ring-[#009be5]">
+  {billingExpanded ? 'Hide details' : 'View details'} <span aria-hidden="true">{billingExpanded ? '▴' : '▾'}</span>
+</button>
+{(billingExpanded) && <div id="project-billing-details">
+{canManageProjects ? <ProjectPricingPanel key={projectPricingRevision}
+    projectId={project.id} projectName={project.project_number} customerId={project.customers?.id ?? null}
+    source={project.billing_method_source ?? 'customer'} preview={false}
+    methods={{MAIN: billingMethods.main, LAT: billingMethods.lateral, JET: billingMethods.jet, PUSH: billingMethods.pushRod, DYE: billingMethods.dye, SMK: billingMethods.smoke, LABOR: billingMethods.laborer, TRFC: billingMethods.trafficControl}}
+  /> : (<div className="mt-3 grid grid-cols-2 items-start gap-x-3 gap-y-5">
+    {[
+      ['MAIN', billingMethods.main], ['LAT', billingMethods.lateral],
+      ['JET', billingMethods.jet], ['PUSH', billingMethods.pushRod],
+      ['DYE', billingMethods.dye], ['SMK', billingMethods.smoke],
+      ['LABOR', billingMethods.laborer], ['TRFC', billingMethods.trafficControl],
+    ].map(([code, method]) => <div key={code} className="flex min-w-0 flex-col gap-1 px-1 text-center text-sm">
+      <span className="font-semibold">{code}</span><span className="min-w-0 break-words text-gray-600">{method}</span>
+    </div>)}
+  </div>)}
+</div>}
 
 
-<div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-  <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-    <span className="font-semibold">MAIN</span>
-    <span className="min-w-0 break-words text-gray-600">
-      {billingMethods.main}
-    </span>
-
-    <span className="font-semibold">LAT</span>
-    <span className="min-w-0 break-words text-gray-600">
-      {billingMethods.lateral}
-    </span>
-
-    <span className="font-semibold">JET</span>
-    <span className="min-w-0 break-words text-gray-600">
-      {billingMethods.jet}
-    </span>
-
-    <span className="font-semibold">PUSH</span>
-    <span className="min-w-0 break-words text-gray-600">
-      {billingMethods.pushRod}
-    </span>
-  </div>
-
-  <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-    <span className="font-semibold">DYE</span>
-    <span className="min-w-0 break-words text-gray-600">
-      {billingMethods.dye}
-    </span>
-
-    <span className="font-semibold">SMK</span>
-    <span className="min-w-0 break-words text-gray-600">
-      {billingMethods.smoke}
-    </span>
-
-    <span className="font-semibold">LABOR</span>
-    <span className="min-w-0 break-words text-gray-600">
-      {billingMethods.laborer}
-    </span>
-    <span className="font-semibold">TRFC</span>
-    <span className="min-w-0 break-words text-gray-600">
-      {billingMethods.trafficControl}
-    </span>
-  </div>
-</div>
 
 </div>
 </div>
@@ -2476,33 +2357,46 @@ traffic_control_pricing_type:
 
 
 {editingProject && (
-  <div className="mt-5 flex gap-3">
+  <div className="mt-5">
+    {projectSaveError && <p role="alert" className="mb-3 text-sm text-red-700">{projectSaveError}</p>}
+  <div className="flex gap-3">
     <button
       type="button"
       onClick={saveProjectEdit}
+      disabled={projectSaving}
       className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
     >
-      Save Project
+      {projectSaving ? 'Saving...' : 'Save Project'}
     </button>
 
     <button
       type="button"
-      onClick={() => setEditingProject(false)}
+      disabled={projectSaving} onClick={() => setEditingProject(false)}
       className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-gray-50"
     >
       Cancel
     </button>
+  </div>
   </div>
 )}
 </div>
 
 
 
+{nonbillableModal && <NonbillableModal projectId={project.id} projectName={project.project_number}
+ date={nonbillableModal.date} entry={nonbillableModal.entry} onClose={()=>setNonbillableModal(null)}
+ onSaved={(date)=>{
+  setNonbillableModal(null);setNonbillableRevision(value=>value+1);setSelectedCalendarDate(date);
+  setExpandedServiceDates(dates=>dates.includes(date)?dates:[...dates,date]);
+  const [year,month]=date.split('-').map(Number);setCalendarMonth(new Date(year,month-1,1));
+  setDayUpdateNotice('Non-billable work updated.');
+ }}/>}
 <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
   <div className="min-w-0 space-y-6">
 
   {canSubmitService && (
     <ProjectSubmissionActions projectId={project.id} projectNumber={project.project_number}
+      onNonbillable={(date) => setNonbillableModal({date,entry:null})}
       onRecordService={() => setShowServiceSubmission(true)}
       onDayRecorded={(date) => {
         setDayRevision((value) => value + 1);
@@ -2858,7 +2752,10 @@ traffic_control_pricing_type:
   </div>
 </div>
 
-<div className="mt-4 border-t pt-4">
+{canManageProjects ? <ProjectRevenueSummary projectId={project.id}
+  version={JSON.stringify([projectPricingRevision, project.billing_method_source, project.status, timeEntries.map((entry) => [entry.id, entry.work_date, entry.updated_at, entry.work_completed, entry.hours, entry.feet, entry.laterals, entry.mainline_tests, entry.residences, entry.flat_rate, entry.notes])])}
+  services={serviceSummary.services}
+/> : (<div className="mt-4 border-t pt-4">
   <div className="mb-3 flex items-center justify-between">
     <p className="text-sm font-bold text-gray-800">
       Service Totals
@@ -2884,7 +2781,8 @@ traffic_control_pricing_type:
       </div>
     ))}
   </div>
-</div>
+</div>)}
+
 
   </div>
 )}
@@ -2898,7 +2796,7 @@ traffic_control_pricing_type:
   </p>
 </div>
 
-<div className="mt-4 grid grid-cols-3 items-center gap-2 text-[11px] font-medium text-gray-600">
+<div className="mt-4 grid grid-cols-2 items-center gap-x-3 gap-y-2 text-[11px] font-medium text-gray-600 sm:grid-cols-4">
   <div className="flex min-w-0 items-center justify-center gap-1">
     <span className="h-3.5 w-3.5 shrink-0 rounded bg-[#009be5]" />
     <span className="whitespace-nowrap">Serviced</span>
@@ -2907,6 +2805,11 @@ traffic_control_pricing_type:
   <div className="flex min-w-0 items-center justify-center gap-1">
     <span className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_3px,#8fd8f7_3px,#8fd8f7_5px)]" />
     <span className="whitespace-nowrap">Holiday/Unable</span>
+  </div>
+
+  <div className="flex min-w-0 items-center justify-center gap-1">
+    <span aria-hidden="true" className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_3px,#16324f_3px,#16324f_5px)]" />
+    <span className="whitespace-nowrap">Non-billable</span>
   </div>
 
   <div className="flex min-w-0 items-center justify-center gap-1">
@@ -2938,14 +2841,17 @@ traffic_control_pricing_type:
   </button>
 </div>
 
+  {nonbillableLoading && <p role="status" className="mt-2 text-xs text-gray-500">Loading non-billable work…</p>}
+  {nonbillableError && <div className="mt-2"><p role="alert" className="text-sm text-red-700">Non-billable work: {nonbillableError}</p><button type="button" className="min-h-11 rounded-lg border px-3 py-2 text-sm" onClick={()=>setNonbillableRevision(value=>value+1)}>Retry</button></div>}
+  {dayUpdatesLoading && <p role="status" className="mt-2 text-xs text-gray-500">Loading Holiday/Unable updates…</p>}
+  {dayUpdatesError && <div className="mt-2"><p role="alert" className="text-sm text-red-700">Holiday/Unable updates unavailable: {dayUpdatesError}</p><button type="button" onClick={() => setDayRevision((value) => value + 1)} className="mt-1 rounded-lg border px-3 py-2 text-sm">Retry</button></div>}
+
   <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase text-gray-500">
     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
       <div key={day}>{day}</div>
     ))}
   </div>
 
-  {dayUpdatesLoading && <p role="status" className="mt-2 text-xs text-gray-500">Loading Holiday/Unable updates…</p>}
-  {dayUpdatesError && <div className="mt-2"><p role="alert" className="text-sm text-red-700">Holiday/Unable updates unavailable: {dayUpdatesError}</p><button type="button" onClick={() => setDayRevision((value) => value + 1)} className="mt-1 rounded-lg border px-3 py-2 text-sm">Retry</button></div>}
   <div className="mt-2 grid grid-cols-7 gap-1">
     {calendarBlankDays.map((_, index) => (
       <div key={`blank-${index}`} className="aspect-square" />
@@ -2955,6 +2861,7 @@ traffic_control_pricing_type:
       const hasService = day.serviceCount > 0;
       const hasZeroQuantity = day.hasZeroQuantity;
       const hasDayUpdate = interruptedDates.has(day.key);
+      const hasNonbillable = nonbillableEntries.some(entry=>entry.work_date===day.key);
       const isSelected = selectedCalendarDate === day.key;
 
       return (
@@ -2967,12 +2874,13 @@ traffic_control_pricing_type:
     ? 'bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_7px,#8fd8f7_7px,#8fd8f7_9px)] text-[#005f8f] shadow-sm'
     : hasService
     ? 'bg-[#009be5] text-white shadow-sm'
-    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+    : hasNonbillable ? 'bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_7px,#16324f_7px,#16324f_9px)] text-[#16324f] shadow-sm' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
           } ${isSelected ? 'ring-2 ring-black ring-offset-2' : ''} ${
             day.isToday && !isSelected ? 'ring-2 ring-[#009be5] ring-offset-1' : ''
           }`}
         >
           {day.day}
+          {hasNonbillable && (hasService || hasDayUpdate) && <span aria-label="Non-billable work also recorded" className="absolute bottom-1 right-1 h-3 w-3 rounded-sm border border-white bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_2px,#16324f_2px,#16324f_4px)]" />}
           {hasDayUpdate && hasService && <span aria-label="Holiday or unable-to-work update also recorded" className="absolute right-1 top-1 h-2.5 w-2.5 rounded border border-white bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_2px,#8fd8f7_2px,#8fd8f7_4px)]" />}
 
           {day.serviceCount > 0 && (
@@ -3010,6 +2918,7 @@ traffic_control_pricing_type:
       {canSubmitService && (
         <div className="mt-3">
           <ProjectSubmissionActions projectId={project.id} projectNumber={project.project_number}
+      onNonbillable={(date) => setNonbillableModal({date,entry:null})}
             defaultDate={selectedCalendarDate} buttonLabel="+ Add entry for this date"
             onRecordService={() => {
               setTimeForm((current) => ({ ...current, workDate: selectedCalendarDate }));
@@ -3026,6 +2935,7 @@ traffic_control_pricing_type:
       )}
 
       <div className="mt-3 space-y-2">
+        {nonbillableEntries.filter(entry=>entry.work_date===selectedCalendarDate).map(entry=><NonbillableCard key={entry.id} entry={entry} />)}
         {selectedDayUpdates.map((entry) => (
           <div key={`day-${entry.id}`} className="rounded-lg border border-blue-100 bg-white p-3 text-sm">
             <p className="font-semibold text-[#005f8f]">{entry.reason}</p>
@@ -3102,7 +3012,7 @@ traffic_control_pricing_type:
       {dayUpdatesError && <p role="alert" className="mt-3 text-sm text-red-700">Holiday/Unable history unavailable: {dayUpdatesError}</p>}
       <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto pr-2">
 
-      {groupedSubmissionHistory.map(({ workDate, entries, dayEntries }) => {
+      {groupedSubmissionHistory.map(({ workDate, entries, dayEntries, nonbillable }) => {
   const isDateExpanded = expandedServiceDates.includes(workDate);
   const summary = serviceDateSummary(entries);
 
@@ -3126,13 +3036,13 @@ traffic_control_pricing_type:
       </p>
 
       <p className="mt-1 truncate text-sm text-gray-600">
-  {[...(entries.length ? [serviceNamesForEntries(entries)] : []), ...Array.from(new Set(dayEntries.map((entry) => entry.reason)))].join(', ')}
+  {[...(entries.length ? [serviceNamesForEntries(entries)] : []), ...Array.from(new Set(dayEntries.map((entry) => entry.reason))), ...(nonbillable.length ? ['Non-billable Work'] : [])].join(', ')}
 </p>
     </div>
 
     <div className="shrink-0 text-right">
       <p className="text-xs font-medium text-gray-500">
-        {entries.length + dayEntries.length} {entries.length + dayEntries.length === 1 ? 'entry' : 'entries'}
+        {entries.length + dayEntries.length + nonbillable.length} {entries.length + dayEntries.length + nonbillable.length === 1 ? 'entry' : 'entries'}
       </p>
 
       <span className="mt-1 block text-xl leading-none text-gray-400">
@@ -3146,6 +3056,8 @@ traffic_control_pricing_type:
 
 {isDateExpanded && (
   <div className="max-h-[60vh] space-y-2 overflow-y-auto border-t bg-gray-50 p-3 pr-2 md:max-h-none md:overflow-visible md:pr-3">
+    {nonbillable.map(entry=><NonbillableCard key={entry.id} entry={entry}
+      onEdit={managingTimeEntries && (canManageHistory || (normalizedRole==='field' && entry.created_by===currentUserId)) ? ()=>setNonbillableModal({date:entry.work_date,entry}) : undefined} />)}
     {dayEntries.map((entry) => (
       <ProjectDayHistoryEntry key={`day-${entry.id}`} entry={entry} projectId={project.id}
         managing={managingTimeEntries}
@@ -3399,7 +3311,7 @@ traffic_control_pricing_type:
   );
 })}
 
-{timeEntries.length === 0 && dayUpdates.length === 0 && !dayUpdatesLoading && !dayUpdatesError && (
+{timeEntries.length === 0 && dayUpdates.length === 0 && nonbillableEntries.length === 0 && !nonbillableLoading && !nonbillableError && !dayUpdatesLoading && !dayUpdatesError && (
     <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
       No submissions yet.
     </div>
@@ -3680,11 +3592,12 @@ traffic_control_pricing_type:
   );
 }
 
-function ProjectSubmissionActions({ projectId, projectNumber, onRecordService, onDayRecorded, defaultDate, buttonLabel = '+ Record Service' }: {
+function ProjectSubmissionActions({ projectId, projectNumber, onRecordService, onDayRecorded, onNonbillable, defaultDate, buttonLabel = '+ Record Service' }: {
   projectId: string;
   projectNumber: string;
   onRecordService: () => void;
   onDayRecorded: (date: string) => void;
+  onNonbillable: (date: string) => void;
   defaultDate?: string;
   buttonLabel?: string;
 }) {
@@ -3777,6 +3690,7 @@ function ProjectSubmissionActions({ projectId, projectNumber, onRecordService, o
             <ChevronDown aria-hidden="true" className="h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none group-open:rotate-180" />
           </summary>
           <div className="absolute left-0 right-0 top-full z-30 mt-2 rounded-xl border border-gray-200 bg-white p-2 text-gray-800 shadow-lg">
+            <button type="button" onClick={() => { if(menu.current)menu.current.open=false;onNonbillable(defaultDate ?? rateToday()); }} className="min-h-12 w-full rounded-lg px-3 py-3 text-left text-sm font-semibold hover:bg-gray-50">Record Non-billable Work</button>
             <button type="button" onClick={() => {
               if (menu.current) menu.current.open = false;
               setDate(defaultDate ?? new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()));
@@ -3921,4 +3835,587 @@ function ProjectDayHistoryEntry({ entry, projectId, managing, canEdit, canDelete
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
     </div>
   );
+}
+
+
+const rateServices = [
+  { code: 'MAIN', name: 'Mainline', units: ['Per Hour', 'Per Foot'] },
+  { code: 'LAT', name: 'Lateral', units: ['Per Hour', 'Per Lateral'] },
+  { code: 'JET', name: 'Jetter', units: ['Per Hour', 'Per Foot'] },
+  { code: 'PUSH', name: 'Push Rod', units: ['Per Hour'] },
+  { code: 'DYE', name: 'Dye', units: ['Per Hour'] },
+  { code: 'SMK', name: 'Smoke', units: ['Per Hour', 'Per Mainline Test', 'Per Residence'] },
+  { code: 'LABOR', name: 'Laborer', units: ['Per Hour'] },
+  { code: 'TRFC', name: 'Traffic Control', units: ['Flat Rate'] },
+];
+type CustomerRate = {
+  id: string; service_code: string; unit: string; amount: number;
+  effective_from: string; effective_to: string | null; note: string;
+  updated_at: string;
+};
+function formatCurrentRate(rows: CustomerRate[], code: string, method: string, today: string) {
+  const units = code === 'SMK' && method.includes('+')
+    ? ['Per Mainline Test', 'Per Residence'] : [method];
+  const amounts = units.map((unit) => {
+    const rate = rows.find((row) => row.service_code === code && row.unit === unit &&
+      row.effective_from <= today && (!row.effective_to || row.effective_to >= today));
+    return rate ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(rate.amount)) : 'Missing rate';
+  });
+  return amounts.join(' + ');
+}
+
+function rateToday() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+function rateDate(value: string) {
+  return new Date(`${value}T00:00:00`).toLocaleDateString('en-US');
+}
+function emptyRate() {
+  return { service_code: 'MAIN', unit: 'Per Hour', amount: '', effective_from: rateToday(), effective_to: '', note: '' };
+}
+function splitRateHistory(rows: CustomerRate[], today: string) {
+  const visibleIds = new Set<string>();
+  // Show one applicable rate per unit; preserve both combined Smoke components.
+  for (const unit of new Set(rows.map((row) => row.unit))) {
+    const unitRows = rows.filter((row) => row.unit === unit);
+    const current = unitRows.find((row) => row.effective_from <= today && (!row.effective_to || row.effective_to >= today));
+    const upcoming = [...unitRows].filter((row) => row.effective_from > today)
+      .sort((a, b) => a.effective_from.localeCompare(b.effective_from))[0];
+    const latest = [...unitRows].sort((a, b) => b.effective_from.localeCompare(a.effective_from))[0];
+    const primary = current ?? upcoming ?? latest;
+    if (primary) visibleIds.add(primary.id);
+  }
+  return { visibleIds, historyCount: rows.filter((row) => !visibleIds.has(row.id)).length };
+}
+
+function ProjectOverrideRates({ projectId, projectName, methods, billingVersion, canSaveRates, onRatesChanged, onEditState }: {
+  projectId: string; projectName: string; methods: Record<string, string>;
+  billingVersion: string | null;
+  canSaveRates: boolean;
+  onRatesChanged: (patch: Partial<ProjectDetail>) => void;
+  onEditState: (dirty: boolean, busy: boolean) => void;
+}) {
+  const busy = useRef(false);
+  const open = true;
+  const [rows, setRows] = useState<CustomerRate[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [revision, setRevision] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<CustomerRate | null>(null);
+  const [form, setForm] = useState(emptyRate);
+  const [dirty, setDirty] = useState(false);
+  const [activeService, setActiveService] = useState<string | null>(null);
+  const [expandedHistory, setExpandedHistory] = useState<Record<string, boolean>>({});
+  useEffect(() => { onEditState(dirty, saving); }, [dirty, saving, onEditState]);
+  const units = rateServices.find((service) => service.code === form.service_code)!.units;
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    async function load() {
+      setLoading(true); setLoadError('');
+      try {
+        const { data, error } = await supabase.from('project_service_rate_ranges')
+          .select('id, service_code, unit, amount, effective_from, effective_to, note, updated_at')
+          .eq('project_id', projectId).order('effective_from', { ascending: false });
+        if (error) throw error;
+        if (!cancelled) setRows(data ?? []);
+      } catch (e) {
+        if (!cancelled) setLoadError((e as { message?: string }).message || 'Could not load rates. Please retry.');
+      } finally { if (!cancelled) setLoading(false); }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [open, projectId, revision]);
+  function discard() {
+    return !busy.current && (!dirty || window.confirm('Discard your unsaved rate changes?'));
+  }
+  function reset() { setActiveService(null); setEditing(null); setForm(emptyRate()); setDirty(false); setError(''); }
+  function change(values: Partial<ReturnType<typeof emptyRate>>) { setForm((current) => ({ ...current, ...values })); setDirty(true); setError(''); setNotice(''); }
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy.current) return;
+    if (!canSaveRates) { setError('Click Apply Rate above before saving a project override rate.'); return; }
+    setError(''); setNotice('');
+    if (!/^\d+(\.\d{1,2})?$/.test(form.amount) || Number(form.amount) > 99999999.99) {
+      setError('Enter a nonnegative rate with up to two decimal places.'); return;
+    }
+    if (rows.some((row) => row.id !== editing?.id && row.service_code === form.service_code && row.unit === form.unit)) {
+      setError('This project already has a rate for this service and unit. Edit that rate instead.'); return;
+    }
+    const nextMethod = form.service_code === 'SMK' && form.unit !== 'Per Hour'
+      ? 'Per Mainline Segment + Per Connection' : form.unit;
+    if (methods[form.service_code] !== nextMethod && !window.confirm(`Save this rate and change ${form.service_code} billing from "${methods[form.service_code]}" to "${nextMethod}"? The billing unit changes immediately for new submissions.`)) return;
+    busy.current = true; setSaving(true);
+    try {
+      const result = await supabase.rpc('save_project_rate_and_method', {
+        p_project_id: projectId, p_rate_id: editing?.id ?? null,
+        p_expected_rate_updated_at: editing?.updated_at ?? null,
+        p_expected_billing_updated_at: billingVersion,
+        p_service_code: form.service_code, p_unit: form.unit, p_amount: Number(form.amount),
+        p_effective_from: null, p_effective_to: null,
+        p_note: form.note.trim(),
+      });
+      if (result.error) throw result.error;
+      if (!result.data) throw new Error('This rate changed since you opened it. Reload rates and review it before saving again.');
+      reset(); setNotice('Unit and rate saved.'); setRevision((v) => v + 1); onRatesChanged(result.data as Partial<ProjectDetail>);
+    } catch (e) {
+      const failure = e as { code?: string; message?: string };
+      setError(failure.code === '23P01' ? 'Another rate overlaps these dates. Reload rates and adjust the date range.' : failure.message || 'Could not save the rate. Please retry.');
+    } finally { busy.current = false; setSaving(false); }
+  }
+  const inputClass = 'mt-2 block box-border min-w-0 w-full max-w-full rounded-lg border bg-white p-3 text-base font-normal';
+  const rateEditor = (
+          <form onSubmit={save} className="mt-3 space-y-3 rounded-lg bg-gray-50 p-3">
+            <h3 className="font-semibold">{editing ? 'Edit unit & rate' : 'Set unit & rate'}</h3>
+            <p className="text-sm text-gray-600">Applies throughout this project’s service period. Dates follow the project automatically.</p>
+            <fieldset disabled={saving} className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <label className="min-w-0 text-sm font-medium">Unit<select disabled={saving || units.length === 1} className={inputClass} value={form.unit} onChange={(e) => change({ unit: e.target.value })}>{units.map((unit) => <option key={unit}>{unit}</option>)}</select></label>
+              <label className="min-w-0 text-sm font-medium">Rate (USD)<input required inputMode="decimal" placeholder="0.00" value={form.amount} onChange={(e) => change({ amount: e.target.value })} className={inputClass} /></label>
+              <label className="min-w-0 text-sm font-medium sm:col-span-2">Note (optional)<textarea rows={2} maxLength={1000} value={form.note} onChange={(e) => change({ note: e.target.value })} className={inputClass} /></label>
+            </fieldset>
+            {form.service_code === 'SMK' && <p className="text-sm text-gray-600">For combined Smoke billing, enter a separate rate for each component: Per Mainline Test and Per Residence.</p>}
+            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+            <div className="flex flex-wrap gap-3">
+              <button type="submit" disabled={saving || !canSaveRates} className="min-h-11 flex-1 rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving...' : canSaveRates ? 'Save unit & rate' : 'Apply Rate first'}</button>
+              <button type="button" disabled={saving} onClick={() => { if (discard()) reset(); }} className="min-h-11 rounded-lg border px-4 py-3 text-sm">Cancel</button>
+            </div>
+          </form>
+  );
+  return <div>
+      <div className="space-y-3">
+        <details className="text-sm text-gray-600">
+          <summary className="flex min-h-11 cursor-pointer items-center text-[#007bb5]">Rate dates &amp; pricing help ▾</summary>
+          <p className="pb-2">Project rates apply throughout the project’s service period. The start follows the first service date (or estimated start before work begins). The end follows the final service date once completed. Edit an existing unit’s rate rather than adding date ranges.</p>
+        </details>
+        <p className="text-xs text-gray-500">All override rates follow the project’s service dates.</p>
+        {loading ? <p role="status">Loading rates...</p> : loadError ? <p role="alert" className="text-sm text-red-700">{loadError}</p> : <>
+          <section aria-label="Service rates" className="grid items-start gap-2 sm:grid-cols-2">
+            {rateServices.map((service) => {
+              const serviceRows = rows.filter((row) => row.service_code === service.code);
+              const visibleIds = new Set(serviceRows.map((row) => row.id));
+              const historyCount = 0;
+              const historyOpen = expandedHistory[service.code] ?? false;
+              const historyId = `rate-history-${projectId}-${service.code}`;
+              return <section key={service.code} aria-label={`${service.name} rates`} className={`min-w-0 rounded-lg border px-3 py-2 ${activeService === service.code ? 'sm:col-span-2' : ''}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">{service.name} <span className="ml-1 text-xs font-normal text-gray-500">{service.code}</span></h3>
+                  <button type="button" disabled={saving} onClick={() => {
+                    if (!discard()) return;
+                    setEditing(null); setActiveService(service.code);
+                    setForm({ ...emptyRate(), service_code: service.code, unit: service.units.includes(methods[service.code]) ? methods[service.code] : service.code === 'SMK' && methods[service.code] !== 'Per Hour' ? 'Per Mainline Test' : service.units[0] });
+                    setDirty(false); setError(''); setNotice('');
+                  }} className="min-h-11 rounded-lg px-3 py-2 text-sm font-semibold text-[#007bb5] hover:bg-[#e8f7ff]" aria-label={`Add project rate for ${service.name}`}>+ Add rate</button>
+                </div>
+                {serviceRows.length === 0 && activeService !== service.code && <p className="pb-1 text-sm text-gray-500">No rate set.</p>}
+                <div id={historyId} className="divide-y border-gray-100">
+                  {serviceRows.map((row) => {
+                    const status = 'Project service period';
+                    return <div key={row.id} hidden={!historyOpen && !visibleIds.has(row.id)} className="py-2">
+                      {activeService === service.code && editing?.id === row.id ? rateEditor : <>
+                        <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
+                          <div className="min-w-0">
+                            <p className="text-sm"><span className="font-semibold">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(row.amount))}</span> <span className="text-gray-600">{row.unit}</span></p>
+
+                          </div>
+                          <button type="button" disabled={saving} onClick={() => {
+                            if (!discard()) return;
+                            setActiveService(service.code); setEditing(row);
+                            setForm({ service_code: row.service_code, unit: row.unit, amount: String(row.amount), effective_from: row.effective_from, effective_to: row.effective_to ?? '', note: row.note });
+                            setDirty(false); setError(''); setNotice('');
+                          }} className="min-h-11 justify-self-end rounded-lg px-3 py-2 text-sm font-medium text-[#007bb5] hover:bg-[#e8f7ff]" aria-label={`Edit ${service.name} ${row.unit} rate from ${rateDate(row.effective_from)}`}>Edit</button>
+                        </div>
+                        {row.note && <details className="mt-1 text-xs text-gray-600"><summary className="cursor-pointer py-2">Note</summary><p className="whitespace-pre-wrap break-words">{row.note}</p></details>}
+                      </>}
+                    </div>;
+                  })}
+                </div>
+                {historyCount > 0 && <button type="button" disabled={saving}
+                  aria-expanded={historyOpen} aria-controls={historyId}
+                  onClick={() => {
+                    if (historyOpen && activeService === service.code && editing && !visibleIds.has(editing.id)) {
+                      if (!discard()) return;
+                      reset();
+                    }
+                    setExpandedHistory((current) => ({ ...current, [service.code]: !historyOpen }));
+                  }} className="min-h-11 rounded-lg px-2 py-2 text-sm font-semibold text-[#007bb5] hover:bg-[#e8f7ff]">
+                  {historyOpen ? 'Hide rate changes' : `Show rate changes (${historyCount})`} <span aria-hidden="true">{historyOpen ? '▴' : '▾'}</span>
+                </button>}
+                {activeService === service.code && !editing && rateEditor}
+              </section>;
+            })}
+          </section>
+        </>}
+        {notice && <p role="status" className="text-sm text-green-700">{notice}</p>}
+        <button type="button" disabled={saving || loading} onClick={() => { if (discard()) { reset(); setRevision((v) => v + 1); } }} className="min-h-11 rounded-lg border px-3 py-2 text-sm">Reload rates</button>
+      </div>
+  </div>;
+}
+
+function ProjectPricingPanel({ projectId, projectName, customerId, source, methods, preview }: {
+  projectId: string; projectName: string; customerId: string | null;
+  source: string; methods: Record<string, string>; preview: boolean;
+}) {
+  const [rows, setRows] = useState<CustomerRate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [revision, setRevision] = useState(0);
+  const [asOf, setAsOf] = useState(rateToday);
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true); setError(''); setRows([]);
+      try {
+        if (source === 'standard') return;
+        if (source !== 'customer' && source !== 'project') throw new Error('Select a valid billing source.');
+        if (source === 'customer' && !customerId) throw new Error('This project has no customer linked.');
+        let query = supabase.from(source === 'project' ? 'project_service_rate_ranges' : 'customer_service_rates')
+          .select('id, service_code, unit, amount, effective_from, effective_to, note, updated_at')
+          .eq(source === 'project' ? 'project_id' : 'customer_id', source === 'project' ? projectId : customerId!);
+        if (source === 'customer') query = query.lte('effective_from', asOf).or(`effective_to.is.null,effective_to.gte.${asOf}`);
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!cancelled) setRows(data ?? []);
+      } catch (e) { if (!cancelled) setError((e as { message?: string }).message || 'Could not load rates.'); }
+      finally { if (!cancelled) setLoading(false); }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [projectId, customerId, source, asOf, revision]);
+  useEffect(() => {
+    const refresh = () => { setAsOf(rateToday()); setRevision((value) => value + 1); };
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, []);
+  return <div className="mt-3 w-full min-w-0 space-y-3">
+    {preview && <p className="text-sm text-amber-800">Preview only. Save Project to apply this billing source and its methods.</p>}
+
+    {source === 'standard' && <p className="text-sm text-gray-600">Standard dollar rates have not been configured. Existing standard billing methods remain available.</p>}
+    {error && <div><p role="alert" className="text-sm text-red-700">{error}</p><button type="button" onClick={() => setRevision((v) => v + 1)} className="min-h-11 rounded-lg border px-3 py-2 text-sm">Retry rates</button></div>}
+    <div className="grid w-full grid-cols-2 items-start gap-x-3 gap-y-5 sm:gap-x-6">
+      {rateServices.map((service) => <div key={service.code} className="min-w-0 px-1 text-center text-sm">
+        <p className="font-semibold" title={service.name}>{service.code}</p>
+        <p className="mt-1 break-words text-gray-600">{methods[service.code] || 'Method not set'}</p>
+        <p className="mt-1 break-words font-semibold">{source === 'standard' ? 'Not configured' : loading ? 'Loading…' : error ? 'Rate unavailable' : !methods[service.code] ? 'Set billing method first' : formatCurrentRate(source === 'project' ? rows.map((row) => ({ ...row, effective_from: '0001-01-01', effective_to: null })) : rows, service.code, methods[service.code], asOf)}</p>
+      </div>)}
+    </div>
+    {source === 'project' && preview && <p className="text-sm text-gray-600">Save Project, then use Manage Project Rates to enter custom rates.</p>}
+    {source === 'customer' && customerId && <Link href={`/customers/${customerId}`} className="flex min-h-11 w-full items-center justify-center text-center text-sm font-semibold text-[#007bb5]">Manage customer billing &amp; rates →</Link>}
+  </div>;
+}
+
+const projectBillingConfig = [
+  { code: 'MAIN', column: 'main_pricing_type', standard: 'Per Foot', choices: ['Per Hour', 'Per Foot'] },
+  { code: 'LAT', column: 'lateral_pricing_type', standard: 'Per Lateral', choices: ['Per Hour', 'Per Lateral'] },
+  { code: 'JET', column: 'jet_pricing_type', standard: 'Per Foot', choices: ['Per Hour', 'Per Foot'] },
+  { code: 'PUSH', column: 'push_rod_pricing_type', standard: 'Per Hour', choices: ['Per Hour'] },
+  { code: 'DYE', column: 'dye_pricing_type', standard: 'Per Hour', choices: ['Per Hour'] },
+  { code: 'SMK', column: 'smoke_pricing_type', standard: 'Per Mainline Segment + Per Connection', choices: ['Per Hour', 'Per Mainline Test + Per Residence', 'Per Mainline Segment + Per Connection', 'Per Mainline Segments + Connections'] },
+  { code: 'LABOR', column: 'laborer_pricing_type', standard: 'Per Hour', choices: ['Per Hour'] },
+  { code: 'TRFC', column: 'traffic_control_pricing_type', standard: 'Flat Rate', choices: ['Flat Rate'] },
+] as const;
+function ProjectBillingManager({ project, effectiveMethods, onSaved }: {
+  project: ProjectDetail; effectiveMethods: Record<string, string>;
+  onSaved: (patch: Partial<ProjectDetail>) => void;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const lock = useRef(false);
+  const [open, setOpen] = useState(false);
+  const [source, setSource] = useState(project.billing_method_source ?? 'customer');
+  const [draftMethods, setDraftMethods] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [rateDirty, setRateDirty] = useState(false);
+  const [rateBusy, setRateBusy] = useState(false);
+  const onEditState = useCallback((dirty: boolean, busy: boolean) => { setRateDirty(dirty); setRateBusy(busy); }, []);
+  const storedSource = project.billing_method_source ?? 'customer';
+  const settingsDirty = source !== storedSource || (source === 'project' && projectBillingConfig.some((item) =>
+    draftMethods[item.code] !== (project[item.column] || effectiveMethods[item.code])));
+  const inheritedMethods = Object.fromEntries(projectBillingConfig.map((item) => [item.code,
+    source === 'standard' ? item.standard : source === 'project' ? draftMethods[item.code] : project.customers?.[item.column] || item.standard]));
+  useEffect(() => {
+    if (!open) return;
+    dialog.current?.showModal();
+    const previous = document.body.style.overflow; document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = previous; dialog.current?.close(); };
+  }, [open]);
+  function start() {
+    setSource(storedSource);
+    setDraftMethods(Object.fromEntries(projectBillingConfig.map((item) => [item.code, project[item.column] || effectiveMethods[item.code]])));
+    setError(''); setNotice(''); setRateDirty(false); setRateBusy(false); setOpen(true);
+  }
+  function close() {
+    if (lock.current || rateBusy) return;
+    if ((settingsDirty || rateDirty) && !window.confirm('Discard unsaved project pricing changes?')) return;
+    setOpen(false);
+  }
+  function switchSource(value: string) {
+    if (lock.current || rateBusy || value === source) return;
+    if (rateDirty && !window.confirm('Discard the unsaved rate edit before switching sources?')) return;
+    setRateDirty(false); setSource(value); setError(''); setNotice('');
+  }
+  async function saveSettings() {
+    if (lock.current || rateBusy || !settingsDirty) return;
+    if (!window.confirm(`Apply ${source === 'project' ? 'Project Override' : source === 'customer' ? 'Customer' : 'Standard'} billing to ${project.project_number}? This changes the methods used for new submissions and updates revenue estimates using the selected rates. Recorded quantities stay unchanged.`)) return;
+    lock.current = true; setSaving(true); setError(''); setNotice('');
+    try {
+      const methods = Object.fromEntries(projectBillingConfig.map((item) => [item.column, draftMethods[item.code]]));
+      const { data, error } = await supabase.rpc('save_project_billing_settings', {
+        p_project_id: project.id, p_source: source, p_methods: methods,
+        p_expected_source: storedSource, p_expected_updated_at: project.billing_methods_updated_at,
+      });
+      if (error) throw error;
+      if (!data) throw new Error('Project pricing was not saved. Reload the project and retry.');
+      onSaved(data as Partial<ProjectDetail>);
+      setNotice('Pricing source saved.');
+    } catch (e) { setError((e as { message?: string }).message || 'Could not save project pricing.'); }
+    finally { lock.current = false; setSaving(false); }
+  }
+  return <>
+    <button type="button" onClick={start} className="mt-3 min-h-11 w-full rounded-lg border border-[#8fd8f7] bg-[#e8f7ff] px-3 py-2 text-sm font-semibold text-[#007bb5]">Manage Project Rates</button>
+    <dialog ref={dialog} aria-labelledby="manage-project-billing-title" onCancel={(e) => { e.preventDefault(); close(); }}
+      style={{ width: 'calc(100% - 1rem)', maxWidth: '48rem' }}
+      className="m-auto max-h-[94dvh] overflow-y-auto rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-white px-3 py-3 sm:px-5">
+        <div className="min-w-0"><h2 id="manage-project-billing-title" className="text-xl font-bold">Manage Project Rates</h2><p className="mt-1 break-words text-sm text-gray-600">{project.project_number}</p></div>
+        <button type="button" disabled={saving || rateBusy} onClick={close} className="min-h-11 rounded-lg border px-3 py-2 text-sm">Close</button>
+      </div>
+      {open && <div className="min-w-0 space-y-3 px-3 py-4 sm:space-y-4 sm:px-5">
+        <fieldset disabled={saving || rateBusy}>
+          <legend className="mb-2 text-sm font-medium">Pricing source</legend>
+          <div className="grid grid-cols-3 gap-2">
+            {[['customer','Customer'],['project','Project Override'],['standard','Standard']].map(([value,label]) => <button type="button" key={value} aria-pressed={source === value} onClick={() => switchSource(value)} className={`min-h-11 min-w-0 rounded-lg border px-2 py-3 text-sm font-medium sm:px-3 ${source === value ? 'border-black bg-black text-white' : 'bg-white text-gray-700'}`}>{label}</button>)}
+          </div>
+        </fieldset>
+        <p className="text-sm text-gray-600">{source === 'project' ? (settingsDirty ? 'Choose a service and enter its unit and price below. Apply Rate above before saving the rate.' : 'Choose a service below to set its unit and price together.') : source === 'customer' ? 'Uses customer billing units and rates. Choose Project Override for job-specific units and prices.' : 'Standard dollar rates are not configured yet.'}</p>
+        {settingsDirty && <button type="button" disabled={saving || rateBusy} onClick={() => void saveSettings()} className="min-h-11 w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving ? 'Saving…' : 'Apply Rate'}</button>}
+        {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+        {notice && <p role="status" className="text-sm text-green-700">{notice}</p>}
+        {source === 'project' ? (<ProjectOverrideRates projectId={project.id} projectName={project.project_number} methods={effectiveMethods} billingVersion={project.billing_methods_updated_at} canSaveRates={!settingsDirty && storedSource === 'project' && !saving} onEditState={onEditState} onRatesChanged={(patch) => {
+          if (patch) setDraftMethods(Object.fromEntries(projectBillingConfig.map((item) => [item.code, (patch[item.column] as string) || effectiveMethods[item.code]])));
+          onSaved(patch);
+        }} />) :
+          <ProjectPricingPanel key={source} projectId={project.id} projectName={project.project_number} customerId={project.customers?.id ?? null} source={source} methods={inheritedMethods} preview={false} />}
+      </div>}
+    </dialog>
+  </>;
+}
+
+
+type RevenueEntry = {
+  entry_id: string; work_date: string; service: string;
+  status: 'priced' | 'missing' | 'review' | 'excluded'; issue: string | null;
+  source: string; source_changed: boolean; amount: number | null; calculated_at: string;
+  lines: { unit: string; quantity: number; rate: number | null; amount: number | null; rate_from: string | null; rate_to: string | null }[];
+};
+type RevenueResult = {
+  total: number; missing_count: number; review_count: number; excluded_count: number;
+  source_changed_count: number; entries: RevenueEntry[];
+};
+function revenueMoney(value: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+}
+function revenueServiceKey(value: string) { return value.trim().toLowerCase().includes('smoke') ? 'smoke' : value.trim().toLowerCase(); }
+function ProjectRevenueSummary({ projectId, version, services }: {
+  projectId: string; version: string; services: { serviceType: string; summary: string }[];
+}) {
+  const [result, setResult] = useState<RevenueResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const sequence = useRef(0);
+  const busy = useRef(false);
+  const load = useCallback(async (background = false) => {
+    const request = ++sequence.current;
+    busy.current = true; if (!background) setLoading(true); setError('');
+    try {
+      const { data, error } = await supabase.rpc('get_project_revenue', { p_project_id: projectId, p_reprice: false });
+      if (error) throw error;
+      if (!data || !Array.isArray(data.entries)) throw new Error('Revenue response was incomplete. Please retry.');
+      if (request === sequence.current) setResult(data as RevenueResult);
+    } catch (e) {
+      if (request === sequence.current) { setResult(null); setError((e as { message?: string }).message || 'Revenue is unavailable. Please retry.'); }
+    } finally { if (request === sequence.current) { busy.current = false; setLoading(false); } }
+  }, [projectId]);
+  useEffect(() => {
+    void load();
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && !busy.current) void load(true);
+    };
+    const timer = window.setInterval(refresh, 30000);
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      sequence.current += 1;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [load, version]);
+  const partialCount = (result?.missing_count ?? 0) + (result?.review_count ?? 0);
+  return <div className="mt-4 space-y-4 border-t pt-4">
+    <div className="rounded-lg bg-white p-4">
+      <p className="text-xs font-medium uppercase text-gray-500">Estimated Billable Revenue</p>
+      {loading ? <p role="status" className="mt-2 text-sm text-gray-600">Calculating estimate…</p> : error ? <p role="alert" className="mt-2 break-words text-sm text-red-700">{error}</p> : result && <>
+        <p className="mt-1 text-2xl font-bold">{revenueMoney(Number(result.total))}</p>
+        {partialCount > 0 && <p className="mt-2 text-sm font-medium text-amber-800">Partial estimate · {partialCount} {partialCount === 1 ? 'entry needs' : 'entries need'} pricing or review.</p>}
+      </>}
+      <p className="mt-2 text-xs text-gray-500">Internal estimate based on submitted quantities and rates applicable to each service date.</p>
+    </div>
+    <div>
+      <p className="mb-3 text-sm font-bold text-gray-800">Service Totals</p>
+      <div className="space-y-2">
+        {services.map((service, index) => {
+          const entries = result?.entries.filter((entry) => revenueServiceKey(entry.service) === revenueServiceKey(service.serviceType)) ?? [];
+          const subtotal = entries.filter((entry) => entry.status === 'priced').reduce((sum, entry) => sum + Number(entry.amount ?? 0), 0);
+          const pending = entries.filter((entry) => entry.status === 'missing' || entry.status === 'review');
+          return <div key={`${service.serviceType}-${index}`} className="rounded-lg border bg-white px-3 py-2 text-sm">
+            <div className="flex items-start justify-between gap-3">
+              <span className="min-w-0 break-words font-semibold text-gray-800">{service.serviceType}</span>
+              <div className="min-w-0 text-right">
+                <p className="whitespace-pre-line font-medium text-gray-600">{service.summary}</p>
+                {!loading && !error && result && <><p className="mt-1 font-semibold">{revenueMoney(subtotal)}</p>{pending.length > 0 && <p className="mt-1 text-xs text-amber-800">Partial · {pending.length} {pending.length === 1 ? 'entry needs' : 'entries need'} review</p>}</>}
+              </div>
+            </div>
+            {!loading && !error && pending.length > 0 && <div className="mt-3 border-t border-amber-200 pt-2 text-xs text-amber-900">
+              <p className="mb-2">Excluded from revenue until resolved:</p>
+              <ul className="space-y-2">
+                {pending.map((entry) => <li key={entry.entry_id} className="break-words rounded-md bg-amber-50 px-3 py-2">
+                  <p className="font-semibold">{rateDate(entry.work_date)}</p>
+                  <p className="mt-1">{entry.issue || 'This submission needs pricing review.'}</p>
+                  {entry.status === 'missing' && entry.source !== 'standard' && <p className="mt-1">
+                    Add or adjust the {entry.source === 'project' ? 'project override' : 'customer'} rate to cover this date
+                    {entry.lines.some((line) => line.rate === null) ? ` for ${entry.lines.filter((line) => line.rate === null).map((line) => line.unit).join(' and ')}` : ''}.
+                  </p>}
+                </li>)}
+              </ul>
+            </div>}
+          </div>;
+        })}
+      </div>
+    </div>
+    <div className="flex flex-wrap gap-2">
+      {error && <button type="button" disabled={loading} onClick={() => { if (!busy.current) void load(); }} className="min-h-11 rounded-lg border bg-white px-3 py-2 text-sm">Retry estimate</button>}
+
+    </div>
+
+  </div>;
+}
+
+type NonbillableEntry = {
+ id: string; project_id: string; work_date: string; category: 'Service' | 'Admin Work'; description: string;
+ service_type: string | null; vehicle: string | null; quantity: number | null; unit: string | null;
+ created_by: string; created_at: string; updated_at: string; technician: string;
+};
+const nonbillableUnits: Record<string,string[]> = {
+ Mainline: ['Hours','Feet'], Lateral: ['Hours','Laterals'], Jetter: ['Hours','Feet'], 'Push Rod': ['Hours'],
+ Dye: ['Hours'], Smoke: ['Hours','Segments','Connections'], Laborer: ['Hours'], 'Traffic Control': ['Occurrences'],
+};
+function NonbillableCard({entry, onEdit}: {entry: NonbillableEntry; onEdit?: () => void}) {
+ return <div className="rounded-lg border border-[#cbd5e1] bg-white p-3 text-sm">
+  <p className="font-semibold text-[#16324f]">Non-billable · {entry.category === 'Service' ? entry.service_type : 'Admin Work'}</p>
+  {entry.vehicle && <p className="mt-1 text-xs text-gray-500">{entry.vehicle}</p>}
+  {entry.quantity !== null && <p className="mt-1 text-gray-600">{entry.quantity} {entry.unit?.toLowerCase()}</p>}
+  <p className="mt-2 whitespace-pre-wrap break-words text-gray-700">{entry.description}</p>
+  <p className="mt-2 text-xs text-gray-500">Submitted {new Date(entry.created_at).toLocaleString('en-US')} by {entry.technician}</p>
+  {onEdit && <button type="button" onClick={onEdit} className="mt-2 min-h-11 rounded-lg border px-3 py-2 text-sm">Edit / Delete</button>}
+ </div>;
+}
+function NonbillableModal({projectId, projectName, date, entry, onClose, onSaved}: {
+ projectId: string; projectName: string; date: string; entry: NonbillableEntry | null; onClose: () => void; onSaved: (date: string) => void;
+}) {
+ const dialog=useRef<HTMLDialogElement>(null); const title=useId(); const lock=useRef(false);
+ const request=useRef<{id:string;signature:string}|null>(null);
+ const [form,setForm]=useState({work_date:entry?.work_date ?? date,category:entry?.category ?? 'Service',description:entry?.description ?? '',service_type:entry?.service_type ?? 'Mainline',vehicle:entry?.vehicle ?? '',quantity:entry?.quantity == null ? '' : String(entry.quantity),unit:entry?.unit ?? 'Hours'});
+ const [busy,setBusy]=useState(false);const [error,setError]=useState('');const [dirty,setDirty]=useState(false);
+ useEffect(()=>{dialog.current?.showModal();const old=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=old;dialog.current?.close();};},[]);
+ function close(){if(lock.current)return;if(dirty&&!window.confirm('Discard unsaved non-billable work?'))return;onClose();}
+ async function save(remove=false){
+  if(lock.current)return;setError('');
+  if(remove&&!window.confirm('Delete this non-billable work entry?'))return;
+  if(!remove&&(!form.work_date||!form.description.trim()||form.description.trim().length>2000)){setError('Choose a date and describe the work performed (up to 2,000 characters).');return;}
+  if(!remove&&form.category==='Service'&&form.quantity&&(!/^\d+(\.\d{1,2})?$/.test(form.quantity)||Number(form.quantity)<=0)){setError('Enter a positive quantity with up to two decimal places, or leave it blank.');return;}
+  lock.current=true;setBusy(true);
+  try{
+   const {data:{user},error:authError}=await supabase.auth.getUser();if(authError)throw authError;if(!user)throw new Error('Please sign in.');
+   const values={work_date:form.work_date,category:form.category,description:form.description.trim(),service_type:form.category==='Service'?form.service_type:null,vehicle:form.category==='Service'&&form.vehicle?form.vehicle:null,quantity:form.category==='Service'&&form.quantity?Number(form.quantity):null,unit:form.category==='Service'&&form.quantity?form.unit:null};
+   if(entry){
+    const result=await supabase.from('project_nonbillable_work').update(remove?{deleted_at:new Date().toISOString()}:values).eq('id',entry.id).eq('project_id',projectId).eq('updated_at',entry.updated_at).is('deleted_at',null).select('id').maybeSingle();
+    if(result.error)throw result.error;if(!result.data)throw new Error('This entry changed or is unavailable. Close this form and reload the page before editing again.');
+   }else{
+    const signature=JSON.stringify([projectId,user.id,values]);if(request.current?.signature!==signature)request.current={id:crypto.randomUUID(),signature};
+    const result=await supabase.from('project_nonbillable_work').insert({...values,id:request.current.id,project_id:projectId,created_by:user.id});
+    if(result.error){
+     if(result.error.code!=='23505')throw result.error;
+     const lookup=await supabase.from('project_nonbillable_work').select('id').eq('id',request.current.id).eq('project_id',projectId).eq('created_by',user.id).maybeSingle();
+     if(lookup.error||!lookup.data)throw lookup.error||result.error;
+    }
+   }
+   onSaved(remove&&entry?entry.work_date:form.work_date);
+  }catch(e){setError((e as {message?:string}).message||'Could not save non-billable work.');}
+  finally{lock.current=false;setBusy(false);}
+ }
+ const input='mt-2 block box-border min-h-11 w-full min-w-0 max-w-full appearance-none rounded-lg border bg-white p-3 text-base font-normal';
+ return <dialog ref={dialog} aria-labelledby={title} onCancel={(e)=>{e.preventDefault();close();}} style={{width:'calc(100% - 2rem)',maxWidth:'48rem'}} className="m-auto max-h-[90dvh] overflow-y-auto rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
+  <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-white px-6 py-4"><div className="min-w-0"><h2 id={title} className="text-xl font-bold">{entry?'Edit':'Record'} Non-billable Work</h2><p className="mt-1 break-words text-sm text-gray-600">{projectName}</p></div><button type="button" disabled={busy} onClick={close} className="min-h-11 shrink-0 rounded-lg border px-3 py-2 text-sm">Close</button></div>
+  <form onSubmit={(e)=>{e.preventDefault();void save();}} onChange={()=>setDirty(true)} className="min-w-0 space-y-4 p-6">
+   <p className="text-sm text-gray-600">Completed work with no charge. Kept in project history and excluded from billable totals and the invoice tracker.</p>
+   <fieldset disabled={busy} className="min-w-0 space-y-4">
+    <label className="block min-w-0 text-sm font-medium">Date<input required type="date" className={input} value={form.work_date} onChange={(e)=>setForm({...form,work_date:e.target.value})}/></label>
+    <fieldset><legend className="text-sm font-medium">Work category</legend><div className="mt-2 grid grid-cols-2 gap-2">{(['Service','Admin Work'] as const).map(category=><button key={category} type="button" aria-pressed={form.category===category} onClick={()=>{setForm({...form,category});setDirty(true);}} className={`min-h-12 rounded-lg border px-3 py-3 text-sm ${form.category===category?'bg-black text-white':'bg-white text-gray-700'}`}>{category}</button>)}</div></fieldset>
+    {form.category==='Service'&&<>
+     <label className="block text-sm font-medium">Service type<select className={input} value={form.service_type} onChange={(e)=>setForm({...form,service_type:e.target.value,unit:nonbillableUnits[e.target.value][0],quantity:''})}>{Object.keys(nonbillableUnits).map(name=><option key={name}>{name}</option>)}</select></label>
+     <label className="block text-sm font-medium">Vehicle (optional)<select className={input} value={form.vehicle} onChange={(e)=>setForm({...form,vehicle:e.target.value})}><option value="">No vehicle</option><option>2007 Ford F-150</option><option>2016 Ford Van</option></select></label>
+     <div className="grid min-w-0 grid-cols-2 gap-3"><label className="min-w-0 text-sm font-medium">Quantity (optional)<input inputMode="decimal" className={input} value={form.quantity} onChange={(e)=>setForm({...form,quantity:e.target.value})}/></label><label className="min-w-0 text-sm font-medium">Unit<select className={input} value={form.unit} onChange={(e)=>setForm({...form,unit:e.target.value})}>{nonbillableUnits[form.service_type].map(unit=><option key={unit}>{unit}</option>)}</select></label></div>
+    </>}
+    <label className="block text-sm font-medium">Work performed<textarea required maxLength={2000} rows={3} className={input} value={form.description} onChange={(e)=>setForm({...form,description:e.target.value})}/></label>
+   </fieldset>
+   {error&&<p role="alert" className="text-sm text-red-700">{error}</p>}
+   <button disabled={busy} type="submit" className="min-h-12 w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy?'Saving…':'Save Non-billable Work'}</button>
+   {entry&&<button type="button" disabled={busy} onClick={()=>void save(true)} className="min-h-11 w-full rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">Delete entry</button>}
+  </form>
+ </dialog>;
+}
+
+function CustomerTypeBadge({ value }: { value: string | null | undefined }) {
+  if (value !== 'Sewer' && value !== 'Telecom') return null;
+  const label = value === 'Telecom' ? 'Telecom / Fiber' : 'Sewer';
+  return <span role="img" aria-label={label} title={label} className="inline-flex shrink-0 items-center text-[#16324f]">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      {value === 'Sewer' ? <>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="7" />
+        <path d="M8 7v10M12 5v14M16 7v10M7 8h10M5 12h14M7 16h10" />
+      </> : <>
+        <path d="M2.7 15.7A10 10 0 1 1 8.3 21.3L11.5 18L6 12.5Z" />
+        <g strokeWidth="1.3">
+          <path d="M6.8 13.3L7.5 10.5L7.2 8.4M8 14.5L11.4 10.1L12 6.5M9.1 15.6L16.3 8M10.2 16.7L14 13L17.6 12.2M11.3 17.8L14 16.4L16.1 16.8" />
+          <circle cx="7.1" cy="7.4" r="1" />
+          <circle cx="12.2" cy="5.5" r="1" />
+          <circle cx="17" cy="7.3" r="1" />
+          <circle cx="18.6" cy="12" r="1" />
+          <circle cx="17.1" cy="17" r="1" />
+        </g>
+      </>}
+    </svg>
+  </span>;
+}
+
+function ProjectTypeIcon({ value }: { value: string | null | undefined }) {
+ if(value!=='Commercial'&&value!=='Residential')return null;
+ return <span role="img" aria-label={value} title={value} className="inline-flex shrink-0 text-[#16324f]">
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+   {value==='Residential'?<><path d="M3 11L12 3l9 8M5 10v11h14V10M9 21v-7h6v7"/></>:<><rect x="5" y="2" width="14" height="20" rx="1"/><path d="M9 6h1m4 0h1M9 10h1m4 0h1M9 14h1m4 0h1M10 22v-4h4v4"/></>}
+  </svg>
+ </span>;
+}
+function ProjectTypePicker({value,onChange,disabled=false}:{value:string;onChange:(value:string)=>void;disabled?:boolean}) {
+ return <fieldset disabled={disabled} className="min-w-0"><legend className="mb-2 text-sm font-medium">Project type</legend>
+  <div className="grid grid-cols-2 gap-2">{['Commercial','Residential'].map(type=><label key={type} className={`flex min-h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm focus-within:ring-2 focus-within:ring-[#009be5] ${value===type?'border-[#009be5] bg-[#e8f7ff] text-[#16324f]':'bg-white text-gray-700'} ${disabled?'opacity-50':''}`}>
+   <input type="radio" name="project-type" value={type} checked={value===type} onChange={()=>onChange(type)} required className="sr-only"/>
+   <ProjectTypeIcon value={type}/><span>{type}</span>
+  </label>)}</div>
+ </fieldset>;
 }

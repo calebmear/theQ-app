@@ -31,6 +31,14 @@ body {
     rgb(var(--background-start-rgb));
 }
 
+/* Prevent iPhone Safari from zooming into form fields */
+@media screen and (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
 
 
 

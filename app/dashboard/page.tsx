@@ -1048,7 +1048,7 @@ onClick={() => {
 
     <AppRevenueSnapshot />
 
-    <div>
+    <div className="hidden">
     <div className="rounded-2xl bg-white p-4 shadow md:p-6">
     <div className="flex items-center justify-between gap-3">
   <h2 className="text-xl font-bold">Revenue Snapshot</h2>
@@ -2422,7 +2422,7 @@ function AppRevenueSnapshot() {
   const names = [...appRevenueServiceNames, ...(data?.services.map((row) => row.service).filter((name) => !appRevenueServiceNames.includes(name)) ?? [])].filter((name) => data?.services.some((row) => row.service === name));
   const period = year ? `${month ? `${months[Number(month) - 1]} ` : ''}${year}` : 'All service dates';
   return <section aria-labelledby="app-revenue-heading" className="rounded-2xl bg-white p-4 shadow md:p-6">
-    <h2 id="app-revenue-heading" className="text-xl font-bold">App Revenue Snapshot</h2>
+    <h2 id="app-revenue-heading" className="text-xl font-bold">Q Revenue Snapshot</h2>
     <p className="mt-1 text-sm text-gray-600">Estimated revenue from app submissions and rates applicable to each service date.</p>
     <div className="mt-4 grid grid-cols-2 gap-3">
       <label className="min-w-0 text-sm font-medium">Year

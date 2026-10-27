@@ -37,6 +37,7 @@ type BillingMethodCodes = {
 
 type Customer = {
   id: string;
+  customerType: string;
   name: string;
   contactName: string;
   phone: string;
@@ -107,6 +108,17 @@ const emptyPricingModels = {
   SMK: '',
   LABOR: '',
   TRFC: '',
+};
+
+const emptyCustomerForm = {
+  customerType: '',
+  name: '',
+  contactName: '',
+  phone: '',
+  email: '',
+  address: '',
+  notes: '',
+  pricingModels: emptyPricingModels,
 };
 
 const pricingModelOptions = [
@@ -410,14 +422,7 @@ export default function DashboardPage() {
   const [showCustomerBillingMethods, setShowCustomerBillingMethods] =
   useState(false);
 
-  const [newCustomer, setNewCustomer] = useState({
-    name: '',
-    contactName: '',
-    phone: '',
-    email: '',
-    address: '',
-    pricingModels: emptyPricingModels,
-  });
+  const [newCustomer, setNewCustomer] = useState(emptyCustomerForm);
 
   function getLocalDateInputValue() {
     const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -616,7 +621,7 @@ trafficControlPricingType: '',
       const { data, error } = await supabase
         .from('customers')
         .select(
-          'id, name, contact_name, phone, email, address, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type, notes'
+          'id, name, customer_type, contact_name, phone, email, address, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type, notes'
         )        
         .order('name');
 
@@ -628,6 +633,7 @@ trafficControlPricingType: '',
       const formattedCustomers: Customer[] = (data ?? []).map((customer) => ({
         id: customer.id,
         name: customer.name,
+        customerType: customer.customer_type ?? '',
         contactName: customer.contact_name ?? '',
         phone: customer.phone ?? '',
         email: customer.email ?? '',
@@ -711,12 +717,16 @@ trafficControlPricingType: '',
     setDashboardServiceEntries((data ?? []) as unknown as DashboardServiceEntry[]);  }
 
   async function saveCustomer() {
+
+    if (!canViewDashboard) return;
+
     if (
       !newCustomer.name.trim() ||
       !newCustomer.contactName.trim() ||
       !newCustomer.phone.trim() ||
       !newCustomer.email.trim() ||
       !newCustomer.address.trim() ||
+      
       Object.values(newCustomer.pricingModels).some((value) => !value)
     ) {
       alert('Please complete all required customer fields.');
@@ -727,10 +737,12 @@ trafficControlPricingType: '',
       .from('customers')
       .insert({
         name: newCustomer.name,
+        customer_type: newCustomer.customerType || null,
         contact_name: newCustomer.contactName,
         phone: newCustomer.phone,
         email: newCustomer.email,
         address: newCustomer.address,
+        notes: newCustomer.notes,
         main_pricing_type: newCustomer.pricingModels.MAIN,
         lateral_pricing_type: newCustomer.pricingModels.LAT,
         jet_pricing_type: newCustomer.pricingModels.JET,
@@ -752,10 +764,12 @@ trafficControlPricingType: '',
     const customer: Customer = {
       id: data.id,
       name: data.name,
+      customerType: data.customer_type ?? '',
       contactName: data.contact_name ?? '',
       phone: data.phone ?? '',
       email: data.email ?? '',
       address: data.address ?? '',
+      notes: data.notes ?? '',
       pricingModels: {
         MAIN: data.main_pricing_type ?? '',
         LAT: data.lateral_pricing_type ?? '',
@@ -766,21 +780,14 @@ trafficControlPricingType: '',
         LABOR: data.laborer_pricing_type ?? '',
         TRFC: data.traffic_control_pricing_type ?? '',
       },
-      notes: data.notes ?? '',
     };
 
-    setCustomers([...customers, customer]);
+    setCustomers(
+      [...customers, customer].sort((a, b) => a.name.localeCompare(b.name))
+    );
 
-    setNewCustomer({
-      name: '',
-      contactName: '',
-      phone: '',
-      email: '',
-      address: '',
-
-      pricingModels: emptyPricingModels,
-    });
-
+    setNewCustomer(emptyCustomerForm);
+    setShowCustomerBillingMethods(false);
     setShowCustomerForm(false);
   }
 
@@ -1096,149 +1103,163 @@ onClick={() => {
 
 <RecentActivity services={recentServices} formatDate={formatDate} />
 
-      {showCustomerForm && (
-  <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
-    <div className="flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
-      <h2 className="text-2xl font-bold">Add Customer</h2>
+      {canViewDashboard && showCustomerForm && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
+          <div className="flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-2xl font-bold">Add Customer</h2>
 
-      <div className="mt-4 grid flex-1 gap-4 overflow-y-auto pr-1">
-      <input required
-          type="text"
-          placeholder="Customer name"
-          value={newCustomer.name}
-          onChange={(e) =>
-            setNewCustomer({ ...newCustomer, name: e.target.value })
-          }
-          className="rounded-lg border p-3"
-        />
+            <div className="mt-4 grid flex-1 gap-4 overflow-y-auto pr-1">
+              <input
+                required
+                type="text"
+                placeholder="Customer name"
+                value={newCustomer.name}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, name: e.target.value })
+                }
+                className="rounded-lg border p-3"
+              />
 
-<input required
-          type="text"
-          placeholder="Contact name"
-          value={newCustomer.contactName}
-          onChange={(e) =>
-            setNewCustomer({
-              ...newCustomer,
-              contactName: e.target.value,
-            })
-          }
-          className="rounded-lg border p-3"
-        />
+              <label className="block text-sm font-medium">Customer type
+                <select value={newCustomer.customerType} onChange={(event)=>setNewCustomer({...newCustomer,customerType:event.target.value})} className="mt-2 block min-h-12 w-full rounded-lg border bg-white px-3 py-3 text-base font-normal">
+                  <option value="">Not set</option><option value="Sewer">Sewer</option><option value="Telecom">Telecom / Fiber</option>
+                </select>
+              </label>
 
-<input required
-          type="tel"
-          placeholder="Phone"
-          value={newCustomer.phone}
-          onChange={(e) =>
-            setNewCustomer({ ...newCustomer, phone: e.target.value })
-          }
-          className="rounded-lg border p-3"
-        />
+              <input
+                required
+                type="text"
+                placeholder="Contact name"
+                value={newCustomer.contactName}
+                onChange={(e) =>
+                  setNewCustomer({
+                    ...newCustomer,
+                    contactName: e.target.value,
+                  })
+                }
+                className="rounded-lg border p-3"
+              />
 
-<input required
-          type="email"
-          placeholder="Email"
-          value={newCustomer.email}
-          onChange={(e) =>
-            setNewCustomer({ ...newCustomer, email: e.target.value })
-          }
-          className="rounded-lg border p-3"
-        />
+              <input
+                required
+                type="tel"
+                placeholder="Phone"
+                value={newCustomer.phone}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, phone: e.target.value })
+                }
+                className="rounded-lg border p-3"
+              />
 
-<input
-  type="text"
-  required
-  placeholder="Mailing address"
-  value={newCustomer.address}
-  onChange={(e) =>
-    setNewCustomer({ ...newCustomer, address: e.target.value })
-  }
-  className="rounded-lg border p-3"
-/>
+              <input
+                required
+                type="email"
+                placeholder="Email"
+                value={newCustomer.email}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, email: e.target.value })
+                }
+                className="rounded-lg border p-3"
+              />
 
-<div className="rounded-lg border p-3">
-  <button
-    type="button"
-    onClick={() =>
-      setShowCustomerBillingMethods(!showCustomerBillingMethods)
-    }
-    className="flex w-full items-center justify-between gap-3 text-left"
-  >
-    <span className="text-sm font-medium">Billing Methods</span>
+              <input
+                required
+                type="text"
+                placeholder="Mailing address"
+                value={newCustomer.address}
+                onChange={(e) =>
+                  setNewCustomer({ ...newCustomer, address: e.target.value })
+                }
+                className="rounded-lg border p-3"
+              />
 
-    <span className="text-xl leading-none text-gray-500">
-      {showCustomerBillingMethods ? '⌄' : '›'}
-    </span>
-  </button>
+              <div className="rounded-lg border p-3">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowCustomerBillingMethods(!showCustomerBillingMethods)
+                  }
+                  className="flex w-full items-center justify-between gap-3 text-left"
+                >
+                  <span className="text-sm font-medium">Billing Methods</span>
 
-  {showCustomerBillingMethods && (
-    <div className="mt-3 grid gap-3">
-      {pricingModelOptions.map((option) => (
-        <div
-          key={option.code}
-          className="grid gap-2 md:grid-cols-[120px_1fr]"
-        >
-          <div className="flex items-baseline gap-2">
-  <p className="font-medium">{option.label}</p>
-  <p className="text-xs font-medium text-gray-500">{option.code}</p>
-</div>
+                  <span className="text-xl leading-none text-gray-500">
+                    {showCustomerBillingMethods ? '⌄' : '›'}
+                  </span>
+                </button>
 
-          <select
-            value={newCustomer.pricingModels[option.code]}
-            onChange={(e) =>
-              setNewCustomer({
-                ...newCustomer,
-                pricingModels: {
-                  ...newCustomer.pricingModels,
-                  [option.code]: e.target.value,
-                },
-              })
-            }
-            className={`rounded-lg border p-3 ${
-              newCustomer.pricingModels[option.code]
-                ? 'text-black'
-                : 'text-gray-400'
-            }`}
-          >
-            <option value="" disabled hidden>
-              Select pricing
-            </option>
+                {showCustomerBillingMethods && (
+                  <div className="mt-3 grid gap-3">
+                    {pricingModelOptions.map((option) => (
+                      <div
+                        key={option.code}
+                        className="grid gap-2 md:grid-cols-[120px_1fr]"
+                      >
+                        <div className="flex items-baseline gap-2">
+                          <p className="font-medium">{option.label}</p>
+                          <p className="text-xs font-medium text-gray-500">
+                            {option.code}
+                          </p>
+                        </div>
 
-            {option.choices.map((choice) => (
-              <option key={choice} value={choice} className="text-black">
-                {choice}
-              </option>
-            ))}
-          </select>
+                        <select
+                          value={newCustomer.pricingModels[option.code]}
+                          onChange={(e) =>
+                            setNewCustomer({
+                              ...newCustomer,
+                              pricingModels: {
+                                ...newCustomer.pricingModels,
+                                [option.code]: e.target.value,
+                              },
+                            })
+                          }
+                          className={`rounded-lg border p-3 ${
+                            newCustomer.pricingModels[option.code]
+                              ? 'text-black'
+                              : 'text-gray-400'
+                          }`}
+                        >
+                          <option value="" disabled hidden>
+                            Select pricing
+                          </option>
+
+                          {option.choices.map((choice) => (
+                            <option
+                              key={choice}
+                              value={choice}
+                              className="text-black"
+                            >
+                              {choice}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCustomerForm(false)}
+                className="rounded-lg border px-5 py-3 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={saveCustomer}
+                className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
+              >
+                Save Customer
+              </button>
+            </div>
+          </div>
         </div>
-      ))}
-    </div>
-  )}
-</div>
-
-      </div>
-
-      <div className="mt-6 flex justify-end gap-3">
-        <button
-          type="button"
-          onClick={() => setShowCustomerForm(false)}
-          className="rounded-lg border px-5 py-3 hover:bg-gray-50"
-        >
-          Cancel
-        </button>
-
-        <button
-          type="button"
-          onClick={saveCustomer}
-          className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800"
-        >
-          Save Customer
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
+      )}
 
       {showProjectForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">

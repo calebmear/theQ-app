@@ -2536,20 +2536,14 @@ function AppRevenueSnapshot() {
         {' · '}{projectTypes.length ? projectTypes.join(' + ') : 'All properties'}
         {includeUnclassified ? ' · Unclassified only' : ''}
       </p>
-      <div className="mt-1 flex items-center justify-center gap-3">
-        <button type="button" onClick={() => {
-          setCustomerTypes(['Sewer', 'Telecom']);
-          setProjectTypes(['Residential', 'Commercial']);
-          setIncludeUnclassified(false);
-          setShowIssues(false);
-        }} className="min-h-11 rounded-lg px-2 py-2 text-xs font-medium text-[#007bb5] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]">Select all</button>
+      {(customerTypes.length > 0 || projectTypes.length > 0 || includeUnclassified) && <div className="mt-1 flex items-center justify-center">
         <button type="button" onClick={() => {
           setCustomerTypes([]);
           setProjectTypes([]);
           setIncludeUnclassified(false);
           setShowIssues(false);
         }} className="min-h-11 rounded-lg px-2 py-2 text-xs font-medium text-gray-600 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]" title="Reset category filters and show all revenue">Reset filters</button>
-      </div>
+      </div>}
     </div>
     {loading ? <p role="status" className="mt-4 text-sm text-gray-600">Calculating app revenue…</p> : error ? <div className="mt-4">
       <p role="alert" className="break-words text-sm text-red-700">{error}</p>

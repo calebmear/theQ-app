@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Wrench } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, useRef, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserProfile } from '../../lib/useUserProfile';
 
@@ -1053,7 +1053,7 @@ onClick={() => {
       </div>
     </div>
 
-    <AppRevenueSnapshot />
+    <AppRevenueSnapshot onProjectClassified={() => { void loadProjects(); }} />
 
     <div className="hidden">
     <div className="rounded-2xl bg-white p-4 shadow md:p-6">
@@ -2438,7 +2438,7 @@ function RevenueServiceIcon({ value }: { value: string | null | undefined }) {
 }
 
 
-function AppRevenueSnapshot() {
+function AppRevenueSnapshot({ onProjectClassified }: { onProjectClassified: () => void }) {
   const [today] = useState(() => {
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
     return { year: parts.find((part) => part.type === 'year')!.value, month: String(Number(parts.find((part) => part.type === 'month')!.value)) };
@@ -2488,26 +2488,23 @@ function AppRevenueSnapshot() {
     const refresh = () => { if (document.visibilityState === 'visible') void load(true); };
     const timer = window.setInterval(refresh, 30000);
     window.addEventListener('focus', refresh);
+    window.addEventListener('q:project-classification-updated', refresh);
     document.addEventListener('visibilitychange', refresh);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
       window.removeEventListener('focus', refresh);
+      window.removeEventListener('q:project-classification-updated', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
   }, [year, month, customerTypes, projectTypes, includeUnclassified, revision]);
   const years = [...(data?.available_years ?? [])].sort((a, b) => b - a);
-const activeMonths = Array.from(
-  new Set(
-    (data?.available_periods ?? [])
-      .filter((period) => period.year === Number(year))
-      .map((period) => period.month)
-  )
-).sort((a, b) => b - a);  const months = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString('en-US', { month: 'long' }));
+  const activeMonths = [...new Set((data?.available_periods ?? []).filter((period) => period.year === Number(year)).map((period) => period.month))].sort((a, b) => b - a);
+  const months = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString('en-US', { month: 'long' }));
   const names = [...appRevenueServiceNames, ...(data?.services.map((row) => row.service).filter((name) => !appRevenueServiceNames.includes(name)) ?? [])].filter((name) => data?.services.some((row) => row.service === name));
   const period = year ? `${month ? `${months[Number(month) - 1]} ` : ''}${year}` : 'All service dates';
   return <section aria-labelledby="app-revenue-heading" className="rounded-2xl bg-white p-4 shadow md:p-6">
-    <h2 id="app-revenue-heading" className="text-xl font-bold">Q Revenue Snapshot</h2>
+    <h2 tabIndex={-1} id="app-revenue-heading" className="text-xl font-bold">Q Revenue Snapshot</h2>
     <p className="mt-1 text-sm text-gray-600">Estimated revenue from app submissions and rates applicable to each service date.</p>
     <div className="mt-4 grid grid-cols-2 gap-3">
       <label className="min-w-0 text-sm font-medium">Year
@@ -2535,6 +2532,9 @@ const activeMonths = Array.from(
         {(includeUnclassified || data?.has_unclassified_amounts) && <RevenueCategoryToggle label="Unclassified" selected={includeUnclassified}
           onToggle={() => { setIncludeUnclassified((current) => !current); setShowIssues(false); }}
           icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path strokeLinecap="round" d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16.5v.1"/></svg>} />}
+      </div>
+      <div className="flex justify-center">
+        <UnclassifiedProjectsModal onSaved={onProjectClassified} />
       </div>
       <p aria-live="polite" className="mx-auto mt-1 max-w-md text-center text-xs text-gray-600">
         {customerTypes.length ? customerTypes.join(' + ') : 'All services'}
@@ -2600,4 +2600,156 @@ function ProjectTypePicker({value,onChange,disabled=false}:{value:string;onChang
    <ProjectTypeIcon value={type}/><span>{type}</span>
   </label>)}</div>
  </fieldset>;
+}
+
+
+type UnclassifiedProjectRow = {
+  id: string;
+  projectNumber: string;
+  location: string;
+  customerName: string;
+};
+
+function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
+  const { role } = useUserProfile();
+  const canClassify = ['admin', 'management'].includes(String(role ?? '').trim().toLowerCase());
+  const dialog = useRef<HTMLDialogElement>(null);
+  const returnFocus = useRef<HTMLButtonElement>(null);
+  const busy = useRef(false);
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<UnclassifiedProjectRow[]>([]);
+  const [count, setCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [saving, setSaving] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, 'Residential' | 'Commercial'>>({});
+
+  const reload = useCallback(async () => {
+    if (!canClassify) return;
+    setLoading(true);
+    try {
+      // Load a small batch; reloading after a save brings in the next project.
+      const { data, error, count } = await supabase.from('projects')
+        .select('id, project_number, project_location, customers(name)', { count: 'exact' })
+        .or('project_type.is.null,project_type.eq.')
+        .order('project_number').order('id').limit(25);
+      if (error) throw error;
+      setRows((data ?? []).map((row) => {
+        const customer = Array.isArray(row.customers) ? row.customers[0] : row.customers;
+        return { id: row.id, projectNumber: row.project_number || 'Project',
+          location: row.project_location ?? '', customerName: customer?.name ?? '' };
+      }));
+      setCount(count ?? 0);
+      setError('');
+    } catch (failure) {
+      setError((failure as { message?: string }).message || 'Could not load unclassified projects.');
+    } finally { setLoading(false); }
+  }, [canClassify]);
+
+  useEffect(() => {
+    if (!canClassify) return;
+    void reload();
+    const refresh = () => { if (document.visibilityState === 'visible' && !busy.current) void reload(); };
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [canClassify, reload]);
+
+  useEffect(() => {
+    if (!open || !canClassify) { dialog.current?.close(); return; }
+    dialog.current?.showModal();
+    const oldOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { dialog.current?.close(); document.body.style.overflow = oldOverflow; };
+  }, [open, canClassify]);
+
+  function close() {
+    if (busy.current) return;
+    setOpen(false);
+    setDrafts({});
+    setNotice('');
+    window.requestAnimationFrame(() => {
+      // The link disappears when the last project is classified.
+      if (returnFocus.current) returnFocus.current.focus();
+      else document.getElementById('app-revenue-heading')?.focus();
+    });
+  }
+
+  async function confirm(row: UnclassifiedProjectRow) {
+    const type = drafts[row.id];
+    if (!canClassify || !type || busy.current) return;
+    busy.current = true;
+    setSaving(row.id); setError(''); setNotice('');
+    try {
+      // Keep existing row-level permissions and do not overwrite another user's classification.
+      const { data, error } = await supabase.from('projects')
+        .update({ project_type: type }).eq('id', row.id)
+        .or('project_type.is.null,project_type.eq.').select('id').maybeSingle();
+      if (error) throw error;
+      if (!data) {
+        await reload();
+        throw new Error('This project may already be classified, or you may not have permission. The list has been refreshed.');
+      }
+      setDrafts((current) => { const next = { ...current }; delete next[row.id]; return next; });
+      setNotice(`${row.projectNumber} classified as ${type}.`);
+      await reload();
+      onSaved();
+      window.dispatchEvent(new Event('q:project-classification-updated'));
+    } catch (failure) {
+      setError((failure as { message?: string }).message || 'Classification could not be saved. Please retry.');
+    } finally { busy.current = false; setSaving(null); }
+  }
+
+  if (!canClassify) return null;
+  return <>
+    {(count > 0 || error) && <button ref={returnFocus} type="button"
+      onClick={() => { setOpen(true); setNotice(''); void reload(); }}
+      className="mt-1 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-800 hover:bg-orange-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-600">
+      <span aria-hidden="true" className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-orange-400 text-orange-800">?</span>
+      {count > 0 ? `Unclassified projects (${count})` : 'Review project classifications'}
+      <span aria-hidden="true">→</span>
+    </button>}
+    <dialog ref={dialog} aria-labelledby="unclassified-projects-title"
+      onCancel={(event) => { event.preventDefault(); close(); }}
+      className="m-auto max-h-[85dvh] w-[calc(100%_-_2rem)] max-w-lg rounded-2xl border bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-white px-4 py-3">
+        <div><h2 id="unclassified-projects-title" className="text-lg font-bold">Unclassified projects</h2>
+          <p className="mt-1 text-xs text-gray-600">{count} remaining</p></div>
+        <button type="button" disabled={!!saving} onClick={close} aria-label="Close classification modal"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border text-xl disabled:opacity-50">×</button>
+      </div>
+      <div className="space-y-3 p-4">
+        <p className="text-sm text-gray-600">Choose Residential or Commercial, then confirm.</p>
+        {notice && <p role="status" className="text-sm text-green-800">{notice}</p>}
+        {error && <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
+          <p>{error}</p><button type="button" disabled={!!saving} onClick={() => void reload()} className="mt-1 min-h-11 underline">Retry loading</button>
+        </div>}
+        {loading && <p role="status" className="text-sm text-gray-600">Refreshing projects…</p>}
+        {!loading && !error && count === 0 && <p role="status" className="rounded-lg bg-green-50 p-3 text-sm text-green-800">All projects are classified.</p>}
+        {rows.map((row) => <article key={row.id} className="rounded-xl border p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="font-semibold">{row.projectNumber}</h3>
+            <span className="rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-900">Unclassified</span>
+          </div>
+          {row.customerName && <p className="mt-1 break-words text-sm text-gray-600">{row.customerName}</p>}
+          {row.location && <p className="mt-1 break-words text-sm text-gray-600">{row.location}</p>}
+          <div role="group" aria-label={`Project type for ${row.projectNumber}`} className="mt-3 grid grid-cols-2 gap-2">
+            {(['Residential', 'Commercial'] as const).map((type) => <button key={type} type="button"
+              disabled={!!saving || loading} aria-pressed={drafts[row.id] === type}
+              onClick={() => setDrafts((current) => ({ ...current, [row.id]: type }))}
+              className={`flex min-h-11 min-w-0 flex-wrap items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm disabled:opacity-50 ${
+                drafts[row.id] === type ? 'border-[#16324f] bg-[#16324f] text-white' : 'border-[#b8def0] bg-[#e8f7ff] text-[#16324f]'
+              }`}>
+              <span aria-hidden="true" className="inline-flex [&_span]:text-inherit"><ProjectTypeIcon value={type} /></span>{type}
+            </button>)}
+          </div>
+          <div className="mt-3 flex justify-end"><button type="button" disabled={!drafts[row.id] || !!saving || loading}
+            onClick={() => void confirm(row)} className="min-h-11 rounded-lg bg-[#16324f] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
+            {saving === row.id ? 'Saving…' : 'Confirm'}
+          </button></div>
+        </article>)}
+        {!loading && count > rows.length && <p className="text-xs text-gray-600">Showing {rows.length} of {count}. More projects appear as you classify these.</p>}
+      </div>
+    </dialog>
+  </>;
 }

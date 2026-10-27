@@ -2499,7 +2499,11 @@ function AppRevenueSnapshot({ onProjectClassified }: { onProjectClassified: () =
     };
   }, [year, month, customerTypes, projectTypes, includeUnclassified, revision]);
   const years = [...(data?.available_years ?? [])].sort((a, b) => b - a);
-  const activeMonths = [...new Set((data?.available_periods ?? []).filter((period) => period.year === Number(year)).map((period) => period.month))].sort((a, b) => b - a);
+  const activeMonths = Array.from(new Set<number>(
+    (data?.available_periods ?? [])
+      .filter((period) => period.year === Number(year))
+      .map((period) => period.month)
+  )).sort((a, b) => b - a);
   const months = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString('en-US', { month: 'long' }));
   const names = [...appRevenueServiceNames, ...(data?.services.map((row) => row.service).filter((name) => !appRevenueServiceNames.includes(name)) ?? [])].filter((name) => data?.services.some((row) => row.service === name));
   const period = year ? `${month ? `${months[Number(month) - 1]} ` : ''}${year}` : 'All service dates';

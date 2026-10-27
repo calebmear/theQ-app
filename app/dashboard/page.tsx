@@ -434,6 +434,7 @@ export default function DashboardPage() {
   
 
   const [newProject, setNewProject] = useState({
+    projectType: '',
     id: '',
     name: '',
     customerId: '',
@@ -787,6 +788,7 @@ trafficControlPricingType: '',
     const projectId = newProject.id.trim();
   
     if (!projectId || !newProject.customerId) return;
+    if (!newProject.projectType) { alert('Choose Commercial or Residential for this project.'); return; }
   
     setCheckingProjectId(true);
     setProjectIdCheckError('');
@@ -810,6 +812,7 @@ trafficControlPricingType: '',
   
     const { error } = await supabase.from('projects').insert({
       project_number: projectId,
+      project_type: newProject.projectType,
       customer_id: newProject.customerId,
       assigned_to: newProject.assignedToId || null,
       status: newProject.status,
@@ -859,6 +862,7 @@ traffic_control_pricing_type:
     }
 
     setNewProject({
+      projectType: '',
       id: '',
       name: '',
       customerId: '',
@@ -1344,6 +1348,8 @@ onClick={() => {
   </div>
 </div>
 
+              <div className="md:col-span-2"><ProjectTypePicker value={newProject.projectType} onChange={(value)=>setNewProject({...newProject,projectType:value})}/></div>
+
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-medium">
                   Project Location
@@ -1501,7 +1507,8 @@ onClick={() => {
     duplicateProjectId ||
     checkingProjectId ||
     !newProject.id.trim() ||
-    !newProject.customerId
+    !newProject.customerId ||
+    !newProject.projectType
   }
   className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
 >
@@ -2462,4 +2469,21 @@ function AppRevenueSnapshot() {
       <p className="mt-3 text-xs text-gray-500">Updated {new Date(data.calculated_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })} · Updates automatically while this page is open.</p>
     </>}
   </section>;
+}
+
+function ProjectTypeIcon({ value }: { value: string | null | undefined }) {
+ if(value!=='Commercial'&&value!=='Residential')return null;
+ return <span role="img" aria-label={value} title={value} className="inline-flex shrink-0 text-[#16324f]">
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+   {value==='Residential'?<><path d="M3 11L12 3l9 8M5 10v11h14V10M9 21v-7h6v7"/></>:<><rect x="5" y="2" width="14" height="20" rx="1"/><path d="M9 6h1m4 0h1M9 10h1m4 0h1M9 14h1m4 0h1M10 22v-4h4v4"/></>}
+  </svg>
+ </span>;
+}
+function ProjectTypePicker({value,onChange,disabled=false}:{value:string;onChange:(value:string)=>void;disabled?:boolean}) {
+ return <fieldset disabled={disabled} className="min-w-0"><legend className="mb-2 text-sm font-medium">Project type</legend>
+  <div className="grid grid-cols-2 gap-2">{['Commercial','Residential'].map(type=><label key={type} className={`flex min-h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm focus-within:ring-2 focus-within:ring-[#009be5] ${value===type?'border-[#009be5] bg-[#e8f7ff] text-[#16324f]':'bg-white text-gray-700'} ${disabled?'opacity-50':''}`}>
+   <input type="radio" name="project-type" value={type} checked={value===type} onChange={()=>onChange(type)} required className="sr-only"/>
+   <ProjectTypeIcon value={type}/><span>{type}</span>
+  </label>)}</div>
+ </fieldset>;
 }

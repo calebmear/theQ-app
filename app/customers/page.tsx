@@ -19,6 +19,7 @@ type PricingModels = {
 
 type Customer = {
   id: string;
+  customerType: string;
   name: string;
   contactName: string;
   phone: string;
@@ -29,6 +30,7 @@ type Customer = {
 };
 
 type CustomerForm = {
+  customerType: string;
   name: string;
   contactName: string;
   phone: string;
@@ -60,11 +62,12 @@ const pricingModelOptions = [
     label: 'Smoke',
     choices: ['Per Hour', 'Per Mainline Test + Per Residence'],
   },
-  { code: 'LABOR', label: 'Laborer', choices: ['Flat Rate'] },
+  { code: 'LABOR', label: 'Laborer', choices: ['Per Hour'] },
   { code: 'TRFC', label: 'Traffic Control', choices: ['Flat Rate'] },
 ] as const;
 
 const emptyCustomerForm: CustomerForm = {
+  customerType: '',
   name: '',
   contactName: '',
   phone: '',
@@ -77,6 +80,7 @@ const emptyCustomerForm: CustomerForm = {
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const { role } = useUserProfile();
 
@@ -94,15 +98,18 @@ const canManageCustomers =
   }, []);
 
   async function loadCustomers() {
+    setLoading(true);
+    setLoadError('');
     const { data, error } = await supabase
       .from('customers')
       .select(
-        'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type'
+        'id, name, customer_type, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type'
       )
       .order('name');
 
     if (error) {
       console.error('Error loading customers:', error);
+      setLoadError(error.message);
       setLoading(false);
       return;
     }
@@ -110,6 +117,7 @@ const canManageCustomers =
     const formattedCustomers: Customer[] = (data ?? []).map((customer) => ({
       id: customer.id,
       name: customer.name,
+      customerType: customer.customer_type ?? '',
       contactName: customer.contact_name ?? '',
       phone: customer.phone ?? '',
       email: customer.email ?? '',
@@ -164,6 +172,7 @@ const canManageCustomers =
       .from('customers')
       .insert({
         name: newCustomer.name,
+        customer_type: newCustomer.customerType || null,
         contact_name: newCustomer.contactName,
         phone: newCustomer.phone,
         email: newCustomer.email,
@@ -190,6 +199,7 @@ const canManageCustomers =
     const customer: Customer = {
       id: data.id,
       name: data.name,
+      customerType: data.customer_type ?? '',
       contactName: data.contact_name ?? '',
       phone: data.phone ?? '',
       email: data.email ?? '',
@@ -215,6 +225,13 @@ const canManageCustomers =
     setShowCustomerBillingMethods(false);
     setShowCustomerForm(false);
   }
+
+  const customerGroups = ['Sewer', 'Telecom', ''].map((type) => ({
+    type,
+    label: type === 'Telecom' ? 'Telecom / Fiber' : type || 'Not set',
+    customers: customers.filter((customer) => (customer.customerType || '') === type)
+      .sort((a, b) => a.name.localeCompare(b.name, 'en', { sensitivity: 'base', numeric: true }) || a.id.localeCompare(b.id)),
+  })).filter((group) => group.customers.length > 0);
 
   if (loading) {
     return <div className="text-black">Loading customers...</div>;
@@ -243,8 +260,20 @@ const canManageCustomers =
 )}
       </div>
 
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
+          <p className="font-semibold">Could not load customers.</p>
+          <p className="mt-1 text-sm">{loadError}</p>
+          <button type="button" onClick={loadCustomers} className="mt-3 rounded-lg border px-3 py-2 text-sm">
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="space-y-3">
-        {customers.map((customer) => (
+        {customerGroups.map((group) => <section key={group.type || 'unset'} className="space-y-3">
+          <h2 className="flex items-center gap-2 pt-1 text-sm font-semibold text-gray-500"><CustomerTypeBadge value={group.type} /><span>{group.label} <span className="font-normal">({group.customers.length})</span></span></h2>
+          {group.customers.map((customer) => (
           <div
             key={customer.id}
             className="rounded-xl border bg-white p-4 shadow-sm"
@@ -254,7 +283,7 @@ const canManageCustomers =
                 href={`/customers/${customer.id}?from=/customers&fromLabel=Customers`}
                 className="min-w-0 flex-1"
               >
-                <h2 className="truncate font-bold">{customer.name}</h2>
+                <h3 className="truncate font-bold">{customer.name}</h3>
                 <p className="mt-1 text-sm text-gray-600">
                   {customer.contactName || 'No contact saved'} •{' '}
                   {formatPhone(customer.phone)}
@@ -269,9 +298,10 @@ const canManageCustomers =
               <span className="text-xl text-gray-400">›</span>
             </div>
           </div>
-        ))}
+          ))}
+        </section>)}
 
-        {customers.length === 0 && (
+        {!loadError && customers.length === 0 && (
           <div className="rounded-xl border border-dashed bg-white p-4 text-center text-sm text-gray-500">
             No customers found.
           </div>
@@ -294,6 +324,12 @@ const canManageCustomers =
                 }
                 className="rounded-lg border p-3"
               />
+
+              <label className="block text-sm font-medium">Customer type
+                <select value={newCustomer.customerType} onChange={(event)=>setNewCustomer({...newCustomer,customerType:event.target.value})} className="mt-2 block min-h-12 w-full rounded-lg border bg-white px-3 py-3 text-base font-normal">
+                  <option value="">Not set</option><option value="Sewer">Sewer</option><option value="Telecom">Telecom / Fiber</option>
+                </select>
+              </label>
 
               <input
                 required
@@ -431,4 +467,28 @@ const canManageCustomers =
       )}
     </div>
   );
+}
+
+function CustomerTypeBadge({ value }: { value: string | null | undefined }) {
+  if (value !== 'Sewer' && value !== 'Telecom') return null;
+  const label = value === 'Telecom' ? 'Telecom / Fiber' : 'Sewer';
+  return <span role="img" aria-label={label} title={label} className="inline-flex shrink-0 items-center text-[#16324f]">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      {value === 'Sewer' ? <>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="7" />
+        <path d="M8 7v10M12 5v14M16 7v10M7 8h10M5 12h14M7 16h10" />
+      </> : <>
+        <path d="M2.7 15.7A10 10 0 1 1 8.3 21.3L11.5 18L6 12.5Z" />
+        <g strokeWidth="1.3">
+          <path d="M6.8 13.3L7.5 10.5L7.2 8.4M8 14.5L11.4 10.1L12 6.5M9.1 15.6L16.3 8M10.2 16.7L14 13L17.6 12.2M11.3 17.8L14 16.4L16.1 16.8" />
+          <circle cx="7.1" cy="7.4" r="1" />
+          <circle cx="12.2" cy="5.5" r="1" />
+          <circle cx="17" cy="7.3" r="1" />
+          <circle cx="18.6" cy="12" r="1" />
+          <circle cx="17.1" cy="17" r="1" />
+        </g>
+      </>}
+    </svg>
+  </span>;
 }

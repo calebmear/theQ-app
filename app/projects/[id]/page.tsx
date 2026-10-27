@@ -20,6 +20,7 @@ type ProjectDayUpdate = {
 };
 
 type ProjectDetail = {
+  project_type: string | null;
   id: string;
   project_number: string;
   status: string;
@@ -42,6 +43,7 @@ type ProjectDetail = {
   notes: string | null;
   customers: {
     id: string;
+    customer_type: string | null;
     name: string;
     address: string | null;
     phone: string | null;
@@ -308,6 +310,7 @@ const [projectSaveError, setProjectSaveError] = useState('');
 const [projectSaving, setProjectSaving] = useState(false);
 const projectSavingRef = useRef(false);
 const [projectEditForm, setProjectEditForm] = useState({
+  projectType: '',
   projectNumber: '',
   projectLocation: '',
   serviceStartDate: '',
@@ -737,6 +740,7 @@ function quantityLabelForPendingItem(item: PendingServiceItem) {
         .select(`
   id,
   project_number,
+  project_type,
   status,
   progress,
   service_start_date,
@@ -757,6 +761,7 @@ notes,
 customers (
   id,
   name,
+  customer_type,
   address,
   phone,
   email,
@@ -793,6 +798,7 @@ const employee = Array.isArray(data.employees)
   setProject({
     id: data.id,
     project_number: data.project_number,
+    project_type: data.project_type ?? null,
     status: data.status,
     progress: data.progress,
     service_start_date: data.service_start_date,
@@ -1843,6 +1849,7 @@ function startProjectEdit() {
   if (!project) return;
 
   setProjectEditForm({
+    projectType: project.project_type ?? '',
     projectNumber: project.project_number,
     projectLocation: project.project_location ?? '',
     serviceStartDate: project.service_start_date ?? '',
@@ -2008,6 +2015,7 @@ async function saveProjectEdit() {
     .from('projects')
     .update({
       project_number: projectEditForm.projectNumber,
+      project_type: projectEditForm.projectType || null,
       project_location: projectEditForm.projectLocation,
       ...(timeEntries.length === 0 && {
         service_start_date: projectEditForm.serviceStartDate,
@@ -2026,6 +2034,7 @@ async function saveProjectEdit() {
   setProject({
     ...project,
     project_number: projectEditForm.projectNumber,
+    project_type: projectEditForm.projectType || null,
     project_location: projectEditForm.projectLocation,
     service_start_date:
   timeEntries.length === 0
@@ -2060,13 +2069,14 @@ async function saveProjectEdit() {
 </div>
 
 
-<div className="rounded-2xl bg-white p-6 shadow">
+<div className="rounded-2xl bg-white p-4 shadow sm:p-6">
   {editingProject && (
     <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm font-medium text-yellow-800">
       Editing project details
     </div>
   )}
 
+{editingProject && <div className="mb-4"><ProjectTypePicker value={projectEditForm.projectType} onChange={(value)=>setProjectEditForm({...projectEditForm,projectType:value})} disabled={projectSaving}/></div>}
 <div className="border-b pb-3">
 <div className="flex items-start justify-between gap-3">
   <div className="min-w-0">
@@ -2086,9 +2096,7 @@ async function saveProjectEdit() {
         className="mt-1 w-full rounded-lg border p-3 text-xl font-bold"
       />
     ) : (
-      <p className="mt-1 break-all text-2xl font-bold">
-  {project.project_number}
-</p>
+      <div className="mt-1 flex min-w-0 items-center gap-2"><ProjectTypeIcon value={project.project_type}/><p className="min-w-0 break-words text-2xl font-bold">{project.project_number}</p></div>
     )}
   </div>
 
@@ -2277,13 +2285,15 @@ async function saveProjectEdit() {
   {project.customers?.id ? (
     <Link
       href={`/customers/${project.customers.id}`}
-      className="mt-1 inline-block text-lg font-semibold hover:underline"
+      className="mt-1 inline-flex max-w-full items-center gap-2 text-lg font-semibold hover:underline"
     >
-      {project.customers.name}
+      <CustomerTypeBadge value={project.customers.customer_type} />
+      <span className="min-w-0 break-words">{project.customers.name}</span>
     </Link>
   ) : (
     <p className="mt-1 text-lg font-semibold">No customer saved</p>
   )}
+
 
   <p className="mt-1 text-sm text-gray-600">
     {formatPhone(project.customers?.phone)}
@@ -2317,7 +2327,7 @@ async function saveProjectEdit() {
   onSaved={(patch) => { setProject((current) => current ? { ...current, ...patch } : current); setProjectPricingRevision((value) => value + 1); }} />}
 <button type="button" aria-expanded={billingExpanded} aria-controls="project-billing-details"
   onClick={() => setBillingExpanded((value) => !value)}
-  className="mt-2 inline-flex min-h-11 items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-[#007bb5] focus-visible:ring-2 focus-visible:ring-[#009be5]">
+  className="mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold text-[#007bb5] focus-visible:ring-2 focus-visible:ring-[#009be5]">
   {billingExpanded ? 'Hide details' : 'View details'} <span aria-hidden="true">{billingExpanded ? '▴' : '▾'}</span>
 </button>
 {(billingExpanded) && <div id="project-billing-details">
@@ -2325,13 +2335,13 @@ async function saveProjectEdit() {
     projectId={project.id} projectName={project.project_number} customerId={project.customers?.id ?? null}
     source={project.billing_method_source ?? 'customer'} preview={false}
     methods={{MAIN: billingMethods.main, LAT: billingMethods.lateral, JET: billingMethods.jet, PUSH: billingMethods.pushRod, DYE: billingMethods.dye, SMK: billingMethods.smoke, LABOR: billingMethods.laborer, TRFC: billingMethods.trafficControl}}
-  /> : (<div className="mt-2 divide-y">
+  /> : (<div className="mt-3 grid grid-cols-2 items-start gap-x-3 gap-y-5">
     {[
       ['MAIN', billingMethods.main], ['LAT', billingMethods.lateral],
       ['JET', billingMethods.jet], ['PUSH', billingMethods.pushRod],
       ['DYE', billingMethods.dye], ['SMK', billingMethods.smoke],
       ['LABOR', billingMethods.laborer], ['TRFC', billingMethods.trafficControl],
-    ].map(([code, method]) => <div key={code} className="grid grid-cols-[56px_minmax(0,1fr)] gap-3 py-2 text-sm">
+    ].map(([code, method]) => <div key={code} className="flex min-w-0 flex-col gap-1 px-1 text-center text-sm">
       <span className="font-semibold">{code}</span><span className="min-w-0 break-words text-gray-600">{method}</span>
     </div>)}
   </div>)}
@@ -3975,20 +3985,21 @@ function ProjectOverrideRates({ projectId, projectName, methods, billingVersion,
           </form>
   );
   return <div>
-      <div className="space-y-3 p-3 sm:p-4">
+      <div className="space-y-3">
         <details className="text-sm text-gray-600">
           <summary className="flex min-h-11 cursor-pointer items-center text-[#007bb5]">Rate dates &amp; pricing help ▾</summary>
           <p className="pb-2">Project rates apply throughout the project’s service period. The start follows the first service date (or estimated start before work begins). The end follows the final service date once completed. Edit an existing unit’s rate rather than adding date ranges.</p>
         </details>
+        <p className="text-xs text-gray-500">All override rates follow the project’s service dates.</p>
         {loading ? <p role="status">Loading rates...</p> : loadError ? <p role="alert" className="text-sm text-red-700">{loadError}</p> : <>
-          <section aria-label="Service rates" className="space-y-3">
+          <section aria-label="Service rates" className="grid items-start gap-2 sm:grid-cols-2">
             {rateServices.map((service) => {
               const serviceRows = rows.filter((row) => row.service_code === service.code);
               const visibleIds = new Set(serviceRows.map((row) => row.id));
               const historyCount = 0;
               const historyOpen = expandedHistory[service.code] ?? false;
               const historyId = `rate-history-${projectId}-${service.code}`;
-              return <section key={service.code} aria-label={`${service.name} rates`} className="min-w-0 rounded-xl border p-4">
+              return <section key={service.code} aria-label={`${service.name} rates`} className={`min-w-0 rounded-lg border px-3 py-2 ${activeService === service.code ? 'sm:col-span-2' : ''}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold">{service.name} <span className="ml-1 text-xs font-normal text-gray-500">{service.code}</span></h3>
                   <button type="button" disabled={saving} onClick={() => {
@@ -3999,7 +4010,7 @@ function ProjectOverrideRates({ projectId, projectName, methods, billingVersion,
                   }} className="min-h-11 rounded-lg px-3 py-2 text-sm font-semibold text-[#007bb5] hover:bg-[#e8f7ff]" aria-label={`Add project rate for ${service.name}`}>+ Add rate</button>
                 </div>
                 {serviceRows.length === 0 && activeService !== service.code && <p className="pb-1 text-sm text-gray-500">No rate set.</p>}
-                <div id={historyId} className="divide-y border-t border-gray-100 pt-2">
+                <div id={historyId} className="divide-y border-gray-100">
                   {serviceRows.map((row) => {
                     const status = 'Project service period';
                     return <div key={row.id} hidden={!historyOpen && !visibleIds.has(row.id)} className="py-2">
@@ -4007,7 +4018,7 @@ function ProjectOverrideRates({ projectId, projectName, methods, billingVersion,
                         <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1">
                           <div className="min-w-0">
                             <p className="text-sm"><span className="font-semibold">{new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(row.amount))}</span> <span className="text-gray-600">{row.unit}</span></p>
-                            <p className="mt-0.5 text-xs leading-5 text-gray-500">{row.effective_from ? rateDate(row.effective_from) : 'Start not set'} – {row.effective_to ? rateDate(row.effective_to) : 'Until project completion'} · {status}</p>
+
                           </div>
                           <button type="button" disabled={saving} onClick={() => {
                             if (!discard()) return;
@@ -4016,7 +4027,7 @@ function ProjectOverrideRates({ projectId, projectName, methods, billingVersion,
                             setDirty(false); setError(''); setNotice('');
                           }} className="min-h-11 justify-self-end rounded-lg px-3 py-2 text-sm font-medium text-[#007bb5] hover:bg-[#e8f7ff]" aria-label={`Edit ${service.name} ${row.unit} rate from ${rateDate(row.effective_from)}`}>Edit</button>
                         </div>
-                        {row.note && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-gray-600">{row.note}</p>}
+                        {row.note && <details className="mt-1 text-xs text-gray-600"><summary className="cursor-pointer py-2">Note</summary><p className="whitespace-pre-wrap break-words">{row.note}</p></details>}
                       </>}
                     </div>;
                   })}
@@ -4078,20 +4089,20 @@ function ProjectPricingPanel({ projectId, projectName, customerId, source, metho
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, []);
-  return <div className="mt-4 space-y-3">
+  return <div className="mt-3 w-full min-w-0 space-y-3">
     {preview && <p className="text-sm text-amber-800">Preview only. Save Project to apply this billing source and its methods.</p>}
 
     {source === 'standard' && <p className="text-sm text-gray-600">Standard dollar rates have not been configured. Existing standard billing methods remain available.</p>}
     {error && <div><p role="alert" className="text-sm text-red-700">{error}</p><button type="button" onClick={() => setRevision((v) => v + 1)} className="min-h-11 rounded-lg border px-3 py-2 text-sm">Retry rates</button></div>}
-    <div className="divide-y">
-      {rateServices.map((service) => <div key={service.code} className="grid min-w-0 grid-cols-[56px_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-2 text-sm sm:grid-cols-[56px_minmax(0,1fr)_auto]">
-        <span className="font-semibold" title={service.name}>{service.code}</span>
-        <span className="min-w-0 break-words text-gray-600">{methods[service.code] || 'Method not set'}</span>
-        <span className="col-start-2 min-w-0 break-words font-semibold sm:col-start-auto sm:text-right">{source === 'standard' ? 'Not configured' : loading ? 'Loading…' : error ? 'Rate unavailable' : !methods[service.code] ? 'Set billing method first' : formatCurrentRate(source === 'project' ? rows.map((row) => ({ ...row, effective_from: '0001-01-01', effective_to: null })) : rows, service.code, methods[service.code], asOf)}</span>
+    <div className="grid w-full grid-cols-2 items-start gap-x-3 gap-y-5 sm:gap-x-6">
+      {rateServices.map((service) => <div key={service.code} className="min-w-0 px-1 text-center text-sm">
+        <p className="font-semibold" title={service.name}>{service.code}</p>
+        <p className="mt-1 break-words text-gray-600">{methods[service.code] || 'Method not set'}</p>
+        <p className="mt-1 break-words font-semibold">{source === 'standard' ? 'Not configured' : loading ? 'Loading…' : error ? 'Rate unavailable' : !methods[service.code] ? 'Set billing method first' : formatCurrentRate(source === 'project' ? rows.map((row) => ({ ...row, effective_from: '0001-01-01', effective_to: null })) : rows, service.code, methods[service.code], asOf)}</p>
       </div>)}
     </div>
     {source === 'project' && preview && <p className="text-sm text-gray-600">Save Project, then use Manage Project Rates to enter custom rates.</p>}
-    {source === 'customer' && customerId && <Link href={`/customers/${customerId}`} className="inline-flex min-h-11 items-center text-sm font-semibold text-[#007bb5]">Manage customer billing &amp; rates →</Link>}
+    {source === 'customer' && customerId && <Link href={`/customers/${customerId}`} className="flex min-h-11 w-full items-center justify-center text-center text-sm font-semibold text-[#007bb5]">Manage customer billing &amp; rates →</Link>}
   </div>;
 }
 
@@ -4148,7 +4159,7 @@ function ProjectBillingManager({ project, effectiveMethods, onSaved }: {
   }
   async function saveSettings() {
     if (lock.current || rateBusy || !settingsDirty) return;
-    if (!window.confirm(`Apply ${source === 'project' ? 'Project Override' : source === 'customer' ? 'Customer' : 'Standard'} billing to ${project.project_number}? This changes the methods used for new submissions. Existing service entries are not repriced.`)) return;
+    if (!window.confirm(`Apply ${source === 'project' ? 'Project Override' : source === 'customer' ? 'Customer' : 'Standard'} billing to ${project.project_number}? This changes the methods used for new submissions and updates revenue estimates using the selected rates. Recorded quantities stay unchanged.`)) return;
     lock.current = true; setSaving(true); setError(''); setNotice('');
     try {
       const methods = Object.fromEntries(projectBillingConfig.map((item) => [item.column, draftMethods[item.code]]));
@@ -4166,17 +4177,17 @@ function ProjectBillingManager({ project, effectiveMethods, onSaved }: {
   return <>
     <button type="button" onClick={start} className="mt-3 min-h-11 w-full rounded-lg border border-[#8fd8f7] bg-[#e8f7ff] px-3 py-2 text-sm font-semibold text-[#007bb5]">Manage Project Rates</button>
     <dialog ref={dialog} aria-labelledby="manage-project-billing-title" onCancel={(e) => { e.preventDefault(); close(); }}
-      style={{ width: 'calc(100% - 2rem)', maxWidth: '48rem' }}
-      className="m-auto max-h-[90dvh] overflow-y-auto rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-white px-4 py-3">
+      style={{ width: 'calc(100% - 1rem)', maxWidth: '48rem' }}
+      className="m-auto max-h-[94dvh] overflow-y-auto rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-white px-3 py-3 sm:px-5">
         <div className="min-w-0"><h2 id="manage-project-billing-title" className="text-xl font-bold">Manage Project Rates</h2><p className="mt-1 break-words text-sm text-gray-600">{project.project_number}</p></div>
         <button type="button" disabled={saving || rateBusy} onClick={close} className="min-h-11 rounded-lg border px-3 py-2 text-sm">Close</button>
       </div>
-      {open && <div className="space-y-4 p-4">
+      {open && <div className="min-w-0 space-y-3 px-3 py-4 sm:space-y-4 sm:px-5">
         <fieldset disabled={saving || rateBusy}>
           <legend className="mb-2 text-sm font-medium">Pricing source</legend>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {[['customer','Customer'],['project','Project Override'],['standard','Standard']].map(([value,label]) => <button type="button" key={value} aria-pressed={source === value} onClick={() => switchSource(value)} className={`min-h-11 rounded-lg border px-3 py-3 text-sm font-medium ${source === value ? 'border-black bg-black text-white' : 'bg-white text-gray-700'}`}>{label}</button>)}
+          <div className="grid grid-cols-3 gap-2">
+            {[['customer','Customer'],['project','Project Override'],['standard','Standard']].map(([value,label]) => <button type="button" key={value} aria-pressed={source === value} onClick={() => switchSource(value)} className={`min-h-11 min-w-0 rounded-lg border px-2 py-3 text-sm font-medium sm:px-3 ${source === value ? 'border-black bg-black text-white' : 'bg-white text-gray-700'}`}>{label}</button>)}
           </div>
         </fieldset>
         <p className="text-sm text-gray-600">{source === 'project' ? (settingsDirty ? 'Choose a service and enter its unit and price below. Apply Rate above before saving the rate.' : 'Choose a service below to set its unit and price together.') : source === 'customer' ? 'Uses customer billing units and rates. Choose Project Override for job-specific units and prices.' : 'Standard dollar rates are not configured yet.'}</p>
@@ -4366,4 +4377,45 @@ function NonbillableModal({projectId, projectName, date, entry, onClose, onSaved
    {entry&&<button type="button" disabled={busy} onClick={()=>void save(true)} className="min-h-11 w-full rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">Delete entry</button>}
   </form>
  </dialog>;
+}
+
+function CustomerTypeBadge({ value }: { value: string | null | undefined }) {
+  if (value !== 'Sewer' && value !== 'Telecom') return null;
+  const label = value === 'Telecom' ? 'Telecom / Fiber' : 'Sewer';
+  return <span role="img" aria-label={label} title={label} className="inline-flex shrink-0 items-center text-[#16324f]">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      {value === 'Sewer' ? <>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="7" />
+        <path d="M8 7v10M12 5v14M16 7v10M7 8h10M5 12h14M7 16h10" />
+      </> : <>
+        <path d="M2.7 15.7A10 10 0 1 1 8.3 21.3L11.5 18L6 12.5Z" />
+        <g strokeWidth="1.3">
+          <path d="M6.8 13.3L7.5 10.5L7.2 8.4M8 14.5L11.4 10.1L12 6.5M9.1 15.6L16.3 8M10.2 16.7L14 13L17.6 12.2M11.3 17.8L14 16.4L16.1 16.8" />
+          <circle cx="7.1" cy="7.4" r="1" />
+          <circle cx="12.2" cy="5.5" r="1" />
+          <circle cx="17" cy="7.3" r="1" />
+          <circle cx="18.6" cy="12" r="1" />
+          <circle cx="17.1" cy="17" r="1" />
+        </g>
+      </>}
+    </svg>
+  </span>;
+}
+
+function ProjectTypeIcon({ value }: { value: string | null | undefined }) {
+ if(value!=='Commercial'&&value!=='Residential')return null;
+ return <span role="img" aria-label={value} title={value} className="inline-flex shrink-0 text-[#16324f]">
+  <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+   {value==='Residential'?<><path d="M3 11L12 3l9 8M5 10v11h14V10M9 21v-7h6v7"/></>:<><rect x="5" y="2" width="14" height="20" rx="1"/><path d="M9 6h1m4 0h1M9 10h1m4 0h1M9 14h1m4 0h1M10 22v-4h4v4"/></>}
+  </svg>
+ </span>;
+}
+function ProjectTypePicker({value,onChange,disabled=false}:{value:string;onChange:(value:string)=>void;disabled?:boolean}) {
+ return <fieldset disabled={disabled} className="min-w-0"><legend className="mb-2 text-sm font-medium">Project type</legend>
+  <div className="grid grid-cols-2 gap-2">{['Commercial','Residential'].map(type=><label key={type} className={`flex min-h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm focus-within:ring-2 focus-within:ring-[#009be5] ${value===type?'border-[#009be5] bg-[#e8f7ff] text-[#16324f]':'bg-white text-gray-700'} ${disabled?'opacity-50':''}`}>
+   <input type="radio" name="project-type" value={type} checked={value===type} onChange={()=>onChange(type)} required className="sr-only"/>
+   <ProjectTypeIcon value={type}/><span>{type}</span>
+  </label>)}</div>
+ </fieldset>;
 }

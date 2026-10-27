@@ -8,6 +8,7 @@ import { supabase } from '../../../lib/supabaseClient';
 
 type Customer = {
   id: string;
+  customerType: string;
   name: string;
   contactName: string;
   phone: string;
@@ -98,6 +99,7 @@ export default function CustomerDetailPage({
     return formatCurrentRate(currentRates, code, method, rateToday());
   }
   const [customerEditForm, setCustomerEditForm] = useState({
+    customerType: '',
     contactName: '',
     phone: '',
     email: '',
@@ -119,7 +121,7 @@ export default function CustomerDetailPage({
       const { data, error } = await supabase
         .from('customers')
         .select(
-          'id, name, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type'
+          'id, name, customer_type, contact_name, phone, email, address, notes, main_pricing_type, lateral_pricing_type, jet_pricing_type, push_rod_pricing_type, dye_pricing_type, smoke_pricing_type, laborer_pricing_type, traffic_control_pricing_type'
 
           )
         
@@ -135,6 +137,7 @@ export default function CustomerDetailPage({
       setCustomer({
         id: data.id,
         name: data.name,
+        customerType: data.customer_type ?? '',
         contactName: data.contact_name ?? '',
         phone: data.phone ?? '',
         email: data.email ?? '',
@@ -237,6 +240,7 @@ setProjects(formattedProjects);
     if (!customer) return;
   
     setCustomerEditForm({
+      customerType: customer.customerType,
       contactName: customer.contactName,
       phone: customer.phone,
       email: customer.email,
@@ -266,6 +270,7 @@ setProjects(formattedProjects);
     const { error } = await supabase
       .from('customers')
       .update({
+        customer_type: customerEditForm.customerType || null,
         contact_name: customerEditForm.contactName,
         phone: customerEditForm.phone,
         email: customerEditForm.email,
@@ -282,6 +287,7 @@ setProjects(formattedProjects);
   
     setCustomer({
       ...customer,
+      customerType: customerEditForm.customerType,
       contactName: customerEditForm.contactName,
       phone: customerEditForm.phone,
       email: customerEditForm.email,
@@ -326,7 +332,7 @@ setProjects(formattedProjects);
         <div className="flex items-start justify-between gap-4 border-b pb-3">
           <div>
             <p className="text-xs font-medium uppercase text-gray-500">Customer</p>
-            <h1 className="mt-1 text-xl font-bold">{customer.name}</h1>
+            <h1 className="mt-1 flex items-center gap-2 text-xl font-bold"><CustomerTypeBadge value={customer.customerType} /><span className="min-w-0 break-words">{customer.name}</span></h1>
           </div>
 
           {canManageCustomers && !editingCustomer && (
@@ -339,6 +345,17 @@ setProjects(formattedProjects);
             </button>
           )}
         </div>
+
+        {editingCustomer && canManageCustomers && <div className="border-b py-3">
+          <p className="text-xs font-medium uppercase text-gray-500">Customer Type</p>
+          <label className="mt-2 block text-sm">
+            <span className="sr-only">Customer type</span>
+            <select value={customerEditForm.customerType} onChange={(event)=>setCustomerEditForm({...customerEditForm,customerType:event.target.value})} className="block min-h-12 w-full rounded-lg border bg-white px-3 py-3 text-base">
+              <option value="">Not set</option><option value="Telecom">Telecom / Fiber</option><option value="Sewer">Sewer</option>
+            </select>
+            <span className="mt-2 block text-xs text-gray-500">Applies to projects linked to this customer.</span>
+          </label>
+        </div>}
 
         <div className="grid gap-3 py-3 md:grid-cols-[1fr_420px] md:gap-4 md:py-4">
           <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm md:gap-x-4 md:gap-y-3">
@@ -391,9 +408,7 @@ setProjects(formattedProjects);
               {canManageCustomers && !editingCustomer && <CustomerRates key={customer.id} customerId={customer.id} customerName={customer.name} customer={customer} onMethodSaved={(field, value) => setCustomer((current) => current ? { ...current, [field]: value } : current)} onRatesChanged={() => setRatesRevision((value) => value + 1)} />}
 
               <div
-  className={`mt-2 grid gap-2 ${
-    'grid-cols-2 gap-x-4'
-  }`}
+  className="mt-4 grid grid-cols-2 items-start gap-x-3 gap-y-5 sm:gap-x-6"
 >
   <PricingSelect
     code="MAIN"
@@ -701,7 +716,7 @@ function PricingSelect({
   onChange: (value: string) => void;
 }) {
   return (
-<div className="grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-center sm:gap-x-2">
+<div className="flex min-w-0 flex-col items-center gap-1 px-1 text-center">
       <span className="whitespace-nowrap font-semibold">{code}</span>
 
       {editing ? (
@@ -723,9 +738,9 @@ function PricingSelect({
           ))}
         </select>
       ) : (
-        <span className="flex min-w-0 flex-wrap items-baseline gap-x-1 break-words text-gray-600">
-          <span>{displayValue}</span>
-          {rateLabel && <span className="font-medium text-gray-900">· {rateLabel}</span>}
+        <span className="flex w-full min-w-0 flex-col items-center gap-1 break-words text-gray-600">
+          <span className="w-full break-words">{displayValue}</span>
+          {rateLabel && <span className="w-full break-words font-semibold text-gray-900">{rateLabel}</span>}
         </span>
       )}
     </div>
@@ -1058,4 +1073,28 @@ function CustomerRates({ customerId, customerName, customer, onMethodSaved, onRa
       </div>
     </dialog>
   </>;
+}
+
+function CustomerTypeBadge({ value }: { value: string | null | undefined }) {
+  if (value !== 'Sewer' && value !== 'Telecom') return null;
+  const label = value === 'Telecom' ? 'Telecom / Fiber' : 'Sewer';
+  return <span role="img" aria-label={label} title={label} className="inline-flex shrink-0 items-center text-[#16324f]">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
+      {value === 'Sewer' ? <>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="7" />
+        <path d="M8 7v10M12 5v14M16 7v10M7 8h10M5 12h14M7 16h10" />
+      </> : <>
+        <path d="M2.7 15.7A10 10 0 1 1 8.3 21.3L11.5 18L6 12.5Z" />
+        <g strokeWidth="1.3">
+          <path d="M6.8 13.3L7.5 10.5L7.2 8.4M8 14.5L11.4 10.1L12 6.5M9.1 15.6L16.3 8M10.2 16.7L14 13L17.6 12.2M11.3 17.8L14 16.4L16.1 16.8" />
+          <circle cx="7.1" cy="7.4" r="1" />
+          <circle cx="12.2" cy="5.5" r="1" />
+          <circle cx="17" cy="7.3" r="1" />
+          <circle cx="18.6" cy="12" r="1" />
+          <circle cx="17.1" cy="17" r="1" />
+        </g>
+      </>}
+    </svg>
+  </span>;
 }

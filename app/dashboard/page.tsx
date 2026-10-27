@@ -1245,8 +1245,7 @@ onClick={() => {
         <div className="flex max-h-[calc(100vh-4rem)] w-full max-w-2xl flex-col rounded-2xl bg-white p-6 shadow-xl">
           <h2 className="text-2xl font-bold">Add Project</h2>
     
-          <div className="mt-4 grid flex-1 gap-4 overflow-y-auto pr-1 md:grid-cols-2">
-              <div className="relative">
+          <div className="mt-4 grid min-w-0 flex-1 grid-cols-1 gap-4 overflow-x-hidden overflow-y-auto pr-1 md:grid-cols-2">              <div className="relative">
                 <label className="mb-2 block text-sm font-medium">
                   Customer
                 </label>
@@ -1433,11 +1432,11 @@ onClick={() => {
 </div>
 
 {newProject.billingMethodSource === 'project' && (
-  <div className="md:col-span-2 rounded-lg border p-3">
-    <p className="text-sm font-medium">Project Override Billing Methods</p>
+  <div className="min-w-0 max-w-full rounded-lg border p-3 md:col-span-2">
+        <p className="text-sm font-medium">Project Override Billing Methods</p>
 
-    <div className="mt-3 grid gap-3 md:grid-cols-2">
-      {pricingModelOptions.map((option) => {
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2">
+                {pricingModelOptions.map((option) => {
         const fieldMap = {
           MAIN: 'mainPricingType',
           LAT: 'lateralPricingType',
@@ -1452,8 +1451,8 @@ onClick={() => {
         const field = fieldMap[option.code];
 
         return (
-          <div key={option.code} className="grid gap-2">
-            <div className="flex items-baseline gap-2">
+<div key={option.code} className="grid min-w-0 gap-2">
+              <div className="flex items-baseline gap-2">
   <p className="font-medium">{option.label}</p>
   <p className="text-xs font-medium text-gray-500">{option.code}</p>
 </div>
@@ -1466,7 +1465,7 @@ onClick={() => {
                   [field]: e.target.value,
                 })
               }
-              className={`rounded-lg border p-3 ${
+              className={`box-border block w-full min-w-0 max-w-full rounded-lg border p-3 text-base ${
                 newProject[field] ? 'text-black' : 'text-gray-400'
               }`}
             >

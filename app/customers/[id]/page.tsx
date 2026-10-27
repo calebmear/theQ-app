@@ -798,7 +798,7 @@ function emptyRate() {
 function splitRateHistory(rows: CustomerRate[], today: string) {
   const visibleIds = new Set<string>();
   // Show one applicable rate per unit; preserve both combined Smoke components.
-  for (const unit of new Set(rows.map((row) => row.unit))) {
+  for (const unit of Array.from(new Set(rows.map((row) => row.unit)))) {
     const unitRows = rows.filter((row) => row.unit === unit);
     const current = unitRows.find((row) => row.effective_from <= today && (!row.effective_to || row.effective_to >= today));
     const upcoming = [...unitRows].filter((row) => row.effective_from > today)

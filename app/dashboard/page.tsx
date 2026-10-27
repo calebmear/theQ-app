@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Wrench } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserProfile } from '../../lib/useUserProfile';
 
@@ -2383,9 +2383,13 @@ function shopAreasByDate(entries: { work_date: string; categories?: string[] | n
 
 type AppRevenueSnapshotData = {
   total: number;
+  has_unclassified_amounts: boolean;
+  available_customer_types: string[];
+  available_project_types: string[];
   services: { service: string; amount: number; pending: number }[];
   issues: { entry_id: string; project_id: string; project_name: string; work_date: string; service: string; issue: string }[];
   available_years: number[];
+  available_periods: { year: number; month: number }[];
   priced_count: number;
   excluded_count: number;
   calculated_at: string;
@@ -2394,6 +2398,46 @@ const appRevenueServiceNames = ['Mainline', 'Lateral', 'Jetter', 'Push Rod', 'Dy
 function appRevenueCurrency(amount: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(amount));
 }
+function RevenueCategoryToggle({ label, selected, onToggle, icon }: {
+  label: string;
+  selected: boolean;
+  onToggle: () => void;
+  icon: ReactNode;
+}) {
+  return <button type="button" aria-label={label} title={label}
+    aria-pressed={selected} onClick={onToggle}
+    className={`inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5] ${
+      selected ? 'border-[#16324f] bg-[#16324f] text-white' : 'border-[#b8def0] bg-[#e8f7ff] text-[#16324f] hover:bg-[#d5effc]'
+    }`}>
+    <span aria-hidden="true" className="inline-flex items-center justify-center [&_span]:text-inherit [&_svg]:h-5 [&_svg]:w-5">{icon}</span>
+  </button>;
+}
+
+function RevenueServiceIcon({ value }: { value: string | null | undefined }) {
+  if (value !== 'Sewer' && value !== 'Telecom') return null;
+  const label = value === 'Telecom' ? 'Telecom / Fiber' : 'Sewer';
+  return <span role="img" aria-label={label} title={label} className="inline-flex shrink-0 items-center text-current">
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      {value === 'Sewer' ? <>
+        <circle cx="12" cy="12" r="10" />
+        <circle cx="12" cy="12" r="7" />
+        <path d="M8 7v10M12 5v14M16 7v10M7 8h10M5 12h14M7 16h10" />
+      </> : <>
+        <path d="M2.7 15.7A10 10 0 1 1 8.3 21.3L11.5 18L6 12.5Z" />
+        <g strokeWidth="1.3">
+          <path d="M6.8 13.3L7.5 10.5L7.2 8.4M8 14.5L11.4 10.1L12 6.5M9.1 15.6L16.3 8M10.2 16.7L14 13L17.6 12.2M11.3 17.8L14 16.4L16.1 16.8" />
+          <circle cx="7.1" cy="7.4" r="1" />
+          <circle cx="12.2" cy="5.5" r="1" />
+          <circle cx="17" cy="7.3" r="1" />
+          <circle cx="18.6" cy="12" r="1" />
+          <circle cx="17.1" cy="17" r="1" />
+        </g>
+      </>}
+    </svg>
+  </span>;
+}
+
+
 function AppRevenueSnapshot() {
   const [today] = useState(() => {
     const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit' }).formatToParts(new Date());
@@ -2401,6 +2445,9 @@ function AppRevenueSnapshot() {
   });
   const [year, setYear] = useState(today.year);
   const [month, setMonth] = useState('');
+  const [customerTypes, setCustomerTypes] = useState<string[]>([]);
+  const [projectTypes, setProjectTypes] = useState<string[]>([]);
+  const [includeUnclassified, setIncludeUnclassified] = useState(false);
   const [data, setData] = useState<AppRevenueSnapshotData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2414,10 +2461,22 @@ function AppRevenueSnapshot() {
       inFlight = true;
       if (!background) setLoading(true);
       try {
-        const response = await supabase.rpc('get_dashboard_app_revenue', { p_year: year ? Number(year) : null, p_month: year && month ? Number(month) : null });
+        const response = await supabase.rpc('get_dashboard_app_revenue_facets', { p_year: year ? Number(year) : null, p_month: year && month ? Number(month) : null, p_customer_types: customerTypes, p_project_types: projectTypes, p_unclassified_only: includeUnclassified });
         if (response.error) throw response.error;
-        if (!response.data || !Array.isArray(response.data.services) || !Array.isArray(response.data.issues)) throw new Error('The revenue response was incomplete. Please retry.');
-        if (!cancelled) { setData(response.data as AppRevenueSnapshotData); setError(''); }
+        if (!response.data || !Array.isArray(response.data.services) || !Array.isArray(response.data.issues) || !Array.isArray(response.data.available_periods) || typeof response.data.has_unclassified_amounts !== 'boolean' || !Array.isArray(response.data.available_customer_types) || !Array.isArray(response.data.available_project_types)) throw new Error('The revenue response was incomplete. Please retry.');
+        if (!cancelled) {
+          const next = response.data as AppRevenueSnapshotData;
+          setData(next);
+          setError('');
+          if (year && !next.available_years.includes(Number(year))) {
+            setYear(next.available_years.length ? String(Math.max(...next.available_years)) : '');
+            setMonth('');
+            setShowIssues(false);
+          } else if (month && !next.available_periods.some((period) => period.year === Number(year) && period.month === Number(month))) {
+            setMonth('');
+            setShowIssues(false);
+          }
+        }
       } catch (failure) {
         if (!cancelled) setError((failure as { message?: string }).message || 'App revenue is unavailable.');
       } finally {
@@ -2436,8 +2495,9 @@ function AppRevenueSnapshot() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [year, month, revision]);
-  const years = Array.from(new Set([Number(today.year), ...(data?.available_years ?? []), ...(year ? [Number(year)] : [])])).sort((a, b) => b - a);
+  }, [year, month, customerTypes, projectTypes, includeUnclassified, revision]);
+  const years = [...(data?.available_years ?? [])].sort((a, b) => b - a);
+  const activeMonths = [...new Set((data?.available_periods ?? []).filter((period) => period.year === Number(year)).map((period) => period.month))].sort((a, b) => b - a);
   const months = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString('en-US', { month: 'long' }));
   const names = [...appRevenueServiceNames, ...(data?.services.map((row) => row.service).filter((name) => !appRevenueServiceNames.includes(name)) ?? [])].filter((name) => data?.services.some((row) => row.service === name));
   const period = year ? `${month ? `${months[Number(month) - 1]} ` : ''}${year}` : 'All service dates';
@@ -2446,15 +2506,50 @@ function AppRevenueSnapshot() {
     <p className="mt-1 text-sm text-gray-600">Estimated revenue from app submissions and rates applicable to each service date.</p>
     <div className="mt-4 grid grid-cols-2 gap-3">
       <label className="min-w-0 text-sm font-medium">Year
-        <select value={year} onChange={(event) => { setYear(event.target.value); if (!event.target.value) setMonth(''); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-base">
+        <select value={year} onChange={(event) => { setYear(event.target.value); setMonth(''); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-base">
           <option value="">All years</option>{years.map((value) => <option key={value} value={value}>{value}</option>)}
         </select>
       </label>
       <label className="min-w-0 text-sm font-medium">Month
         <select disabled={!year} value={month} onChange={(event) => { setMonth(event.target.value); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-base disabled:bg-gray-50 disabled:text-gray-500">
-          <option value="">All months</option>{months.map((name, index) => ({ name, value: String(index + 1) })).reverse().map(({ name, value }) => <option key={value} value={value}>{name}</option>)}
+          <option value="">All months</option>{activeMonths.map((value) => <option key={value} value={value}>{months[value - 1]}</option>)}
         </select>
       </label>
+    </div>
+    <div className="mt-3">
+      <div role="group" aria-label="Revenue categories" className="mx-auto flex w-max max-w-full flex-nowrap items-center gap-1 overflow-x-auto py-1">
+        {['Sewer', 'Telecom'].filter((type) => customerTypes.includes(type) || !data || data.available_customer_types.includes(type)).map((type) => <RevenueCategoryToggle key={type}
+          label={type === 'Telecom' ? 'Telecom / Fiber' : type} selected={customerTypes.includes(type)}
+          onToggle={() => { setCustomerTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]); setShowIssues(false); }}
+          icon={<RevenueServiceIcon value={type} />} />)}
+        {(!data || ((customerTypes.length > 0 || data.available_customer_types.length > 0) && (projectTypes.length > 0 || data.available_project_types.length > 0))) && <span aria-hidden="true" className="mx-0.5 h-7 w-px shrink-0 bg-gray-200" />}
+        {['Residential', 'Commercial'].filter((type) => projectTypes.includes(type) || !data || data.available_project_types.includes(type)).map((type) => <RevenueCategoryToggle key={type}
+          label={type} selected={projectTypes.includes(type)}
+          onToggle={() => { setProjectTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]); setShowIssues(false); }}
+          icon={<ProjectTypeIcon value={type} />} />)}
+        {(includeUnclassified || data?.has_unclassified_amounts) && <RevenueCategoryToggle label="Unclassified" selected={includeUnclassified}
+          onToggle={() => { setIncludeUnclassified((current) => !current); setShowIssues(false); }}
+          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path strokeLinecap="round" d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16.5v.1"/></svg>} />}
+      </div>
+      <p aria-live="polite" className="mx-auto mt-1 max-w-md text-center text-xs text-gray-600">
+        {customerTypes.length ? customerTypes.join(' + ') : 'All services'}
+        {' · '}{projectTypes.length ? projectTypes.join(' + ') : 'All properties'}
+        {includeUnclassified ? ' · Unclassified only' : ''}
+      </p>
+      <div className="mt-1 flex items-center justify-center gap-3">
+        <button type="button" onClick={() => {
+          setCustomerTypes(['Sewer', 'Telecom']);
+          setProjectTypes(['Residential', 'Commercial']);
+          setIncludeUnclassified(false);
+          setShowIssues(false);
+        }} className="min-h-11 rounded-lg px-2 py-2 text-xs font-medium text-[#007bb5] hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]">Select all</button>
+        <button type="button" onClick={() => {
+          setCustomerTypes([]);
+          setProjectTypes([]);
+          setIncludeUnclassified(false);
+          setShowIssues(false);
+        }} className="min-h-11 rounded-lg px-2 py-2 text-xs font-medium text-gray-600 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]" title="Reset category filters and show all revenue">Reset filters</button>
+      </div>
     </div>
     {loading ? <p role="status" className="mt-4 text-sm text-gray-600">Calculating app revenue…</p> : error ? <div className="mt-4">
       <p role="alert" className="break-words text-sm text-red-700">{error}</p>
@@ -2463,7 +2558,7 @@ function AppRevenueSnapshot() {
       <div className="mt-4 rounded-xl bg-[#e8f7ff] p-4">
         <p className="text-xs font-medium uppercase text-gray-600">Estimated Billable Revenue · {period}</p>
         <p className="mt-1 break-words text-3xl font-bold">{appRevenueCurrency(data.total)}</p>
-        {data.issues.length > 0 ? <p className="mt-2 text-sm text-amber-900">Partial estimate · {data.issues.length} {data.issues.length === 1 ? 'submission needs' : 'submissions need'} pricing or review. These submissions are excluded from revenue.</p> : data.priced_count === 0 && <p className="mt-2 text-sm text-gray-600">No priced service submissions for this period.</p>}
+        {data.issues.length > 0 ? <p className="mt-2 text-sm text-amber-900">Partial estimate · {data.issues.length} {data.issues.length === 1 ? 'submission needs' : 'submissions need'} pricing or review. These submissions are excluded from revenue.</p> : data.priced_count === 0 && <p className="mt-2 text-sm text-gray-600">No priced service submissions match these filters.</p>}
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-2">
         {names.map((name) => {

@@ -2803,7 +2803,7 @@ function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
                 className={`flex min-h-11 min-w-0 flex-wrap items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm disabled:opacity-50 ${drafts[row.id] === type ? 'border-[#16324f] bg-[#16324f] text-white' : 'border-[#b8def0] bg-[#e8f7ff] text-[#16324f]'}`}>
                 <span aria-hidden="true" className="inline-flex [&_span]:text-inherit"><ProjectTypeIcon value={type} /></span>{type}
               </button>)}
-            </div> : <p className="mt-3 text-sm text-amber-900">Set this customer's service type before classifying the project.</p>}
+            </div> : <p className="mt-3 text-sm text-amber-900">Set this customer&apos;s service type before classifying the project.</p>}
           <div className="mt-3 flex justify-end"><button type="button" disabled={(row.customerType !== 'Telecom' && (row.customerType !== 'Sewer' || !drafts[row.id])) || !!saving || loading}
             onClick={() => void confirm(row)} className="min-h-11 rounded-lg bg-[#16324f] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
             {saving === row.id ? 'Saving…' : 'Confirm'}

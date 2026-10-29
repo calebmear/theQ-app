@@ -1849,7 +1849,7 @@ function startProjectEdit() {
   if (!project) return;
 
   setProjectEditForm({
-    projectType: project.project_type ?? '',
+    projectType: projectCustomerService(project) === 'Telecom' ? 'Telecom' : projectCustomerService(project) === 'Sewer' && ['Residential', 'Commercial'].includes(project.project_type ?? '') ? project.project_type! : '',
     projectNumber: project.project_number,
     projectLocation: project.project_location ?? '',
     serviceStartDate: project.service_start_date ?? '',
@@ -2004,6 +2004,14 @@ async function saveProjectEdit() {
     return;
   }
 
+  const customerService = projectCustomerService(project);
+  const projectTypeToSave = customerService === 'Telecom' ? 'Telecom'
+    : customerService === 'Sewer' ? projectEditForm.projectType : project.project_type;
+  if (customerService === 'Sewer' && !['Residential', 'Commercial'].includes(projectTypeToSave ?? '')) {
+    setProjectSaveError('Choose Residential or Commercial for this sewer project.');
+    return;
+  }
+
   const assignedEmployee =
     employees.find((employee) => employee.id === projectEditForm.assignedToId) ??
     null;
@@ -2015,7 +2023,7 @@ async function saveProjectEdit() {
     .from('projects')
     .update({
       project_number: projectEditForm.projectNumber,
-      project_type: projectEditForm.projectType || null,
+      project_type: projectTypeToSave || null,
       project_location: projectEditForm.projectLocation,
       ...(timeEntries.length === 0 && {
         service_start_date: projectEditForm.serviceStartDate,
@@ -2034,7 +2042,7 @@ async function saveProjectEdit() {
   setProject({
     ...project,
     project_number: projectEditForm.projectNumber,
-    project_type: projectEditForm.projectType || null,
+    project_type: projectTypeToSave || null,
     project_location: projectEditForm.projectLocation,
     service_start_date:
   timeEntries.length === 0
@@ -2076,7 +2084,14 @@ async function saveProjectEdit() {
     </div>
   )}
 
-{editingProject && <div className="mb-4"><ProjectTypePicker value={projectEditForm.projectType} onChange={(value)=>setProjectEditForm({...projectEditForm,projectType:value})} disabled={projectSaving}/></div>}
+{editingProject && <div className="mb-4">
+  {projectCustomerService(project) === 'Telecom' ? <div className="rounded-lg border border-[#b8def0] bg-[#e8f7ff] p-3">
+    <p className="text-sm font-medium">Project type</p>
+    <div className="mt-2 flex items-center gap-2 text-[#16324f]"><CustomerTypeBadge value="Telecom" /><span>Telecom</span></div>
+    <p className="mt-1 text-xs text-gray-600">Determined by the customer's service type.</p>
+  </div> : projectCustomerService(project) === 'Sewer' ? <ProjectTypePicker value={projectEditForm.projectType} onChange={(value) => setProjectEditForm({ ...projectEditForm, projectType: value })} disabled={projectSaving} />
+    : <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Set the customer's service type to Sewer or Telecom to classify this project.</p>}
+</div>}
 <div className="border-b pb-3">
 <div className="flex items-start justify-between gap-3">
   <div className="min-w-0">
@@ -2096,7 +2111,7 @@ async function saveProjectEdit() {
         className="mt-1 w-full rounded-lg border p-3 text-xl font-bold"
       />
     ) : (
-      <div className="mt-1 flex min-w-0 items-center gap-2"><ProjectTypeIcon value={project.project_type}/><p className="min-w-0 break-words text-2xl font-bold">{project.project_number}</p></div>
+      <div className="mt-1 flex min-w-0 items-center gap-2"><ProjectClassificationIcon project={project} /><p className="min-w-0 break-words text-2xl font-bold">{project.project_number}</p></div>
     )}
   </div>
 
@@ -4405,17 +4420,34 @@ function CustomerTypeBadge({ value }: { value: string | null | undefined }) {
 
 function ProjectTypeIcon({ value }: { value: string | null | undefined }) {
  if(value!=='Commercial'&&value!=='Residential')return null;
- return <span role="img" aria-label={value} title={value} className="inline-flex shrink-0 text-[#16324f]">
+ return <span role="img" aria-label={`${value} Sewer`} title={`${value} Sewer`} className="inline-flex shrink-0 text-[#16324f]">
   <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">
    {value==='Residential'?<><path d="M3 11L12 3l9 8M5 10v11h14V10M9 21v-7h6v7"/></>:<><rect x="5" y="2" width="14" height="20" rx="1"/><path d="M9 6h1m4 0h1M9 10h1m4 0h1M9 14h1m4 0h1M10 22v-4h4v4"/></>}
   </svg>
  </span>;
 }
 function ProjectTypePicker({value,onChange,disabled=false}:{value:string;onChange:(value:string)=>void;disabled?:boolean}) {
- return <fieldset disabled={disabled} className="min-w-0"><legend className="mb-2 text-sm font-medium">Project type</legend>
+ return <fieldset disabled={disabled} className="min-w-0"><legend className="mb-2 text-sm font-medium">Sewer project type</legend>
   <div className="grid grid-cols-2 gap-2">{['Commercial','Residential'].map(type=><label key={type} className={`flex min-h-12 min-w-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm focus-within:ring-2 focus-within:ring-[#009be5] ${value===type?'border-[#009be5] bg-[#e8f7ff] text-[#16324f]':'bg-white text-gray-700'} ${disabled?'opacity-50':''}`}>
    <input type="radio" name="project-type" value={type} checked={value===type} onChange={()=>onChange(type)} required className="sr-only"/>
    <ProjectTypeIcon value={type}/><span>{type}</span>
   </label>)}</div>
  </fieldset>;
+}
+
+
+function projectCustomerService(project: ProjectDetail): 'Telecom' | 'Sewer' | null {
+  const value = project.customers?.customer_type?.trim().toLowerCase();
+  return value === 'telecom' ? 'Telecom' : value === 'sewer' ? 'Sewer' : null;
+}
+
+function ProjectClassificationIcon({ project }: { project: ProjectDetail }) {
+  const service = projectCustomerService(project);
+  // Never display a historical house/building classification for Telecom.
+  if (service === 'Telecom') return <CustomerTypeBadge value="Telecom" />;
+  if (service === 'Sewer' && ['Residential', 'Commercial'].includes(project.project_type ?? '')) {
+    return <ProjectTypeIcon value={project.project_type} />;
+  }
+  return <span role="img" aria-label="Unclassified project" title="Unclassified project"
+    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-amber-400 bg-amber-50 text-sm font-semibold text-amber-900">?</span>;
 }

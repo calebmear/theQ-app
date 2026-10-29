@@ -239,26 +239,7 @@ const canManageCustomers =
 
   return (
     <div className="space-y-6 text-black">
-      <div className="border-b border-gray-200 pb-4">
-        <p className="text-center text-sm text-gray-600">
-          Customer directory, contact details, and profiles.
-        </p>
-
-        {canManageCustomers && (
-  <div className="mt-3">
-    <button
-      type="button"
-      onClick={() => {
-        setShowCustomerBillingMethods(false);
-        setShowCustomerForm(true);
-      }}
-      className="w-full rounded-lg bg-black px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
-    >
-      + Add Customer
-    </button>
-  </div>
-)}
-      </div>
+      
 
       {loadError && (
         <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">

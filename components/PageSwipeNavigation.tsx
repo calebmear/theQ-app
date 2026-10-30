@@ -58,9 +58,9 @@ export default function PageSwipeNavigation({
       Date.now() - initial.time > 800
     ) return;
 
-    if (dx > 0 && next) {
+    if (dx < 0 && next) {
         router.push(next);
-      } else if (dx < 0 && previous) {
+      } else if (dx > 0 && previous) {
         router.push(previous);
       }
   }

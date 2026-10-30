@@ -1759,6 +1759,7 @@ function DashboardServiceCalendar({
     y: number;
     startedAt: number;
   } | null>(null);
+  const suppressDayClickUntil = useRef<number>(0);
 
   function startMonthSwipe(event: TouchEvent<HTMLDivElement>) {
     monthGesture.current = null;

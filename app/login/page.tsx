@@ -44,6 +44,7 @@ export default function LoginPage() {
         return;
       }
       try { sessionStorage.setItem('theqLoginIntroPending', 'true'); } catch {}
+      window.dispatchEvent(new Event('theq:login-success'));
       const userRole = String(profile.role).trim().toLowerCase();
       router.replace(userRole === 'field' ? '/activework' : '/dashboard');
       navigating = true;

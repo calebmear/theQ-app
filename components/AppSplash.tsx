@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { createPortal } from 'react-dom';
 
 export default function AppSplash() {
   const pathname = usePathname();
@@ -11,21 +12,27 @@ export default function AppSplash() {
   const accent = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    if (pathname === '/' || pathname === '/login') return;
-    try {
-      if (sessionStorage.getItem('theqLoginIntroPending') !== 'true') return;
-      sessionStorage.removeItem('theqLoginIntroPending');
-      setShowSplash(true);
-    } catch {
-      // Storage restrictions must never prevent access to the app.
+    function startPendingIntro() {
+      if (pathname === '/' || pathname === '/login') return;
+      try {
+        if (sessionStorage.getItem('theqLoginIntroPending') !== 'true') return;
+        sessionStorage.removeItem('theqLoginIntroPending');
+        setShowSplash(true);
+      } catch {
+        // Storage restrictions must never prevent access to the app.
+      }
     }
+    // Handle both mounting on the destination and an already mounted guard.
+    window.addEventListener('theq:login-success', startPendingIntro);
+    startPendingIntro();
+    return () => window.removeEventListener('theq:login-success', startPendingIntro);
   }, [pathname]);
 
   useLayoutEffect(() => {
     if (!showSplash) return;
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setShowSplash(false);
-      return;
+      const timer = window.setTimeout(() => setShowSplash(false), 750);
+      return () => window.clearTimeout(timer);
     }
     const animations: Animation[] = [];
     if (mark.current?.animate) {
@@ -57,11 +64,11 @@ export default function AppSplash() {
 
   if (!showSplash) return null;
 
-  return <div ref={overlay} role="status" aria-label="Opening THE Q"
+  return createPortal(<div ref={overlay} role="status" aria-label="Opening THE Q"
     className="fixed inset-0 z-[9999] flex items-start justify-center bg-[#16324f] px-4 pt-20 text-white sm:pt-32">
     <div className="relative mt-32 grid place-items-center">
       <div ref={mark} aria-hidden="true" className="relative -left-[3px] text-[112px] font-extrabold leading-none tracking-normal">Q</div>
       <div ref={accent} aria-hidden="true" className="absolute -bottom-7 h-1 w-8 rounded-full bg-[#009be5]" />
     </div>
-  </div>;
+  </div>, document.body);
 }

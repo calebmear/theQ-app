@@ -1013,7 +1013,7 @@ function ActiveWorkTiles({
         ? 'scheduled'
         : 'active'
   );
-  const [swipeProgress, setSwipeProgress] = useState(0);
+  const [swipeProgress, setSwipeProgress, swipeHost] = useCompositorSwipe(active === 'scheduled' ? 1 : 0, 1);
   const carouselPosition = Math.max(0, Math.min(1, (active === 'scheduled' ? 1 : 0) + swipeProgress));
   const [tileHeight, setTileHeight] = useState<number | undefined>();
   const { swipeArea, swipeFloor } = useSwipeAreaFloor();
@@ -1134,7 +1134,7 @@ function ActiveWorkTiles({
 
 
   return <div>
-    <div role="region" aria-roledescription="carousel" aria-label="Project views"
+    <div role="region" ref={swipeHost} aria-roledescription="carousel" aria-label="Project views"
       style={{ touchAction: 'pan-y pinch-zoom' }}
       onClickCapture={(event) => {
         if (Date.now() < suppressProjectClickUntil.current && event.target instanceof Element && event.target.closest('a')) {
@@ -1143,22 +1143,22 @@ function ActiveWorkTiles({
       }}
       onTouchStart={startSwipe} onTouchMove={moveSwipe} onTouchEnd={endSwipe} onTouchCancel={() => { gesture.current = null; setSwipeProgress(0); }}>
       <StickyCarouselHeader>
-        <div className="relative h-11 overflow-hidden">
+        <div className="relative h-9 overflow-hidden">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
+            <span data-swipe-title className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
               style={{ opacity: 1 - carouselPosition * 0.72, left: `${50 * (1 - carouselPosition)}%`, transform: 'translateX(-50%)' }}>Active Projects ({activeCount})</span>
-            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
+            <span data-swipe-title className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
               style={{ opacity: 0.28 + carouselPosition * 0.72, left: `${100 - carouselPosition * 50}%`, transform: 'translateX(-50%)' }}>Scheduled Projects ({scheduledCount})</span>
           </div>
           <button type="button" disabled={active === 'active'} onClick={() => select('active')}
             aria-label="Show previous tile: Active Projects"
-            className={`absolute left-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 'active' ? 'invisible' : ''}`} />
+            className={`absolute left-0 top-0 h-9 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 'active' ? 'invisible' : ''}`} />
           <button type="button" disabled={active === 'scheduled'} onClick={() => select('scheduled')}
             aria-label="Show next tile: Scheduled Projects"
-            className={`absolute right-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 'scheduled' ? 'invisible' : ''}`} />
+            className={`absolute right-0 top-0 h-9 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 'scheduled' ? 'invisible' : ''}`} />
         </div>
         <p className="sr-only" aria-live="polite">{active === 'active' ? 'Active Projects' : 'Scheduled Projects'}</p>
-        <div className="-mt-1 flex items-center justify-center" role="group" aria-label="Choose project view">
+        <div className="-mt-3 flex items-center justify-center" role="group" aria-label="Choose project view">
             {items.map((item) => <button key={item.id} type="button"
               ref={(element) => { dots.current[item.id] = element; }}
               aria-label={`Show ${item.label}`} aria-current={active === item.id ? 'true' : undefined}
@@ -1181,7 +1181,7 @@ function ActiveWorkTiles({
   className="overflow-hidden"
   ref={swipeArea} style={{ height: tileHeight, minHeight: swipeFloor, touchAction: 'pan-y pinch-zoom', overflowAnchor: 'none' }}
 >        <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
-          style={{ willChange: 'transform', transform: `translate3d(calc(${-carouselPosition * 100}% + ${carouselPosition * 12}px), 0, 0)` }}>
+          data-swipe-layer style={{ willChange: 'transform', transform: `translate3d(calc(${-carouselPosition * 100}% + ${carouselPosition * 12}px), 0, 0)` }}>
           {items.map((item, index) => <div key={item.id}
             ref={(element) => {
               slides.current[item.id] = element;
@@ -1213,7 +1213,7 @@ function StickyCarouselHeader({ children }: { children: ReactNode }) {
     window.addEventListener('resize', measure);
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
   }, []);
-  return <div className="sticky z-20 -mx-4 mb-2 border-b border-gray-200 bg-gray-100 px-4 md:mx-0 md:px-0" style={{ top }}>
+  return <div className="sticky z-20 -mx-4 mb-1 border-b border-gray-200 bg-gray-100 px-4 md:mx-0 md:px-0" style={{ top }}>
     {children}
   </div>;
 }
@@ -1259,4 +1259,48 @@ function useSwipeAreaFloor(ready = true) {
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
   }, [ready]);
   return { swipeArea, swipeFloor };
+}
+
+
+function useCompositorSwipe(base: number, maximum: number) {
+  const swipeHost = useRef<HTMLDivElement | null>(null);
+  const frame = useRef<number | null>(null);
+  const latest = useRef(base);
+  const nodes = useRef<{ host: HTMLDivElement; track: HTMLElement | null; titles: HTMLElement[] } | null>(null);
+  function paint(position: number, dragging: boolean) {
+    const host = swipeHost.current;
+    if (!host) return;
+    if (nodes.current?.host !== host) {
+      nodes.current = { host, track: host.querySelector<HTMLElement>('[data-swipe-layer]'), titles: Array.from(host.querySelectorAll<HTMLElement>('[data-swipe-title]')) };
+    }
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const transition = '260ms cubic-bezier(.22,1,.36,1)';
+    if (nodes.current.track) {
+      nodes.current.track.style.transition = dragging || reducedMotion ? 'none' : `transform ${transition}`;
+      nodes.current.track.style.transform = `translate3d(calc(${-position * 100}% + ${position * 12}px), 0, 0)`;
+    }
+    nodes.current.titles.forEach((title, index) => {
+      title.style.transition = dragging || reducedMotion ? 'none' : `left ${transition}, opacity ${transition}`;
+      title.style.left = `${50 + (index - position) * 50}%`;
+      title.style.opacity = String(Math.max(0, 1 - Math.abs(index - position) * .72));
+    });
+  }
+  function setProgress(progress: number) {
+    latest.current = Math.max(0, Math.min(maximum, base + progress));
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    if (progress === 0) {
+      frame.current = null;
+      paint(base, false);
+      return;
+    }
+    frame.current = requestAnimationFrame(() => { frame.current = null; paint(latest.current, true); });
+  }
+  useLayoutEffect(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    paint(base, false);
+  }, [base]);
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
+  // Dragging changes only the compositor layer, not React's page tree.
+  return [0, setProgress, swipeHost] as const;
 }

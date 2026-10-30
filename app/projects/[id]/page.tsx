@@ -379,7 +379,7 @@ const canManageHistory =
   
 function canManageEntry(entry: TimeEntry) {
   if (canManageHistory) return true;
-  return normalizedRole === 'field' && entry.created_by === currentUserId;
+  return normalizedRole === 'field' && Boolean(currentUserId) && entry.created_by === currentUserId;
 }
 
 function canManageNote(note: ProjectNote) {
@@ -1715,37 +1715,32 @@ await syncProjectServiceStartDate(project.id);
 }
 
 async function deleteTimeEntry(entryId: string) {
-  if (!canManageHistory) return;
   if (!project) return;
+  const entry = timeEntries.find(item => item.id === entryId);
+  if (!entry || !canManageEntry(entry)) return;
 
   const confirmed = window.confirm('Are you sure you want to delete this time entry?');
   if (!confirmed) return;
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) { alert('Please sign in to delete this submission.'); return; }
+  if (!canManageHistory && (normalizedRole !== 'field' || entry.created_by !== user.id)) return;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) return;
-
-  const { error } = await supabase
-    .from('time_entries')
-    .update({
-      deleted_at: new Date().toISOString(),
-      deleted_reason: 'Deleted from project workspace',
-      updated_by: user.id,
-    })
-    .eq('id', entryId);
-
-  if (error) {
-    alert(error.message);
+  let query = supabase.from('time_entries').update({
+    deleted_at: new Date().toISOString(),
+    deleted_reason: 'Deleted from project workspace',
+    updated_by: user.id,
+  }, { count: 'exact' }).eq('id', entryId).eq('project_id', project.id).is('deleted_at', null);
+  if (!canManageHistory) query = query.eq('created_by', user.id);
+  const { error, count } = await query;
+  if (error) { alert(error.message); return; }
+  if (count === 0) {
+    alert('This submission could not be deleted. It may have already changed, or your database permissions may not allow deletion.');
     return;
   }
-
+  if (inlineEditingTimeEntryId === entryId) cancelInlineTimeEdit();
   await loadTimeEntries(project.id);
   await syncProjectServiceStartDate(project.id);
 }
-
-
 
 
 async function loadEmployees() {
@@ -2455,7 +2450,6 @@ async function saveProjectEdit() {
 </div>
   </div>,
   <div key="services" className="min-w-0 space-y-4">
-    <p className="break-words text-center text-xs font-medium text-gray-500">Project {project.project_number}</p>
   <div className="rounded-2xl bg-white p-6 shadow">
   
 
@@ -2615,7 +2609,7 @@ async function saveProjectEdit() {
       <ProjectDayHistoryEntry key={`day-${entry.id}`} entry={entry} projectId={project.id}
         managing={managingTimeEntries}
         canEdit={canManageHistory || (normalizedRole === 'field' && entry.created_by === currentUserId)}
-        canDelete={canManageHistory}
+        canDelete={canManageHistory || (normalizedRole === 'field' && Boolean(currentUserId) && entry.created_by === currentUserId)}
         onSaved={(date) => {
           setDayRevision((value) => value + 1);
           setExpandedServiceDates((dates) => dates.includes(date) ? dates : [...dates, date]);
@@ -2792,7 +2786,7 @@ async function saveProjectEdit() {
               Cancel
             </button>
 
-            {canManageHistory && (
+            {canManageEntry(entry) && (
   <button
     type="button"
     onClick={() => deleteTimeEntry(entry.id)}
@@ -2821,11 +2815,12 @@ async function saveProjectEdit() {
             </p>
           </div>
 
-          {entry.notes && (
-            <p className="mt-3 rounded-lg bg-gray-50 p-2 text-sm text-gray-700">
-              {entry.notes}
+          <div className="mt-3 rounded-lg bg-gray-50 p-3">
+            <p className="text-xs font-semibold text-gray-500">Service notes</p>
+            <p className={`mt-1 whitespace-pre-wrap break-words text-sm ${entry.notes?.trim() ? 'text-gray-800' : 'text-gray-500'}`}>
+              {entry.notes?.trim() || 'No service notes recorded.'}
             </p>
-          )}
+          </div>
 
           <p className="mt-2 text-xs text-gray-500">
             Submitted by {entry.created_profile?.full_name || (entry.created_by === currentUserId ? currentUserName : null) || 'Unknown'} · {formatTimestamp(entry.created_at)}
@@ -2844,7 +2839,7 @@ async function saveProjectEdit() {
       Edit
     </button>
 
-    {canManageHistory && (
+    {canManageEntry(entry) && (
       <button
         type="button"
         onClick={() => deleteTimeEntry(entry.id)}
@@ -2870,7 +2865,6 @@ async function saveProjectEdit() {
 
   </div>,
   <div key="history" className="min-w-0 space-y-4">
-    <p className="break-words text-center text-xs font-medium text-gray-500">Project {project.project_number}</p>
 <div className="rounded-2xl bg-white p-6 shadow">
   <button
     type="button"
@@ -3387,8 +3381,8 @@ async function saveProjectEdit() {
 function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactNode[]; onSectionChange: () => void }) {
   const labels = ['Project Summary', 'Service Calendar', 'Notes & Files'];
   const [active, setActive] = useState(0);
-  const [drag, setDrag] = useState(0);
-  const root = useRef<HTMLDivElement>(null);
+  const [drag, setDrag, swipeHost] = useCompositorSwipe(active, 2);
+  const root = useRef<HTMLDivElement | null>(null);
   const panels = useRef<Array<HTMLElement | null>>([]);
   const tabButtons = useRef<Array<HTMLButtonElement | null>>([]);
   const scrollPositions = useRef([0, 0, 0]);
@@ -3435,7 +3429,7 @@ function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactN
     const frame = requestAnimationFrame(() => window.scrollTo({ top, behavior: 'auto' }));
     return () => cancelAnimationFrame(frame);
   }, [active, settling]);
-  return <div ref={root} role="region" aria-roledescription="carousel" aria-label="Project sections" className="min-w-0" style={{ touchAction: 'pan-y pinch-zoom' }}
+  return <div ref={node => { root.current = node; swipeHost.current = node; }} role="region" aria-roledescription="carousel" aria-label="Project sections" className="min-w-0" style={{ touchAction: 'pan-y pinch-zoom' }}
     onTouchStart={(event) => {
       touch.current = null; setDrag(0);
       if (settling || document.querySelector('dialog[open]')) return;
@@ -3473,9 +3467,9 @@ function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactN
     onTouchCancel={() => { touch.current = null; setDrag(0); }}
     onClickCapture={(event) => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); event.stopPropagation(); } }}>
     <StickyCarouselHeader>
-      <div className="relative h-11 overflow-hidden">
+      <div className="relative h-9 overflow-hidden">
         <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          {labels.map((label, index) => <span key={label}
+          {labels.map((label, index) => <span data-swipe-title key={label}
             className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${drag ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
             style={{ left: `${50 + (index - position) * 50}%`, transform: 'translateX(-50%)', opacity: Math.max(0, 1 - Math.abs(index - position) * 0.72) }}>
             {label}
@@ -3483,13 +3477,13 @@ function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactN
         </div>
         <button type="button" disabled={active === 0} onClick={() => select(active - 1)}
           aria-label={`Show previous section: ${labels[Math.max(0, active - 1)]}`}
-          className={`absolute left-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 0 ? 'invisible' : ''}`} />
+          className={`absolute left-0 top-0 h-9 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 0 ? 'invisible' : ''}`} />
         <button type="button" disabled={active === 2} onClick={() => select(active + 1)}
           aria-label={`Show next section: ${labels[Math.min(2, active + 1)]}`}
-          className={`absolute right-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 2 ? 'invisible' : ''}`} />
+          className={`absolute right-0 top-0 h-9 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 2 ? 'invisible' : ''}`} />
       </div>
       <p className="sr-only" aria-live="polite">{labels[active]}</p>
-      <div role="group" aria-label="Choose project section" className="-mt-1 flex items-center justify-center"
+      <div role="group" aria-label="Choose project section" className="-mt-3 flex items-center justify-center"
         onKeyDown={(event) => {
           if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
           event.preventDefault();
@@ -3506,7 +3500,7 @@ function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactN
     <p className="sr-only">Swipe between project sections or use the position buttons. Use calendar arrows to change months.</p>
     <div className="overflow-hidden" ref={swipeArea} style={{ height: tileHeight, minHeight: swipeFloor, touchAction: 'pan-y pinch-zoom', overflowAnchor: 'none' }}>
       <div className={`flex items-start gap-2 motion-reduce:transition-none ${drag ? '' : 'motion-safe:transition-transform motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
-        style={{ willChange: 'transform', transform: `translate3d(calc(${-position * 100}% + ${position * 12}px), 0, 0)` }}>
+        data-swipe-layer style={{ willChange: 'transform', transform: `translate3d(calc(${-position * 100}% + ${position * 12}px), 0, 0)` }}>
         {sections.map((section, index) => <section key={labels[index]}
           ref={(node) => {
             panels.current[index] = node;
@@ -4379,7 +4373,7 @@ function StickyCarouselHeader({ children }: { children: ReactNode }) {
     window.addEventListener('resize', measure);
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
   }, []);
-  return <div className="sticky z-20 -mx-4 mb-2 border-b border-gray-200 bg-gray-100 px-4 md:mx-0 md:px-0" style={{ top }}>
+  return <div className="sticky z-20 -mx-4 mb-1 border-b border-gray-200 bg-gray-100 px-4 md:mx-0 md:px-0" style={{ top }}>
     {children}
   </div>;
 }
@@ -4425,4 +4419,48 @@ function useSwipeAreaFloor(ready = true) {
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
   }, [ready]);
   return { swipeArea, swipeFloor };
+}
+
+
+function useCompositorSwipe(base: number, maximum: number) {
+  const swipeHost = useRef<HTMLDivElement | null>(null);
+  const frame = useRef<number | null>(null);
+  const latest = useRef(base);
+  const nodes = useRef<{ host: HTMLDivElement; track: HTMLElement | null; titles: HTMLElement[] } | null>(null);
+  function paint(position: number, dragging: boolean) {
+    const host = swipeHost.current;
+    if (!host) return;
+    if (nodes.current?.host !== host) {
+      nodes.current = { host, track: host.querySelector<HTMLElement>('[data-swipe-layer]'), titles: Array.from(host.querySelectorAll<HTMLElement>('[data-swipe-title]')) };
+    }
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const transition = '260ms cubic-bezier(.22,1,.36,1)';
+    if (nodes.current.track) {
+      nodes.current.track.style.transition = dragging || reducedMotion ? 'none' : `transform ${transition}`;
+      nodes.current.track.style.transform = `translate3d(calc(${-position * 100}% + ${position * 12}px), 0, 0)`;
+    }
+    nodes.current.titles.forEach((title, index) => {
+      title.style.transition = dragging || reducedMotion ? 'none' : `left ${transition}, opacity ${transition}`;
+      title.style.left = `${50 + (index - position) * 50}%`;
+      title.style.opacity = String(Math.max(0, 1 - Math.abs(index - position) * .72));
+    });
+  }
+  function setProgress(progress: number) {
+    latest.current = Math.max(0, Math.min(maximum, base + progress));
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    if (progress === 0) {
+      frame.current = null;
+      paint(base, false);
+      return;
+    }
+    frame.current = requestAnimationFrame(() => { frame.current = null; paint(latest.current, true); });
+  }
+  useLayoutEffect(() => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    frame.current = null;
+    paint(base, false);
+  }, [base]);
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current); }, []);
+  // Dragging changes only the compositor layer, not React's page tree.
+  return [0, setProgress, swipeHost] as const;
 }

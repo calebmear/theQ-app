@@ -175,7 +175,7 @@ function ProjectsDirectory() {
     });
 
   function serviceDate(project: Project) {
-    if (project.latestServiceDate) return `Last service: ${formatDate(project.latestServiceDate)}`;
+    if (project.latestServiceDate) return `Latest service date: ${formatDate(project.latestServiceDate)}`;
     if (project.status === 'Scheduled' && project.serviceStartDate) return `Scheduled: ${formatDate(project.serviceStartDate)}`;
     return 'No service recorded';
   }
@@ -261,7 +261,7 @@ return (
 
     <div className="hidden overflow-x-auto rounded-xl border bg-white md:block">
       <table className="w-full text-left text-sm">
-        <thead className="bg-gray-50"><tr>{['Project', 'Customer', 'Assigned', 'Service date', 'Status'].map((title) => <th key={title} className="px-4 py-3 font-medium">{title}</th>)}</tr></thead>
+        <thead className="bg-gray-50"><tr>{['Project', 'Customer', 'Assigned', 'Latest service date', 'Status'].map((title) => <th key={title} className="px-4 py-3 font-medium">{title}</th>)}</tr></thead>
         <tbody>{visibleProjects.map((project) => <tr key={project.id} className="border-t hover:bg-gray-50">
           <td className="px-4 py-3"><Link href={`/projects/${encodeURIComponent(project.projectNumber)}`} className="font-semibold text-[#007bb5] hover:underline">{project.projectNumber}</Link></td>
           <td className="px-4 py-3">{project.customerName}</td><td className="px-4 py-3">{project.assignedTo}</td>

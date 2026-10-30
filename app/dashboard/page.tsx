@@ -1754,7 +1754,11 @@ function DashboardServiceCalendar({
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(`${dashboardShopToday()}T00:00:00`));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(dashboardShopToday);
   const [calendarView, setCalendarView] = useState<'all' | 'service' | 'shop'>('all');
-
+  const monthGesture = useRef<{
+    x: number;
+    y: number;
+    startedAt: number;
+  } | null>(null);
 
   function startMonthSwipe(event: TouchEvent<HTMLDivElement>) {
     monthGesture.current = null;

@@ -12,6 +12,8 @@ const publicRoutes = ['/', '/login'];
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isPublicRoute = publicRoutes.includes(pathname);
+  const mainSections = ['/dashboard', '/activework', '/projects', '/customers'];
+  const isMainSection = mainSections.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 
   if (isPublicRoute) {
     return <AuthGuard>{children}</AuthGuard>;
@@ -20,27 +22,22 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
       <div className="min-h-screen bg-gray-100 text-black pb-[env(safe-area-inset-bottom)] md:flex">
-        <aside className="sticky top-0 z-40 border-r bg-white px-4 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] md:h-screen md:w-64 md:shrink-0 md:p-4">
+        <aside className={`sticky top-0 z-40 border-r bg-white px-4 ${isMainSection ? 'pb-0' : 'pb-4'} pt-[calc(env(safe-area-inset-top)+1rem)] md:h-screen md:w-64 md:shrink-0 md:p-4`}>
           <div className="flex w-full items-center gap-3">
             <h1 className="shrink-0 text-2xl font-bold">THE Q</h1>
-
-            <div className="min-w-0 flex-1">
-              <AppSearch />
-            </div>
-
+            <div className="min-w-0 flex-1"><AppSearch /></div>
             <UserMenu />
           </div>
-
           <AppNav />
         </aside>
 
-        <main className="flex-1 p-4 md:p-8">{children}</main>
+        <main className={`min-w-0 flex-1 ${isMainSection ? 'px-4 pb-4 pt-2' : 'p-4'} md:p-8`}>
+  {children}
+</main>
 
         <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+7rem)] right-0 z-30">
-  <div className="pointer-events-auto">
-    <FloatingReceiptButton />
-  </div>
-</div>
+          <div className="pointer-events-auto"><FloatingReceiptButton /></div>
+        </div>
       </div>
     </AuthGuard>
   );

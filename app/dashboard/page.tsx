@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { Wrench } from 'lucide-react';
-import { useEffect, useState, useRef, useCallback, type ReactNode } from 'react';
+import { Wrench, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo, type ReactNode, type TouchEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUserProfile } from '../../lib/useUserProfile';
 
@@ -460,6 +460,12 @@ laborerPricingType: '',
 trafficControlPricingType: '',
   });
 
+  const projectCustomer = customers.find((customer) => customer.id === newProject.customerId);
+  const projectCustomerType = projectCustomer?.customerType ?? '';
+  const effectiveProjectType = projectCustomerType === 'Telecom' ? 'Telecom'
+    : projectCustomerType === 'Sewer' && ['Residential', 'Commercial'].includes(newProject.projectType)
+      ? newProject.projectType : '';
+
 
   function formatDate(value: string | undefined) {
     if (!value) return '';
@@ -721,6 +727,7 @@ trafficControlPricingType: '',
     if (!canViewDashboard) return;
 
     if (
+      !['Sewer', 'Telecom'].includes(newCustomer.customerType) ||
       !newCustomer.name.trim() ||
       !newCustomer.contactName.trim() ||
       !newCustomer.phone.trim() ||
@@ -795,7 +802,7 @@ trafficControlPricingType: '',
     const projectId = newProject.id.trim();
   
     if (!projectId || !newProject.customerId) return;
-    if (!newProject.projectType) { alert('Choose Commercial or Residential for this project.'); return; }
+    if (!effectiveProjectType) { alert(projectCustomerType === 'Sewer' ? 'Choose Residential or Commercial for this sewer project.' : 'Set this customer to Sewer or Telecom before creating a project.'); return; }
   
     setCheckingProjectId(true);
     setProjectIdCheckError('');
@@ -819,7 +826,7 @@ trafficControlPricingType: '',
   
     const { error } = await supabase.from('projects').insert({
       project_number: projectId,
-      project_type: newProject.projectType,
+      project_type: effectiveProjectType,
       customer_id: newProject.customerId,
       assigned_to: newProject.assignedToId || null,
       status: newProject.status,
@@ -1022,37 +1029,10 @@ testBillingSheetConnection();
   }
 
   return (
-    <div className="space-y-6 text-black">
-      <div className="space-y-3">
-        <p className="text-center text-sm text-gray-600">
-          Snapshot of active and scheduled work.
-        </p>
-  
-        <div className="flex justify-center">
-          <div className="flex flex-wrap justify-center gap-2">
-  
-
-          <button
-            type="button"
-            onClick={() => setShowProjectForm(true)}
-            className="rounded-lg bg-black px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
-          >
-            + Add Project
-          </button>
-
-          <button
-            type="button"
-onClick={() => {
-  setShowCustomerBillingMethods(false);
-  setShowCustomerForm(true);
-}}            className="rounded-lg border bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50"
-          >
-            + Add Customer
-          </button>
-          </div>
-      </div>
-    </div>
-
+    <div className="space-y-6 pb-20 text-black">
+    <DashboardSections
+      actions={null}
+      revenue={<>
     <AppRevenueSnapshot onProjectClassified={() => { void loadProjects(); }} />
 
     <div className="hidden">
@@ -1088,20 +1068,26 @@ onClick={() => {
   </div>
 </div>
 </div>
+      </>}
+      work={
+        <div className="space-y-2">
+          <DashboardServiceCalendar
+            entries={dashboardServiceEntries}
+            formatDate={formatDate}
+          />
+          <RecentActivity
+            services={recentServices}
+            formatDate={formatDate}
+          />
+        </div>
+      }
+    />
 
-   
-
-
-
-
-
-
-<DashboardServiceCalendar
-  entries={dashboardServiceEntries}
-  formatDate={formatDate}
-/>
-
-<RecentActivity services={recentServices} formatDate={formatDate} />
+      {canViewDashboard && <DashboardQuickAdd
+        modalOpen={showProjectForm || showCustomerForm}
+        onProject={() => setShowProjectForm(true)}
+        onCustomer={() => { setShowCustomerBillingMethods(false); setShowCustomerForm(true); }}
+      />}
 
       {canViewDashboard && showCustomerForm && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-8">
@@ -1120,11 +1106,8 @@ onClick={() => {
                 className="rounded-lg border p-3"
               />
 
-              <label className="block text-sm font-medium">Customer type
-                <select value={newCustomer.customerType} onChange={(event)=>setNewCustomer({...newCustomer,customerType:event.target.value})} className="mt-2 block min-h-12 w-full rounded-lg border bg-white px-3 py-3 text-base font-normal">
-                  <option value="">Not set</option><option value="Sewer">Sewer</option><option value="Telecom">Telecom / Fiber</option>
-                </select>
-              </label>
+              <CustomerServiceTypePicker value={newCustomer.customerType}
+                onChange={(customerType) => setNewCustomer((current) => ({ ...current, customerType }))} />
 
               <input
                 required
@@ -1283,7 +1266,7 @@ onClick={() => {
                   }
                   onChange={(e) => {
                     setProjectCustomerSearch(e.target.value);
-                    setNewProject({ ...newProject, customerId: '' });
+                    setNewProject({ ...newProject, customerId: '', projectType: '' });
                   }}
                   className="w-full rounded-lg border p-3"
                 />
@@ -1299,6 +1282,7 @@ onClick={() => {
                             setNewProject({
                               ...newProject,
                               customerId: customer.id,
+                              projectType: customer.customerType === 'Telecom' ? 'Telecom' : '',
                             });
                             setProjectCustomerSearch(customer.name);
                           }}
@@ -1368,7 +1352,14 @@ onClick={() => {
   </div>
 </div>
 
-              <div className="md:col-span-2"><ProjectTypePicker value={newProject.projectType} onChange={(value)=>setNewProject({...newProject,projectType:value})}/></div>
+              <div className="md:col-span-2">
+                {projectCustomerType === 'Telecom' ? <div className="rounded-lg border border-[#b8def0] bg-[#e8f7ff] p-3">
+                  <p className="text-sm font-medium">Project type</p>
+                  <div className="mt-2 flex items-center gap-2 text-[#16324f]"><RevenueServiceIcon value="Telecom" /><span>Telecom</span></div>
+                  <p className="mt-1 text-xs text-gray-600">Automatically selected for this Telecom customer.</p>
+                </div> : projectCustomerType === 'Sewer' ? <ProjectTypePicker value={newProject.projectType} onChange={(value) => setNewProject({ ...newProject, projectType: value })} />
+                  : <p className="text-sm text-gray-600">{newProject.customerId ? 'Set the customer service type to Sewer or Telecom before adding this project.' : 'Select a customer to see the project type.'}</p>}
+              </div>
 
               <div className="md:col-span-2">
                 <label className="mb-2 block text-sm font-medium">
@@ -1528,7 +1519,7 @@ onClick={() => {
     checkingProjectId ||
     !newProject.id.trim() ||
     !newProject.customerId ||
-    !newProject.projectType
+    !effectiveProjectType
   }
   className="rounded-lg bg-black px-5 py-3 text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-400"
 >
@@ -1764,6 +1755,43 @@ function DashboardServiceCalendar({
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(`${dashboardShopToday()}T00:00:00`));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(dashboardShopToday);
   const [calendarView, setCalendarView] = useState<'all' | 'service' | 'shop'>('all');
+  const monthGesture = useRef<{ x: number; y: number; startedAt: number } | null>(null);
+  const suppressDayClickUntil = useRef(0);
+
+  function startMonthSwipe(event: TouchEvent<HTMLDivElement>) {
+    monthGesture.current = null;
+    if (event.touches.length !== 1) return;
+    const target = event.target;
+    if (target instanceof Element) {
+      if (target.closest('a, input, select, textarea, [contenteditable="true"]')) return;
+    }
+    const touch = event.touches[0];
+    if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
+    monthGesture.current = { x: touch.clientX, y: touch.clientY, startedAt: Date.now() };
+  }
+
+  function moveMonthSwipe(event: TouchEvent<HTMLDivElement>) {
+    const start = monthGesture.current;
+    if (!start || event.touches.length !== 1) return;
+    const dx = event.touches[0].clientX - start.x;
+    const dy = event.touches[0].clientY - start.y;
+    if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) { monthGesture.current = null; return; }
+    // Avoid a synthesized date-cell click after a horizontal drag.
+    if (Math.abs(dx) > 16 && Math.abs(dx) > Math.abs(dy) * 1.5) suppressDayClickUntil.current = Date.now() + 600;
+  }
+
+  function endMonthSwipe(event: TouchEvent<HTMLDivElement>) {
+    const start = monthGesture.current;
+    monthGesture.current = null;
+    if (!start || event.changedTouches.length !== 1 || event.touches.length !== 0) return;
+    const dx = event.changedTouches[0].clientX - start.x;
+    const dy = event.changedTouches[0].clientY - start.y;
+    if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy) * 1.5 || Date.now() - start.startedAt > 800) return;
+    event.stopPropagation();
+    suppressDayClickUntil.current = Date.now() + 600;
+    changeCalendarMonth(dx < 0 ? 1 : -1);
+  }
+
   const [shopEntries, setShopEntries] = useState<DashboardShopEntry[]>([]);
   const [shopLoading, setShopLoading] = useState(true);
   const [shopError, setShopError] = useState('');
@@ -1843,9 +1871,7 @@ function DashboardServiceCalendar({
   }
 
   function changeCalendarMonth(direction: number) {
-    setCalendarMonth(
-      new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + direction, 1)
-    );
+    setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + direction, 1));
     setSelectedCalendarDate(null);
   }
 
@@ -1943,15 +1969,15 @@ function DashboardServiceCalendar({
   });
 
   return (
-    <div className="rounded-2xl bg-white p-4 shadow md:p-6">
-      <div>
-        <h2 className="text-xl font-bold">Work Calendar</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          View project services and shop work in one calendar.
-        </p>
-      </div>
-
-      <div role="group" aria-label="Calendar work filter" className="mt-4 grid grid-cols-3 gap-2">
+    <div
+      onClickCapture={(event) => {
+        if (Date.now() < suppressDayClickUntil.current && event.target instanceof Element && event.target.closest('[data-calendar-days]')) {
+          event.preventDefault(); event.stopPropagation();
+        }
+      }}
+      style={{ touchAction: 'pan-y pinch-zoom' }}
+      className="rounded-2xl bg-white p-4 shadow md:p-6">
+      <div role="group" aria-label="Calendar work filter" className="grid grid-cols-3 gap-2">
         {([{ value: 'all', label: 'All Work' }, { value: 'service', label: 'Service' }, { value: 'shop', label: 'Shop' }] as const).map((view) => (
           <button key={view.value} type="button" aria-pressed={calendarView === view.value}
             onClick={() => setCalendarView(view.value)}
@@ -1969,12 +1995,9 @@ function DashboardServiceCalendar({
         {showShop && <span className="flex items-center gap-1 text-[#16324f]"><span className="h-3.5 w-3.5 rounded bg-[#16324f]" />Shop Work</span>}
         <span className="flex items-center gap-1"><span className="h-3.5 w-3.5 rounded border bg-gray-50" />No submissions</span>
       </div>
-      {showShop && (!shopReady || shopError) && (
+      {showShop && shopError && (
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-          {shopLoading || (!shopError && !shopReady)
-            ? <p role="status" className="text-gray-500">Loading shop submissions…</p>
-            : shopError ? <p role="alert" className="text-red-700">Shop submissions unavailable: {shopError}</p>
-            : null}
+          <p role="alert" className="text-red-700">Shop submissions unavailable: {shopError}</p>
           {shopError && <button type="button" disabled={shopLoading} onClick={() => setShopRevision((value) => value + 1)}
             className="rounded-lg border px-3 py-2 font-medium hover:bg-gray-50 disabled:opacity-50">
             Retry shop
@@ -1982,17 +2005,26 @@ function DashboardServiceCalendar({
         </div>
       )}
 
-      <div className="mt-4 flex items-center justify-center gap-3">
-        <button
+<div
+  data-dashboard-swipe-ignore
+  style={{ touchAction: 'pan-y' }}
+  onTouchStart={startMonthSwipe}
+  onTouchMove={moveMonthSwipe}
+  onTouchEnd={endMonthSwipe}
+  onTouchCancel={() => {
+    monthGesture.current = null;
+  }}
+>
+  <div className="mt-4 flex items-center justify-center gap-3">        <button
           type="button"
           aria-label="Previous month"
           onClick={() => changeCalendarMonth(-1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#b8def0] bg-[#e8f7ff] p-0 text-[#16324f] transition-colors hover:border-[#16324f] hover:bg-[#d9f0fc] active:bg-[#c5e8fa] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]"
         >
-          &lt;
+          <ChevronLeft aria-hidden="true" size={22} strokeWidth={2.5} className="block" />
         </button>
 
-        <p className="min-w-[10rem] text-center text-sm font-bold text-gray-800">
+        <p aria-live="polite" className="min-w-[10rem] text-center text-sm font-bold text-gray-800">
           {calendarMonthLabel}
         </p>
 
@@ -2000,9 +2032,9 @@ function DashboardServiceCalendar({
           type="button"
           aria-label="Next month"
           onClick={() => changeCalendarMonth(1)}
-          className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
+          className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#b8def0] bg-[#e8f7ff] p-0 text-[#16324f] transition-colors hover:border-[#16324f] hover:bg-[#d9f0fc] active:bg-[#c5e8fa] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]"
         >
-          &gt;
+          <ChevronRight aria-hidden="true" size={22} strokeWidth={2.5} className="block" />
         </button>
       </div>
 
@@ -2012,7 +2044,7 @@ function DashboardServiceCalendar({
         ))}
       </div>
 
-      <div className="mt-2 grid grid-cols-7 gap-1">
+      <div data-calendar-days className="mt-2 grid grid-cols-7 gap-1">
         {calendarBlankDays.map((_, index) => (
           <div key={`blank-${index}`} className="aspect-square" />
         ))}
@@ -2048,9 +2080,11 @@ function DashboardServiceCalendar({
             </button>
           );
         })}
-      </div>
+            </div>
 
-      {selectedCalendarDate && (
+</div> {/* End of calendar month swipe area */}
+
+  {selectedCalendarDate && (
         <div className="mt-4 rounded-xl border bg-gray-50 p-3">
           <p className="text-sm font-bold text-gray-900">
             {formatDate(selectedCalendarDate)}
@@ -2165,9 +2199,9 @@ function RecentActivity({
 
   return (
     <div className="rounded-2xl bg-white p-4 shadow md:p-6">
-      <h2 className="text-xl font-bold">Recent Service Activity</h2>
+      <h2 className="sr-only">Recent Service Activity</h2>
 
-      <div className="mt-4 space-y-3">
+      <div className="space-y-3">
         {groupedServices.map((group) => (
           <Link
             key={`${group.customerName}-${group.workDate}`}
@@ -2384,8 +2418,7 @@ function shopAreasByDate(entries: { work_date: string; categories?: string[] | n
 type AppRevenueSnapshotData = {
   total: number;
   has_unclassified_amounts: boolean;
-  available_customer_types: string[];
-  available_project_types: string[];
+  available_categories: string[];
   services: { service: string; amount: number; pending: number }[];
   issues: { entry_id: string; project_id: string; project_name: string; work_date: string; service: string; issue: string }[];
   available_years: number[];
@@ -2445,9 +2478,19 @@ function AppRevenueSnapshot({ onProjectClassified }: { onProjectClassified: () =
   });
   const [year, setYear] = useState(today.year);
   const [month, setMonth] = useState('');
-  const [customerTypes, setCustomerTypes] = useState<string[]>([]);
-  const [projectTypes, setProjectTypes] = useState<string[]>([]);
-  const [includeUnclassified, setIncludeUnclassified] = useState(false);
+  const [serviceSelections, setServiceSelections] = useState<string[]>([]);
+  const [sewerTypes, setSewerTypes] = useState<string[]>([]);
+  const [unknownSelected, setUnknownSelected] = useState(false);
+  // Expand the Sewer parent into leaf categories, never a second revenue subtotal.
+  const categories = useMemo(() => {
+    const selected: string[] = [];
+    if (serviceSelections.includes('Telecom')) selected.push('Telecom');
+    if (serviceSelections.includes('Sewer')) {
+      selected.push(...(sewerTypes.length ? sewerTypes : ['Residential', 'Commercial']));
+    }
+    if (unknownSelected) selected.push('Unclassified');
+    return Array.from(new Set(selected));
+  }, [serviceSelections, sewerTypes, unknownSelected]);
   const [data, setData] = useState<AppRevenueSnapshotData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2461,9 +2504,9 @@ function AppRevenueSnapshot({ onProjectClassified }: { onProjectClassified: () =
       inFlight = true;
       if (!background) setLoading(true);
       try {
-        const response = await supabase.rpc('get_dashboard_app_revenue_facets', { p_year: year ? Number(year) : null, p_month: year && month ? Number(month) : null, p_customer_types: customerTypes, p_project_types: projectTypes, p_unclassified_only: includeUnclassified });
+        const response = await supabase.rpc('get_dashboard_app_revenue_categories', { p_year: year ? Number(year) : null, p_month: year && month ? Number(month) : null, p_categories: categories });
         if (response.error) throw response.error;
-        if (!response.data || !Array.isArray(response.data.services) || !Array.isArray(response.data.issues) || !Array.isArray(response.data.available_periods) || typeof response.data.has_unclassified_amounts !== 'boolean' || !Array.isArray(response.data.available_customer_types) || !Array.isArray(response.data.available_project_types)) throw new Error('The revenue response was incomplete. Please retry.');
+        if (!response.data || !Array.isArray(response.data.services) || !Array.isArray(response.data.issues) || !Array.isArray(response.data.available_periods) || typeof response.data.has_unclassified_amounts !== 'boolean' || !Array.isArray(response.data.available_categories)) throw new Error('The revenue response was incomplete. Please retry.');
         if (!cancelled) {
           const next = response.data as AppRevenueSnapshotData;
           setData(next);
@@ -2497,68 +2540,82 @@ function AppRevenueSnapshot({ onProjectClassified }: { onProjectClassified: () =
       window.removeEventListener('q:project-classification-updated', refresh);
       document.removeEventListener('visibilitychange', refresh);
     };
-  }, [year, month, customerTypes, projectTypes, includeUnclassified, revision]);
+  }, [year, month, categories, revision]);
   const years = [...(data?.available_years ?? [])].sort((a, b) => b - a);
   const activeMonths = Array.from(new Set<number>(
     (data?.available_periods ?? [])
       .filter((period) => period.year === Number(year))
       .map((period) => period.month)
   )).sort((a, b) => b - a);
+  const defaultYear = years.includes(Number(today.year)) ? today.year : years.length ? String(years[0]) : '';
+  const filtersActive = categories.length > 0 || year !== defaultYear || month !== '';
   const months = Array.from({ length: 12 }, (_, i) => new Date(2000, i, 1).toLocaleDateString('en-US', { month: 'long' }));
   const names = [...appRevenueServiceNames, ...(data?.services.map((row) => row.service).filter((name) => !appRevenueServiceNames.includes(name)) ?? [])].filter((name) => data?.services.some((row) => row.service === name));
   const period = year ? `${month ? `${months[Number(month) - 1]} ` : ''}${year}` : 'All service dates';
-  return <section aria-labelledby="app-revenue-heading" className="rounded-2xl bg-white p-4 shadow md:p-6">
-    <h2 tabIndex={-1} id="app-revenue-heading" className="text-xl font-bold">Q Revenue Snapshot</h2>
-    <p className="mt-1 text-sm text-gray-600">Estimated revenue from app submissions and rates applicable to each service date.</p>
-    <div className="mt-4 grid grid-cols-2 gap-3">
-      <label className="min-w-0 text-sm font-medium">Year
-        <select value={year} onChange={(event) => { setYear(event.target.value); setMonth(''); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-base">
+  return <section aria-labelledby="app-revenue-heading" aria-busy={loading} className="rounded-2xl bg-white p-4 shadow md:p-6">
+    <h2 tabIndex={-1} id="app-revenue-heading" className="sr-only">Revenue Snapshot</h2>
+    <div className="grid grid-cols-2 gap-3">
+      <label className="min-w-0 text-center text-sm font-medium">Year
+        <select value={year} onChange={(event) => { setYear(event.target.value); setMonth(''); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-center text-base [text-align-last:center]">
           <option value="">All years</option>{years.map((value) => <option key={value} value={value}>{value}</option>)}
         </select>
       </label>
-      <label className="min-w-0 text-sm font-medium">Month
-        <select disabled={!year} value={month} onChange={(event) => { setMonth(event.target.value); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-base disabled:bg-gray-50 disabled:text-gray-500">
+      <label className="min-w-0 text-center text-sm font-medium">Month
+        <select disabled={!year} value={month} onChange={(event) => { setMonth(event.target.value); setShowIssues(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border bg-white px-3 py-2 text-center text-base [text-align-last:center] disabled:bg-gray-50 disabled:text-gray-500">
           <option value="">All months</option>{activeMonths.map((value) => <option key={value} value={value}>{months[value - 1]}</option>)}
         </select>
       </label>
     </div>
     <div className="mt-3">
       <div role="group" aria-label="Revenue categories" className="mx-auto flex w-max max-w-full flex-nowrap items-center gap-1 overflow-x-auto py-1">
-        {['Sewer', 'Telecom'].filter((type) => customerTypes.includes(type) || !data || data.available_customer_types.includes(type)).map((type) => <RevenueCategoryToggle key={type}
-          label={type === 'Telecom' ? 'Telecom / Fiber' : type} selected={customerTypes.includes(type)}
-          onToggle={() => { setCustomerTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]); setShowIssues(false); }}
-          icon={<RevenueServiceIcon value={type} />} />)}
-        {(!data || ((customerTypes.length > 0 || data.available_customer_types.length > 0) && (projectTypes.length > 0 || data.available_project_types.length > 0))) && <span aria-hidden="true" className="mx-0.5 h-7 w-px shrink-0 bg-gray-200" />}
-        {['Residential', 'Commercial'].filter((type) => projectTypes.includes(type) || !data || data.available_project_types.includes(type)).map((type) => <RevenueCategoryToggle key={type}
-          label={type} selected={projectTypes.includes(type)}
-          onToggle={() => { setProjectTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]); setShowIssues(false); }}
-          icon={<ProjectTypeIcon value={type} />} />)}
-        {(includeUnclassified || data?.has_unclassified_amounts) && <RevenueCategoryToggle label="Unclassified" selected={includeUnclassified}
-          onToggle={() => { setIncludeUnclassified((current) => !current); setShowIssues(false); }}
-          icon={<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="12" cy="12" r="9"/><path strokeLinecap="round" d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16.5v.1"/></svg>} />}
+        {(!data || data.available_categories.includes('Telecom') || serviceSelections.includes('Telecom')) && <RevenueCategoryToggle
+          label="Telecom" selected={serviceSelections.includes('Telecom')}
+          onToggle={() => { setServiceSelections((current) => current.includes('Telecom') ? current.filter((type) => type !== 'Telecom') : [...current, 'Telecom']); setShowIssues(false); }}
+          icon={<RevenueServiceIcon value="Telecom" />} />}
+        {(!data || data.available_categories.some((type) => ['Residential', 'Commercial'].includes(type)) || serviceSelections.includes('Sewer')) && <RevenueCategoryToggle
+          label="Sewer — expand Residential and Commercial filters" selected={serviceSelections.includes('Sewer')}
+          onToggle={() => {
+            if (serviceSelections.includes('Sewer')) { setServiceSelections((current) => current.filter((type) => type !== 'Sewer')); setSewerTypes([]); }
+            else setServiceSelections((current) => [...current, 'Sewer']);
+            setShowIssues(false);
+          }} icon={<RevenueServiceIcon value="Sewer" />} />}
+        {serviceSelections.includes('Sewer') && <div role="group" aria-label="Sewer project type" className="ml-1 inline-flex shrink-0 items-center gap-1 border-l border-[#b8def0] pl-2">
+          {['Residential', 'Commercial'].filter((type) => sewerTypes.includes(type) || !data || data.available_categories.includes(type)).map((type) => <RevenueCategoryToggle key={type}
+            label={type === 'Residential' ? 'Residential Sewer' : 'Commercial Sewer'} selected={sewerTypes.includes(type)}
+            onToggle={() => { setSewerTypes((current) => current.includes(type) ? current.filter((item) => item !== type) : [...current, type]); setShowIssues(false); }}
+            icon={<ProjectTypeIcon value={type} />} />)}
+        </div>}
+        {(unknownSelected || data?.has_unclassified_amounts) && <RevenueCategoryToggle label="Unclassified" selected={unknownSelected}
+          onToggle={() => { setUnknownSelected((current) => !current); setShowIssues(false); }}
+          icon={<span className="font-semibold">?</span>} />}
       </div>
-      <div className="flex justify-center">
-        <UnclassifiedProjectsModal onSaved={onProjectClassified} />
-      </div>
-      <p aria-live="polite" className="mx-auto mt-1 max-w-md text-center text-xs text-gray-600">
-        {customerTypes.length ? customerTypes.join(' + ') : 'All services'}
-        {' · '}{projectTypes.length ? projectTypes.join(' + ') : 'All properties'}
-        {includeUnclassified ? ' · Unclassified only' : ''}
+      <div className="flex justify-center"><UnclassifiedProjectsModal onSaved={onProjectClassified} /></div>
+      <div className="relative mt-1 flex min-h-11 items-center justify-center pl-12 pr-12">
+      <p aria-live="polite" className="w-full min-w-0 truncate text-center text-xs text-gray-600">
+        {categories.length ? [
+          ...(serviceSelections.includes('Telecom') ? ['Telecom'] : []),
+          ...(serviceSelections.includes('Sewer') ? [sewerTypes.length === 1 ? `${sewerTypes[0]} Sewer` : 'All Sewer'] : []),
+          ...(unknownSelected ? ['Unclassified'] : []),
+        ].join(' + ') : 'All revenue'}
       </p>
-      {(customerTypes.length > 0 || projectTypes.length > 0 || includeUnclassified) && <div className="mt-1 flex items-center justify-center">
-        <button type="button" onClick={() => {
-          setCustomerTypes([]);
-          setProjectTypes([]);
-          setIncludeUnclassified(false);
-          setShowIssues(false);
-        }} className="min-h-11 rounded-lg px-2 py-2 text-xs font-medium text-gray-600 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]" title="Reset category filters and show all revenue">Reset filters</button>
-      </div>}
+      <button type="button" disabled={!filtersActive || !data} aria-hidden={!filtersActive || !data}
+        aria-label="Reset all revenue filters"
+        onClick={() => {
+          setServiceSelections([]); setSewerTypes([]); setUnknownSelected(false);
+          setYear(defaultYear); setMonth(''); setShowIssues(false);
+        }}
+        className={`absolute right-0 top-1/2 inline-flex h-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-lg px-1 text-xs font-medium text-[#007bb5] hover:underline ${filtersActive && data ? '' : 'invisible'}`}>
+        Reset
+      </button>
+      </div>
+
     </div>
-    {loading ? <p role="status" className="mt-4 text-sm text-gray-600">Calculating app revenue…</p> : error ? <div className="mt-4">
+    {loading && data && <span role="status" className="sr-only">Updating revenue.</span>}
+    {loading && !data ? <p role="status" className="mt-4 text-sm text-gray-600">Loading revenue…</p> : error ? <div className="mt-4">
       <p role="alert" className="break-words text-sm text-red-700">{error}</p>
       <button type="button" onClick={() => setRevision((value) => value + 1)} className="mt-2 min-h-11 rounded-lg border px-3 py-2 text-sm">Retry</button>
     </div> : data && <>
-      <div className="mt-4 rounded-xl bg-[#e8f7ff] p-4">
+      <div className="mt-4 rounded-xl bg-[#e8f7ff] p-4 text-center">
         <p className="text-xs font-medium uppercase text-gray-600">Estimated Billable Revenue · {period}</p>
         <p className="mt-1 break-words text-3xl font-bold">{appRevenueCurrency(data.total)}</p>
         {data.issues.length > 0 ? <p className="mt-2 text-sm text-amber-900">Partial estimate · {data.issues.length} {data.issues.length === 1 ? 'submission needs' : 'submissions need'} pricing or review. These submissions are excluded from revenue.</p> : data.priced_count === 0 && <p className="mt-2 text-sm text-gray-600">No priced service submissions match these filters.</p>}
@@ -2612,6 +2669,7 @@ type UnclassifiedProjectRow = {
   projectNumber: string;
   location: string;
   customerName: string;
+  customerType: string;
 };
 
 function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
@@ -2635,14 +2693,14 @@ function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
     try {
       // Load a small batch; reloading after a save brings in the next project.
       const { data, error, count } = await supabase.from('projects')
-        .select('id, project_number, project_location, customers(name)', { count: 'exact' })
+        .select('id, project_number, project_location, customers(name,customer_type)', { count: 'exact' })
         .or('project_type.is.null,project_type.eq.')
         .order('project_number').order('id').limit(25);
       if (error) throw error;
       setRows((data ?? []).map((row) => {
         const customer = Array.isArray(row.customers) ? row.customers[0] : row.customers;
         return { id: row.id, projectNumber: row.project_number || 'Project',
-          location: row.project_location ?? '', customerName: customer?.name ?? '' };
+          location: row.project_location ?? '', customerName: customer?.name ?? '', customerType: customer?.customer_type ?? '' };
       }));
       setCount(count ?? 0);
       setError('');
@@ -2680,7 +2738,7 @@ function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
   }
 
   async function confirm(row: UnclassifiedProjectRow) {
-    const type = drafts[row.id];
+    const type = row.customerType === 'Telecom' ? 'Telecom' : row.customerType === 'Sewer' ? drafts[row.id] : '';
     if (!canClassify || !type || busy.current) return;
     busy.current = true;
     setSaving(row.id); setError(''); setNotice('');
@@ -2723,7 +2781,7 @@ function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
           className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border text-xl disabled:opacity-50">×</button>
       </div>
       <div className="space-y-3 p-4">
-        <p className="text-sm text-gray-600">Choose Residential or Commercial, then confirm.</p>
+        <p className="text-sm text-gray-600">Telecom customers use Telecom. For Sewer customers, choose Residential or Commercial.</p>
         {notice && <p role="status" className="text-sm text-green-800">{notice}</p>}
         {error && <div role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">
           <p>{error}</p><button type="button" disabled={!!saving} onClick={() => void reload()} className="mt-1 min-h-11 underline">Retry loading</button>
@@ -2737,17 +2795,16 @@ function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
           </div>
           {row.customerName && <p className="mt-1 break-words text-sm text-gray-600">{row.customerName}</p>}
           {row.location && <p className="mt-1 break-words text-sm text-gray-600">{row.location}</p>}
-          <div role="group" aria-label={`Project type for ${row.projectNumber}`} className="mt-3 grid grid-cols-2 gap-2">
-            {(['Residential', 'Commercial'] as const).map((type) => <button key={type} type="button"
-              disabled={!!saving || loading} aria-pressed={drafts[row.id] === type}
-              onClick={() => setDrafts((current) => ({ ...current, [row.id]: type }))}
-              className={`flex min-h-11 min-w-0 flex-wrap items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm disabled:opacity-50 ${
-                drafts[row.id] === type ? 'border-[#16324f] bg-[#16324f] text-white' : 'border-[#b8def0] bg-[#e8f7ff] text-[#16324f]'
-              }`}>
-              <span aria-hidden="true" className="inline-flex [&_span]:text-inherit"><ProjectTypeIcon value={type} /></span>{type}
-            </button>)}
-          </div>
-          <div className="mt-3 flex justify-end"><button type="button" disabled={!drafts[row.id] || !!saving || loading}
+          {row.customerType === 'Telecom' ? <div className="mt-3 flex min-h-11 items-center gap-2 rounded-lg border border-[#b8def0] bg-[#e8f7ff] px-3 text-sm text-[#16324f]"><RevenueServiceIcon value="Telecom" />Telecom · automatically selected</div>
+            : row.customerType === 'Sewer' ? <div role="group" aria-label={`Project type for ${row.projectNumber}`} className="mt-3 grid grid-cols-2 gap-2">
+              {(['Residential', 'Commercial'] as const).map((type) => <button key={type} type="button"
+                disabled={!!saving || loading} aria-pressed={drafts[row.id] === type}
+                onClick={() => setDrafts((current) => ({ ...current, [row.id]: type }))}
+                className={`flex min-h-11 min-w-0 flex-wrap items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm disabled:opacity-50 ${drafts[row.id] === type ? 'border-[#16324f] bg-[#16324f] text-white' : 'border-[#b8def0] bg-[#e8f7ff] text-[#16324f]'}`}>
+                <span aria-hidden="true" className="inline-flex [&_span]:text-inherit"><ProjectTypeIcon value={type} /></span>{type}
+              </button>)}
+            </div> : <p className="mt-3 text-sm text-amber-900">Set this customer&apos;s service type before classifying the project.</p>}
+          <div className="mt-3 flex justify-end"><button type="button" disabled={(row.customerType !== 'Telecom' && (row.customerType !== 'Sewer' || !drafts[row.id])) || !!saving || loading}
             onClick={() => void confirm(row)} className="min-h-11 rounded-lg bg-[#16324f] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
             {saving === row.id ? 'Saving…' : 'Confirm'}
           </button></div>
@@ -2756,4 +2813,257 @@ function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
       </div>
     </dialog>
   </>;
+}
+
+
+function CustomerServiceTypePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return <fieldset><legend className="mb-2 text-sm font-medium">Customer service type</legend>
+    <div className="grid grid-cols-2 gap-2">{['Sewer', 'Telecom'].map((type) => <button key={type} type="button"
+      aria-pressed={value === type} onClick={() => onChange(type)}
+      className={`flex min-h-12 items-center justify-center gap-2 rounded-lg border px-3 py-3 text-sm font-medium ${value === type ? 'border-[#16324f] bg-[#16324f] text-white' : 'border-[#b8def0] bg-[#e8f7ff] text-[#16324f]'}`}>
+      <span aria-hidden="true" className="inline-flex [&_span]:text-inherit"><RevenueServiceIcon value={type} /></span>{type}
+    </button>)}</div>
+  </fieldset>;
+}
+
+
+type DashboardSection = 'revenue' | 'work';
+
+function DashboardSections({ revenue, work, actions }: { revenue: ReactNode; work: ReactNode; actions: ReactNode }) {
+  const [active, setActive] = useState<DashboardSection>('revenue');
+  const [swipeProgress, setSwipeProgress] = useState(0);
+  const carouselPosition = Math.max(0, Math.min(1, (active === 'work' ? 1 : 0) + swipeProgress));
+  const [tileHeight, setTileHeight] = useState<number | undefined>();
+  const slides = useRef<Partial<Record<DashboardSection, HTMLDivElement | null>>>({});
+  const dots = useRef<Partial<Record<DashboardSection, HTMLButtonElement | null>>>({});
+  const gesture = useRef<{ x: number; y: number; startedAt: number } | null>(null);
+  const scrollPositions = useRef<Record<DashboardSection, number>>({ revenue: 0, work: 0 });
+  const pendingScroll = useRef<number | null>(null);
+  const items = [{ id: 'revenue', label: 'Revenue Snapshot' }, { id: 'work', label: 'Work Calendar' }] as const;
+
+  function select(next: DashboardSection, focus = false) {
+    if (next !== active) {
+      scrollPositions.current[active] = window.scrollY;
+      pendingScroll.current = scrollPositions.current[next];
+      // Keep focus outside an inactive, inert slide.
+      if (slides.current[active]?.contains(document.activeElement)) focus = true;
+      setActive(next);
+    }
+    if (focus) dots.current[next]?.focus({ preventScroll: true });
+  }
+
+  useLayoutEffect(() => {
+    const slide = slides.current[active];
+    if (!slide) return;
+    const measure = () => {
+      const height = Math.ceil(slide.getBoundingClientRect().height);
+
+const minimumHeight =
+  window.innerHeight -
+  slide.getBoundingClientRect().top -
+  24;
+
+const nextHeight = Math.max(height, minimumHeight);
+
+setTileHeight((current) =>
+  current === nextHeight ? current : nextHeight
+);
+    };
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(slide);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [active]);
+
+  useEffect(() => {
+    if (pendingScroll.current === null) return;
+    const position = pendingScroll.current;
+    pendingScroll.current = null;
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: position, behavior: 'auto' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [active]);
+
+  function startSwipe(event: TouchEvent<HTMLDivElement>) {
+    gesture.current = null;
+    setSwipeProgress(0);
+    if (event.touches.length !== 1 || document.querySelector('dialog[open]')) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('[data-dashboard-swipe-ignore], input, select, textarea, dialog, [contenteditable="true"]')) return;
+    const touch = event.touches[0];
+    if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
+    gesture.current = { x: touch.clientX, y: touch.clientY, startedAt: Date.now() };
+  }
+  function moveSwipe(event: TouchEvent<HTMLDivElement>) {
+    const start = gesture.current;
+    if (!start || event.touches.length !== 1) return;
+    const dx = event.touches[0].clientX - start.x;
+    const dy = event.touches[0].clientY - start.y;
+    if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) {
+      gesture.current = null; setSwipeProgress(0); return;
+    }
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      const width = Math.max(1, event.currentTarget.getBoundingClientRect().width);
+      const progress = -dx / width;
+      setSwipeProgress(active === 'revenue' ? Math.max(0, Math.min(1, progress)) : Math.min(0, Math.max(-1, progress)));
+    }
+  }
+  function endSwipe(event: TouchEvent<HTMLDivElement>) {
+    const start = gesture.current;
+    gesture.current = null;
+    setSwipeProgress(0);
+    if (!start || event.changedTouches.length !== 1 || event.touches.length !== 0) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 64 || Math.abs(dx) <= Math.abs(dy) * 1.5 || Date.now() - start.startedAt > 800) return;
+    if (dx < 0 && active === 'revenue') select('work');
+    if (dx > 0 && active === 'work') select('revenue');
+  }
+
+  return <div>
+    {actions}
+    <div
+  role="region"
+  aria-roledescription="carousel"
+  aria-label="Dashboard tiles"
+>
+      <div className="mb-2">
+        <div className="relative h-11 overflow-hidden">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-300 ease-out'}`}
+              style={{ opacity: 1 - carouselPosition * 0.72, left: `${50 * (1 - carouselPosition)}%`, transform: 'translateX(-50%)' }}>Revenue Snapshot</span>
+            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-300 ease-out'}`}
+              style={{ opacity: 0.28 + carouselPosition * 0.72, left: `${100 - carouselPosition * 50}%`, transform: 'translateX(-50%)' }}>Work Calendar</span>
+          </div>
+          <button type="button" disabled={active === 'revenue'} onClick={() => select('revenue')}
+            aria-label="Show previous tile: Revenue Snapshot"
+            className={`absolute left-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 'revenue' ? 'invisible' : ''}`} />
+          <button type="button" disabled={active === 'work'} onClick={() => select('work')}
+            aria-label="Show next tile: Work Calendar"
+            className={`absolute right-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 'work' ? 'invisible' : ''}`} />
+        </div>
+        <p className="sr-only" aria-live="polite">{active === 'revenue' ? 'Revenue Snapshot' : 'Work Calendar'}</p>
+        <div className="-mt-1 flex items-center justify-center" role="group" aria-label="Choose dashboard tile">
+            {items.map((item) => <button key={item.id} type="button"
+              ref={(element) => { dots.current[item.id] = element; }}
+              aria-label={`Show ${item.label}`} aria-current={active === item.id ? 'true' : undefined}
+              aria-controls={`dashboard-tile-${item.id}`} onClick={() => select(item.id)}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                select(event.key === 'Home' || event.key === 'ArrowLeft' ? 'revenue' : 'work', true);
+              }}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]">
+              <span aria-hidden="true" className={`h-2.5 rounded-full ${active === item.id ? 'w-6 bg-[#009be5]' : 'w-2.5 bg-gray-300'}`} />
+            </button>)}
+        </div>
+      </div>
+      <p className="sr-only">Swipe left for Work Calendar, right for Revenue Snapshot, or use the position buttons. Calendar gestures stay within the calendar.</p>
+      <div
+  className="overflow-hidden"
+  style={{ height: tileHeight, touchAction: 'pan-y' }}
+  onTouchStart={startSwipe}
+  onTouchMove={moveSwipe}
+  onTouchEnd={endSwipe}
+  onTouchCancel={() => {
+    gesture.current = null;
+    setSwipeProgress(0);
+  }}
+>       <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out'}`}
+          style={{ transform: `translateX(calc(${-carouselPosition * 100}% + ${carouselPosition * 32}px))` }}>
+          {items.map((item, index) => <div key={item.id}
+            ref={(element) => {
+              slides.current[item.id] = element;
+              if (element) { if (active === item.id) element.removeAttribute('inert'); else element.setAttribute('inert', ''); }
+            }}
+            id={`dashboard-tile-${item.id}`} role="group" aria-roledescription="slide"
+            aria-label={`${index + 1} of ${items.length}: ${item.label}`}
+            aria-hidden={active !== item.id}
+            className="min-w-0 shrink-0 grow-0 basis-[calc(100%_-_20px)]">
+            {item.id === 'revenue' ? revenue : work}
+          </div>)}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+
+function DashboardQuickAdd({ modalOpen, onProject, onCustomer }: {
+  modalOpen: boolean;
+  onProject: () => void;
+  onCustomer: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [scrolling, setScrolling] = useState(false);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const onScroll = () => {
+      setScrolling(true);
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => setScrolling(false), 400);
+    };
+    // Capture also handles scrolling within dashboard panels.
+    window.addEventListener('scroll', onScroll, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, []);
+
+  const [otherDialogOpen, setOtherDialogOpen] = useState(false);
+  const container = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+
+  // Native dialogs (for example project classification) also hide the launcher.
+  useEffect(() => {
+    const check = () => setOtherDialogOpen(!!document.querySelector('dialog[open]'));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (modalOpen || otherDialogOpen) setOpen(false);
+  }, [modalOpen, otherDialogOpen]);
+
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => container.current?.querySelector<HTMLButtonElement>('#dashboard-quick-add-actions button')?.focus());
+    function outside(event: PointerEvent) {
+      if (event.target instanceof Node && !container.current?.contains(event.target)) setOpen(false);
+    }
+    function escape(event: KeyboardEvent) {
+      if (event.key === 'Escape') { setOpen(false); trigger.current?.focus(); }
+    }
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => { window.cancelAnimationFrame(frame); document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
+  }, [open]);
+
+  if (modalOpen || otherDialogOpen) return null;
+  const faded = scrolling && !open;
+  return <div ref={container} className={`fixed bottom-[calc(env(safe-area-inset-bottom)_+_1rem)] right-4 z-30 flex flex-col items-end gap-3 transition-opacity duration-200 motion-reduce:transition-none md:right-8 ${faded ? 'opacity-25' : 'opacity-100'}`}>
+    {open && <div id="dashboard-quick-add-actions" role="group" aria-label="Add to dashboard"
+      className="flex w-52 flex-col gap-1 rounded-2xl border border-gray-200 bg-white p-2 text-black shadow-xl">
+      <button type="button" onClick={() => { setOpen(false); onProject(); }}
+        className="flex min-h-12 items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-[#e8f7ff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]">
+        <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#e8f7ff] text-[#007bb5]"><Plus size={18} strokeWidth={2.25} className="block shrink-0" /></span>
+        Add Project
+      </button>
+      <button type="button" onClick={() => { setOpen(false); onCustomer(); }}
+        className="flex min-h-12 items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium hover:bg-[#e8f7ff] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]">
+        <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#e8f7ff] text-[#007bb5]"><Plus size={18} strokeWidth={2.25} className="block shrink-0" /></span>
+        Add Customer
+      </button>
+    </div>}
+    <button ref={trigger} type="button" aria-label={open ? 'Close add options' : 'Add project or customer'}
+      aria-expanded={open} aria-controls="dashboard-quick-add-actions"
+      onClick={() => setOpen((current) => !current)}
+      className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-0 bg-[#16324f] p-0 text-white shadow-lg hover:bg-[#10263d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]">
+      {open ? <X aria-hidden="true" size={28} strokeWidth={2.25} className="block shrink-0" /> : <Plus aria-hidden="true" size={28} strokeWidth={2.25} className="block shrink-0" />}
+    </button>
+  </div>;
 }

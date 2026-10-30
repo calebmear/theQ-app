@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { CalendarDays, ChevronDown, Wrench } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { Wrench, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type TouchEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 import { supabase } from '../../lib/supabaseClient';
@@ -146,16 +146,7 @@ export default function ActiveWorkPage() {
   }, [projectsRevision]);
 
   return (
-    <div className="space-y-6 text-black">
-      <div>
-        <p className="text-center text-sm text-gray-600">
-          Active and scheduled projects assigned to you.
-        </p>
-        <div className="mt-3">
-          <ShopWorkCard />
-        </div>
-      </div>
-
+    <div className="space-y-6 pb-20 text-black">
       {projectsLoading ? (
         <p role="status" className="rounded-xl bg-white p-4 text-sm text-gray-600">Loading projects...</p>
       ) : projectsError ? (
@@ -164,33 +155,22 @@ export default function ActiveWorkPage() {
           <button type="button" onClick={() => setProjectsRevision((value) => value + 1)}
             className="mt-3 min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold">Retry</button>
         </div>
-      ) : <div className="grid gap-6 xl:grid-cols-2">
-        <ProjectTable
-          key={`active-${activeWorkSearchValue}`}
-          title="Active Projects"
-          scheduledCount={scheduledProjects.length}
+      ) : <ActiveWorkTiles key={activeWorkSearchValue || 'all'}
+        activeCount={activeProjects.length} scheduledCount={scheduledProjects.length}
+        activeProjects={<ProjectTable title="Active Projects" hideTitle
           collapsedLimit={activeWorkSearchValue ? undefined : 2}
-          showCount
-          projects={activeProjects}
-          formatDate={formatDate}
-          emptyMessage="No active projects found."
-        />
-
-        <ProjectTable
-          title="Scheduled Projects"
-          sectionId="scheduled-projects"
-          showCount
-          projects={scheduledProjects}
-          formatDate={formatDate}
-          emptyMessage="No scheduled projects found."
-        />
-      </div>}
+          projects={activeProjects} formatDate={formatDate} emptyMessage="No active projects found." />}
+        scheduledProjects={<ProjectTable title="Scheduled Projects" hideTitle
+          projects={scheduledProjects} formatDate={formatDate} emptyMessage="No scheduled projects found." />}
+      />}
+      <ShopWorkCard />
     </div>
   );
 }
 
 function ProjectTable({
   title,
+  hideTitle = false,
   projects,
   formatDate,
   emptyMessage,
@@ -200,6 +180,7 @@ function ProjectTable({
   sectionId,
 }: {
   title: string;
+  hideTitle?: boolean;
   projects: Project[];
   formatDate: (value: string | undefined) => string;
   emptyMessage: string;
@@ -244,7 +225,7 @@ function ProjectTable({
   return (
     <div id={sectionId} className="scroll-mt-4 rounded-2xl bg-white p-4 shadow md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <h2 className="text-xl font-bold">{title}{showCount ? ` (${projects.length})` : ''}</h2>
+        <h2 className={hideTitle ? 'sr-only' : 'text-xl font-bold'}>{title}{showCount ? ` (${projects.length})` : ''}</h2>
         {scheduledCount !== undefined && (
           <a href="#scheduled-projects"
             className="inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-[#007bb5] hover:text-[#005f8f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#009be5]">
@@ -255,7 +236,7 @@ function ProjectTable({
 
       <div id={listId} ref={listRef}
         style={canExpand && expanded ? { maxHeight: expandedHeight ? `min(${expandedHeight}px, 65dvh)` : '65dvh' } : undefined}
-        className={`mt-4 ${canExpand && expanded ? 'overflow-y-auto pr-2' : ''}`}>
+        className={`${hideTitle ? '' : 'mt-4'} ${canExpand && expanded ? 'overflow-y-auto pr-2' : ''}`}>
       <div className="space-y-3 md:hidden">
         {visibleProjects.map((project) => (
           <article data-project-row key={project.id} className="rounded-xl border">
@@ -423,9 +404,31 @@ function shopAreasByDate(entries: { work_date: string; categories?: string[] | n
 
 
 function ShopWorkCard() {
+  const [showShopCalendar, setShowShopCalendar] = useState(false);
+  const [scrolling, setScrolling] = useState(false);
+  const shopTriggerRef = useRef<HTMLButtonElement>(null);
+  const hadModalOpen = useRef(false);
+
+  useEffect(() => {
+    let timer: number | undefined;
+    const scroll = () => { setScrolling(true); if (timer !== undefined) window.clearTimeout(timer); timer = window.setTimeout(() => setScrolling(false), 400); };
+    window.addEventListener('scroll', scroll, { passive: true, capture: true });
+    return () => { window.removeEventListener('scroll', scroll, true); if (timer !== undefined) window.clearTimeout(timer); };
+  }, []);
+
+
+
   const [historyRevision, setHistoryRevision] = useState(0);
   const [showShopWorkForm, setShowShopWorkForm] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const modalOpen = showShopWorkForm || showShopCalendar;
+    let frame: number | undefined;
+    if (!modalOpen && hadModalOpen.current) frame = window.requestAnimationFrame(() => shopTriggerRef.current?.focus());
+    hadModalOpen.current = modalOpen;
+    return () => { if (frame !== undefined) window.cancelAnimationFrame(frame); };
+  }, [showShopWorkForm, showShopCalendar]);
+
   const [workDate, setWorkDate] = useState(shopWorkToday);
   const [description, setDescription] = useState('');
   const [categories, setCategories] = useState<ShopWorkCategory[]>([]);
@@ -455,6 +458,12 @@ function ShopWorkCard() {
     return () => { document.body.style.overflow = previousOverflow; };
   }, [showShopWorkForm]);
 
+  useEffect(() => {
+    if (!success) return;
+    const timer = window.setTimeout(() => setSuccess(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [success]);
+
   function closeShopWork() {
     if (savingRef.current) return;
     if ((description.trim() || categories.length > 0) &&
@@ -463,6 +472,7 @@ function ShopWorkCard() {
     setCategories([]);
     setSaveError('');
     setShowShopWorkForm(false);
+    setShowShopCalendar(false);
   }
 
   async function submitShopWork(event: FormEvent<HTMLFormElement>) {
@@ -523,9 +533,10 @@ function ShopWorkCard() {
       pendingRequest.current = null;
       setDescription('');
       setCategories([]);
-      setSuccess('Shop work recorded.');
+      setSuccess('Shop time recorded.');
       setHistoryRevision((value) => value + 1);
       setShowShopWorkForm(false);
+      setShowShopCalendar(true);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message :
         (error as { message?: string })?.message || 'Could not save shop work. Please retry.');
@@ -537,17 +548,21 @@ function ShopWorkCard() {
 
   return (
     <div>
-      <button type="button" onClick={() => {
-        setSaveError('');
-        setSuccess('');
-        setWorkDate(shopWorkToday());
-        setShowShopWorkForm(true);
-      }} className="flex h-9 min-h-9 max-h-9 w-full items-center justify-center rounded-lg bg-black px-3 py-0 text-sm font-medium leading-5 text-white shadow-sm hover:bg-gray-800">
-        + Shop Work
-      </button>
-      {success && <p role="status" className="mt-3 text-sm font-medium text-green-700">{success}</p>}
+      {!showShopWorkForm && !showShopCalendar && <div
+        className={`fixed bottom-[calc(env(safe-area-inset-bottom)_+_1rem)] right-4 z-30 flex flex-col items-end gap-3 transition-opacity duration-200 motion-reduce:transition-none md:right-8 ${scrolling ? 'opacity-25' : 'opacity-100'}`}>
+        <button ref={shopTriggerRef} type="button" aria-label="Open shop calendar to add shop time" aria-haspopup="dialog"
+          onClick={() => setShowShopCalendar(true)} className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-0 bg-[#16324f] p-0 text-white shadow-lg hover:bg-[#10263d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]">
+          <Wrench aria-hidden="true" size={26} strokeWidth={2.25} />
+        </button>
+      </div>}
+      {success && <p role="status" className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)_+_5.5rem)] left-4 right-4 z-40 rounded-xl bg-[#16324f] px-4 py-3 text-center text-sm text-white shadow-lg md:left-auto md:right-8">{success}</p>}
 
       <dialog ref={dialogRef} aria-labelledby="shop-work-modal-title"
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeShopWork();
+        }}
         onCancel={(event) => {
           event.preventDefault();
           closeShopWork();
@@ -556,9 +571,9 @@ function ShopWorkCard() {
         onClose={() => setShowShopWorkForm(false)}
         className="m-auto max-h-[90dvh] max-w-3xl overflow-y-auto rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
         <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b bg-white px-6 py-4">
-          <h2 id="shop-work-modal-title" className="min-w-0 text-xl font-bold">Log Shop Work</h2>
-          <button type="button" disabled={saving} onClick={closeShopWork}
-            className="shrink-0 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50 disabled:opacity-50">Close</button>
+          <h2 id="shop-work-modal-title" className="min-w-0 text-xl font-bold">Add Shop Time</h2>
+          <button type="button" disabled={saving} onClick={closeShopWork} aria-label="Close Add Shop Time"
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border p-0 hover:bg-gray-50 disabled:opacity-50"><X aria-hidden="true" size={22} /></button>
         </div>
       <form onSubmit={submitShopWork} className="min-w-0 p-6">
         <div className="min-w-0 space-y-4">
@@ -600,18 +615,19 @@ function ShopWorkCard() {
         <div className="mt-4 grid gap-3">
         <button type="submit" disabled={saving || !workDate || !description.trim() || categories.length === 0}
           className="w-full rounded-lg bg-black px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50">
-          {saving ? 'Saving...' : 'Submit Shop Work'}
+          {saving ? 'Saving...' : 'Save Shop Time'}
         </button>
         </div>
       </form>
       </dialog>
 
-      <ShopWorkHistory refreshKey={historyRevision} onAddForDate={(date) => {
+      {showShopCalendar && <ShopWorkHistory initialDate={workDate} refreshKey={historyRevision} onClose={() => setShowShopCalendar(false)} onAddForDate={(date) => {
+        setShowShopCalendar(false);
         setWorkDate(date);
         setSaveError('');
         setSuccess('');
         setShowShopWorkForm(true);
-      }} />
+      }} />}
     </div>
   );
 }
@@ -639,11 +655,48 @@ function shopMonthBounds(month: string) {
   };
 }
 
-function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onAddForDate: (date: string) => void }) {
+function ShopWorkHistory({ refreshKey, onAddForDate, onClose, initialDate }: { refreshKey: number; onAddForDate: (date: string) => void; onClose: () => void; initialDate: string }) {
   const [viewerId, setViewerId] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [month, setMonth] = useState(() => shopWorkToday().slice(0, 7));
-  const [selectedDate, setSelectedDate] = useState<string | null>(shopWorkToday);
+  const expanded = true;
+  const calendarDialogRef = useRef<HTMLDialogElement>(null);
+  const monthGesture = useRef<{ x: number; y: number; startedAt: number } | null>(null);
+  const suppressDayClickUntil = useRef(0);
+
+  function startMonthSwipe(event: TouchEvent<HTMLDialogElement>) {
+    monthGesture.current = null;
+    if (event.touches.length !== 1) return;
+    const target = event.target;
+    if (target instanceof Element) {
+      if (target.closest('a, input, select, textarea, [contenteditable="true"]')) return;
+      if (target.closest('button') && !target.closest('[data-shop-calendar-days]')) return;
+    }
+    const touch = event.touches[0];
+    if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
+    monthGesture.current = { x: touch.clientX, y: touch.clientY, startedAt: Date.now() };
+  }
+
+  function moveMonthSwipe(event: TouchEvent<HTMLDialogElement>) {
+    const start = monthGesture.current;
+    if (!start || event.touches.length !== 1) return;
+    const dx = event.touches[0].clientX - start.x, dy = event.touches[0].clientY - start.y;
+    if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) { monthGesture.current = null; return; }
+    if (Math.abs(dx) > 16 && Math.abs(dx) > Math.abs(dy) * 1.5) suppressDayClickUntil.current = Date.now() + 600;
+  }
+
+  function endMonthSwipe(event: TouchEvent<HTMLDialogElement>) {
+    const start = monthGesture.current;
+    monthGesture.current = null;
+    if (!start || event.changedTouches.length !== 1 || event.touches.length !== 0) return;
+    const dx = event.changedTouches[0].clientX - start.x, dy = event.changedTouches[0].clientY - start.y;
+    if (Math.abs(dx) < 56 || Math.abs(dx) <= Math.abs(dy) * 1.5 || Date.now() - start.startedAt > 800) return;
+    event.stopPropagation();
+    suppressDayClickUntil.current = Date.now() + 600;
+    // The existing changeMonth function preserves busy and unsaved-edit checks.
+    changeMonth(dx < 0 ? 1 : -1);
+  }
+
+  const [month, setMonth] = useState(() => (initialDate || shopWorkToday()).slice(0, 7));
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => initialDate || shopWorkToday());
   const [entries, setEntries] = useState<ShopWorkEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -658,6 +711,16 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const bounds = shopMonthBounds(month);
+
+  useEffect(() => {
+    const dialog = calendarDialogRef.current;
+    if (!dialog) return;
+    dialog.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { dialog.close(); document.body.style.overflow = previousOverflow; };
+  }, []);
+
 
   useEffect(() => {
     if (!expanded) return;
@@ -767,29 +830,43 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
   const selectedEntries = entries.filter((entry) => entry.work_date === selectedDate);
 
   return (
-    <section className="mt-3">
-      <button type="button" aria-expanded={expanded} aria-controls="shop-work-history"
-        onClick={() => { if (expanded && !discardEdit()) return; setExpanded((value) => !value); }}
-        className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg px-1 py-2 text-center text-sm font-semibold text-[#007bb5] transition-colors hover:text-[#005f8f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#009be5] focus-visible:ring-offset-2">
-        <CalendarDays aria-hidden="true" className="h-5 w-5 shrink-0" />
-        <span>Shop Calendar</span>
-        <ChevronDown aria-hidden="true" className={`h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none ${expanded ? 'rotate-180' : ''}`} />
-      </button>
+    <dialog ref={calendarDialogRef} aria-labelledby="activework-shop-calendar-title" aria-busy={loading}
+      onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+        if (outside && discardEdit()) onClose();
+      }}
+      onTouchStart={startMonthSwipe} onTouchMove={moveMonthSwipe} onTouchEnd={endMonthSwipe}
+      onTouchCancel={() => { monthGesture.current = null; }}
+      onClickCapture={(event) => {
+        if (Date.now() < suppressDayClickUntil.current && event.target instanceof Element && event.target.closest('[data-shop-calendar-days]')) {
+          event.preventDefault(); event.stopPropagation();
+        }
+      }}
+      style={{ touchAction: 'pan-y pinch-zoom' }}
+      onCancel={(event) => { event.preventDefault(); if (discardEdit()) onClose(); }}
+      className="m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-2xl overflow-y-auto rounded-2xl border-0 bg-white p-0 text-black shadow-xl backdrop:bg-black/40">
+      <div className="sticky top-0 z-20 grid grid-cols-[44px_minmax(0,1fr)_44px] items-center gap-2 border-b bg-white px-4 py-3">
+        <span aria-hidden="true" />
+        <h2 id="activework-shop-calendar-title" className="text-center text-lg font-bold">Shop Calendar</h2>
+        <button type="button" disabled={busy} onClick={() => { if (discardEdit()) onClose(); }} aria-label="Close shop calendar" className="inline-flex h-11 w-11 items-center justify-center rounded-lg border p-0 disabled:opacity-50"><X aria-hidden="true" size={22} /></button>
+      </div>
       {expanded && (
-        <div id="shop-work-history" className="mt-2 rounded-2xl bg-white p-4 md:p-6">
+        <div id="shop-work-history" className="bg-white p-4 md:p-6">
           <div className="mx-auto max-w-lg">
-            <div className="flex justify-center gap-6 text-[11px] font-medium text-gray-600">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[11px] font-medium text-gray-600">
               <span className="flex items-center gap-1"><span className="h-3.5 w-3.5 rounded bg-[#16324f]" />Submitted</span>
               <span className="flex items-center gap-1"><span className="h-3.5 w-3.5 rounded border bg-gray-50" />No submission</span>
             </div>
             <div className="mt-4 flex items-center justify-center gap-3">
               <button type="button" aria-label="Previous month" disabled={busy} onClick={() => changeMonth(-1)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50">‹</button>
-              <p className="min-w-0 flex-1 text-center text-sm font-bold text-gray-800">{bounds.label}</p>
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#b8def0] bg-[#e8f7ff] p-0 text-[#16324f] transition-colors hover:border-[#16324f] hover:bg-[#d9f0fc] active:bg-[#c5e8fa] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]"><ChevronLeft aria-hidden="true" size={22} strokeWidth={2.5} className="block" /></button>
+              <p aria-live="polite" className="min-w-[10rem] text-center text-sm font-bold text-gray-800">{bounds.label}</p>
               <button type="button" aria-label="Next month" disabled={busy} onClick={() => changeMonth(1)}
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50">›</button>
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#b8def0] bg-[#e8f7ff] p-0 text-[#16324f] transition-colors hover:border-[#16324f] hover:bg-[#d9f0fc] active:bg-[#c5e8fa] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]"><ChevronRight aria-hidden="true" size={22} strokeWidth={2.5} className="block" /></button>
             </div>
-            {loading ? <p role="status" className="mt-4 text-sm text-gray-500">Loading shop work...</p> : loadError ? (
+            {loadError ? (
               <div className="mt-4"><p role="alert" className="text-sm text-red-700">{loadError}</p>
                 <button type="button" onClick={() => setRevision((value) => value + 1)} className="mt-2 rounded-lg border px-3 py-2 text-sm">Retry</button></div>
             ) : (
@@ -797,7 +874,7 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
                 <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase text-gray-500">
                   {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <div key={day}>{day}</div>)}
                 </div>
-                <div className="mt-2 grid grid-cols-7 gap-1">
+                <div data-shop-calendar-days className="mt-2 grid grid-cols-7 gap-1">
                   {Array.from({ length: bounds.firstWeekday }, (_, i) => <div key={`blank-${i}`} className="aspect-square" />)}
                   {Array.from({ length: bounds.dayCount }, (_, i) => {
                     const day = i + 1;
@@ -805,12 +882,12 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
                     const selected = key === selectedDate;
                     const count = counts[key] ?? 0;
                     const dayAreas = areasByDate[key] ?? [];
-                    return <button key={key} type="button" disabled={busy} aria-pressed={selected}
+                    return <button key={key} type="button" disabled={busy} aria-pressed={selected} aria-current={key === shopWorkToday() ? 'date' : undefined}
                       aria-label={`${key}: ${count} shop work submissions${dayAreas.length ? `; ${dayAreas.join(', ')}` : ''}`}
                       onClick={() => { if (!discardEdit()) return; setSelectedDate(selected ? null : key); setEditingId(null); setActionError(''); setNotice(''); }}
                       className={`relative flex min-h-11 aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
                         count ? 'bg-[#16324f] text-white shadow-sm' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                      } ${selected ? 'ring-2 ring-black ring-offset-2' : key === shopWorkToday() ? 'ring-2 ring-[#16324f] ring-offset-1' : ''}`}>
+                      } ${selected ? 'ring-2 ring-[#16324f] ring-offset-2' : key === shopWorkToday() ? 'ring-2 ring-[#009be5] ring-offset-1' : ''}`}>
                       <span className="leading-none">{day}</span>
                     </button>;
                   })}
@@ -820,9 +897,9 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
                     <p className="text-sm font-bold text-gray-900">{new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-US')}</p>
                     <button type="button" disabled={busy} onClick={() => { if (discardEdit()) onAddForDate(selectedDate); }}
                       className="mt-3 min-h-11 w-full rounded-lg border border-[#8fd8f7] bg-[#e8f7ff] px-3 py-2 text-sm font-semibold text-[#007bb5] hover:bg-[#d5f0ff] disabled:opacity-50">
-                      + Add entry for this date
+                      Add Shop Time
                     </button>
-                    {selectedEntries.length === 0 && <p className="mt-2 text-sm text-gray-500">No shop work submitted for this day.</p>}
+                    {!loading && selectedEntries.length === 0 && <p className="mt-2 text-sm text-gray-500">No shop work submitted for this day.</p>}
                     {selectedEntries.some((entry) => entry.created_by === viewerId) && (
                       <div className="mt-4 flex justify-end">
                         <button type="button" disabled={busy} aria-pressed={managingEntries}
@@ -897,7 +974,7 @@ function ShopWorkHistory({ refreshKey, onAddForDate }: { refreshKey: number; onA
           </div>
         </div>
       )}
-    </section>
+    </dialog>
   );
 }
 
@@ -905,3 +982,152 @@ function shopWorkError(error: unknown) {
   return error instanceof Error ? error.message :
     (error as { message?: string })?.message || 'Could not update shop work. Please try again.';
 }
+
+
+type ActiveWorkTile = 'active' | 'scheduled';
+
+function ActiveWorkTiles({ activeProjects, scheduledProjects, activeCount, scheduledCount }: { activeProjects: ReactNode; scheduledProjects: ReactNode; activeCount: number; scheduledCount: number }) {
+  const [active, setActive] = useState<ActiveWorkTile>(() => activeCount === 0 && scheduledCount > 0 ? 'scheduled' : 'active');
+  const [swipeProgress, setSwipeProgress] = useState(0);
+  const carouselPosition = Math.max(0, Math.min(1, (active === 'scheduled' ? 1 : 0) + swipeProgress));
+  const [tileHeight, setTileHeight] = useState<number | undefined>();
+  const slides = useRef<Partial<Record<ActiveWorkTile, HTMLDivElement | null>>>({});
+  const dots = useRef<Partial<Record<ActiveWorkTile, HTMLButtonElement | null>>>({});
+  const gesture = useRef<{ x: number; y: number; startedAt: number } | null>(null);
+  const suppressProjectClickUntil = useRef(0);
+  const scrollPositions = useRef<Record<ActiveWorkTile, number>>({ active: 0, scheduled: 0 });
+  const pendingScroll = useRef<number | null>(null);
+  const items = [{ id: 'active', label: 'Active Projects' }, { id: 'scheduled', label: 'Scheduled Projects' }] as const;
+
+  function select(next: ActiveWorkTile, focus = false) {
+    if (next !== active) {
+      scrollPositions.current[active] = window.scrollY;
+      pendingScroll.current = scrollPositions.current[next];
+      // Keep focus outside an inactive, inert slide.
+      if (slides.current[active]?.contains(document.activeElement)) focus = true;
+      setActive(next);
+    }
+    if (focus) dots.current[next]?.focus({ preventScroll: true });
+  }
+
+  useLayoutEffect(() => {
+    const slide = slides.current[active];
+    if (!slide) return;
+    const measure = () => {
+      const height = Math.ceil(slide.getBoundingClientRect().height);
+      setTileHeight((current) => current === height ? current : height);
+    };
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(slide);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [active]);
+
+  useEffect(() => {
+    if (pendingScroll.current === null) return;
+    const position = pendingScroll.current;
+    pendingScroll.current = null;
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: position, behavior: 'auto' }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [active]);
+
+  function startSwipe(event: TouchEvent<HTMLDivElement>) {
+    gesture.current = null;
+    setSwipeProgress(0);
+    if (event.touches.length !== 1 || document.querySelector('dialog[open]')) return;
+    const target = event.target;
+    if (target instanceof Element && target.closest('[data-dashboard-swipe-ignore], button, input, select, textarea, dialog, [contenteditable="true"]')) return;
+    const touch = event.touches[0];
+    if (touch.clientX < 24 || touch.clientX > window.innerWidth - 24) return;
+    gesture.current = { x: touch.clientX, y: touch.clientY, startedAt: Date.now() };
+  }
+  function moveSwipe(event: TouchEvent<HTMLDivElement>) {
+    const start = gesture.current;
+    if (!start || event.touches.length !== 1) return;
+    const dx = event.touches[0].clientX - start.x;
+    const dy = event.touches[0].clientY - start.y;
+    if (Math.abs(dy) > 12 && Math.abs(dy) >= Math.abs(dx)) {
+      gesture.current = null; setSwipeProgress(0); return;
+    }
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      suppressProjectClickUntil.current = Date.now() + 600;
+      const width = Math.max(1, event.currentTarget.getBoundingClientRect().width);
+      const progress = -dx / width;
+      setSwipeProgress(active === 'active' ? Math.max(0, Math.min(1, progress)) : Math.min(0, Math.max(-1, progress)));
+    }
+  }
+  function endSwipe(event: TouchEvent<HTMLDivElement>) {
+    const start = gesture.current;
+    gesture.current = null;
+    setSwipeProgress(0);
+    if (!start || event.changedTouches.length !== 1 || event.touches.length !== 0) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 64 || Math.abs(dx) <= Math.abs(dy) * 1.5 || Date.now() - start.startedAt > 800) return;
+    if (dx < 0 && active === 'active') select('scheduled');
+    if (dx > 0 && active === 'scheduled') select('active');
+  }
+
+  return <div>
+    <div role="region" aria-roledescription="carousel" aria-label="Project views"
+      style={{ touchAction: 'pan-y pinch-zoom' }}
+      onClickCapture={(event) => {
+        if (Date.now() < suppressProjectClickUntil.current && event.target instanceof Element && event.target.closest('a')) {
+          event.preventDefault(); event.stopPropagation();
+        }
+      }}
+      onTouchStart={startSwipe} onTouchMove={moveSwipe} onTouchEnd={endSwipe} onTouchCancel={() => { gesture.current = null; setSwipeProgress(0); }}>
+      <div className="mb-2">
+        <div className="relative h-11 overflow-hidden">
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-300 ease-out'}`}
+              style={{ opacity: 1 - carouselPosition * 0.72, left: `${50 * (1 - carouselPosition)}%`, transform: 'translateX(-50%)' }}>Active Projects ({activeCount})</span>
+            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-300 ease-out'}`}
+              style={{ opacity: 0.28 + carouselPosition * 0.72, left: `${100 - carouselPosition * 50}%`, transform: 'translateX(-50%)' }}>Scheduled Projects ({scheduledCount})</span>
+          </div>
+          <button type="button" disabled={active === 'active'} onClick={() => select('active')}
+            aria-label="Show previous tile: Active Projects"
+            className={`absolute left-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 'active' ? 'invisible' : ''}`} />
+          <button type="button" disabled={active === 'scheduled'} onClick={() => select('scheduled')}
+            aria-label="Show next tile: Scheduled Projects"
+            className={`absolute right-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 'scheduled' ? 'invisible' : ''}`} />
+        </div>
+        <p className="sr-only" aria-live="polite">{active === 'active' ? 'Active Projects' : 'Scheduled Projects'}</p>
+        <div className="-mt-1 flex items-center justify-center" role="group" aria-label="Choose project view">
+            {items.map((item) => <button key={item.id} type="button"
+              ref={(element) => { dots.current[item.id] = element; }}
+              aria-label={`Show ${item.label}`} aria-current={active === item.id ? 'true' : undefined}
+              aria-controls={`activework-tile-${item.id}`} onClick={() => select(item.id)}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                select(event.key === 'Home' || event.key === 'ArrowLeft' ? 'active' : 'scheduled', true);
+              }}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]">
+              <span aria-hidden="true" className={`h-2.5 rounded-full ${active === item.id ? 'w-6 bg-[#009be5]' : 'w-2.5 bg-gray-300'}`} />
+            </button>)}
+        </div>
+      </div>
+      <p className="sr-only">Swipe left for Scheduled Projects, right for Active Projects, or use the position buttons. Project links remain tappable; horizontal swipes change project views.</p>
+      <div className="overflow-hidden" style={{ height: tileHeight }}>
+        <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out'}`}
+          style={{ transform: `translateX(calc(${-carouselPosition * 100}% + ${carouselPosition * 32}px))` }}>
+          {items.map((item, index) => <div key={item.id}
+            ref={(element) => {
+              slides.current[item.id] = element;
+              if (element) { if (active === item.id) element.removeAttribute('inert'); else element.setAttribute('inert', ''); }
+            }}
+            id={`activework-tile-${item.id}`} role="group" aria-roledescription="slide"
+            aria-label={`${index + 1} of ${items.length}: ${item.label}`}
+            aria-hidden={active !== item.id}
+            className="min-w-0 shrink-0 grow-0 basis-[calc(100%_-_20px)]">
+            {item.id === 'active' ? activeProjects : scheduledProjects}
+          </div>)}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+

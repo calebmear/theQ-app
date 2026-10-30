@@ -30,7 +30,7 @@ const navItems = [
     `flex h-12 items-center justify-center border-b-4 text-sm font-medium ${
       active
         ? 'border-[#009be5] bg-[#eaf7fe] text-[#009be5]'
-        : 'border-transparent text-gray-700 hover:bg-gray-100'
+        : 'border-transparent text-gray-700 [@media(hover:hover)]:hover:bg-gray-100'
     } md:h-auto md:justify-start md:border-b-0 md:border-l-4 md:px-3 md:py-2`;
 
   return (

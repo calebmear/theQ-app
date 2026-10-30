@@ -2088,9 +2088,9 @@ async function saveProjectEdit() {
   {projectCustomerService(project) === 'Telecom' ? <div className="rounded-lg border border-[#b8def0] bg-[#e8f7ff] p-3">
     <p className="text-sm font-medium">Project type</p>
     <div className="mt-2 flex items-center gap-2 text-[#16324f]"><CustomerTypeBadge value="Telecom" /><span>Telecom</span></div>
-    <p className="mt-1 text-xs text-gray-600">Determined by the customer&apos;s service type.</p>
+    <p className="mt-1 text-xs text-gray-600">Determined by the customer's service type.</p>
   </div> : projectCustomerService(project) === 'Sewer' ? <ProjectTypePicker value={projectEditForm.projectType} onChange={(value) => setProjectEditForm({ ...projectEditForm, projectType: value })} disabled={projectSaving} />
-    : <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Set the customer&apos;s service type to Sewer or Telecom to classify this project.</p>}
+    : <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Set the customer's service type to Sewer or Telecom to classify this project.</p>}
 </div>}
 <div className="border-b pb-3">
 <div className="flex items-start justify-between gap-3">

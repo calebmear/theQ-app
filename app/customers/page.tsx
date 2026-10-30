@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useUserProfile } from '../../lib/useUserProfile';
-import PageSwipeNavigation from '../../components/PageSwipeNavigation';
 
 import { supabase } from '../../lib/supabaseClient';
 
@@ -239,8 +238,7 @@ const canManageCustomers =
   }
 
   return (
-    <PageSwipeNavigation previous="/projects">
-      <div className="space-y-6 text-black">
+    <div className="space-y-6 text-black">
       
 
       {loadError && (
@@ -448,8 +446,7 @@ const canManageCustomers =
           </div>
         </div>
       )}
-        </div>
-  </PageSwipeNavigation>
+    </div>
   );
 }
 

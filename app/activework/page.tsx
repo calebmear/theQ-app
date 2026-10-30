@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { Wrench, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type TouchEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { useRouter } from 'next/navigation';
 
 import { supabase } from '../../lib/supabaseClient';
 
@@ -156,11 +155,8 @@ export default function ActiveWorkPage() {
           <button type="button" onClick={() => setProjectsRevision((value) => value + 1)}
             className="mt-3 min-h-11 rounded-lg border px-4 py-2 text-sm font-semibold">Retry</button>
         </div>
-      ) : <ActiveWorkTiles
-      key={activeWorkSearchValue || 'all'}
-      initialView={searchParams.get('view')}
-      activeCount={activeProjects.length}
-      scheduledCount={scheduledProjects.length}
+      ) : <ActiveWorkTiles key={activeWorkSearchValue || 'all'}
+        activeCount={activeProjects.length} scheduledCount={scheduledProjects.length}
         activeProjects={<ProjectTable title="Active Projects" hideTitle
           collapsedLimit={activeWorkSearchValue ? undefined : 2}
           projects={activeProjects} formatDate={formatDate} emptyMessage="No active projects found." />}
@@ -990,26 +986,8 @@ function shopWorkError(error: unknown) {
 
 type ActiveWorkTile = 'active' | 'scheduled';
 
-function ActiveWorkTiles({
-  activeProjects,
-  scheduledProjects,
-  activeCount,
-  scheduledCount,
-  initialView,
-}: {
-  activeProjects: ReactNode;
-  scheduledProjects: ReactNode;
-  activeCount: number;
-  scheduledCount: number;
-  initialView: string | null;
-}) {
-  const [active, setActive] = useState<ActiveWorkTile>(() =>
-    initialView === 'scheduled'
-      ? 'scheduled'
-      : activeCount === 0 && scheduledCount > 0
-        ? 'scheduled'
-        : 'active'
-  );
+function ActiveWorkTiles({ activeProjects, scheduledProjects, activeCount, scheduledCount }: { activeProjects: ReactNode; scheduledProjects: ReactNode; activeCount: number; scheduledCount: number }) {
+  const [active, setActive] = useState<ActiveWorkTile>(() => activeCount === 0 && scheduledCount > 0 ? 'scheduled' : 'active');
   const [swipeProgress, setSwipeProgress] = useState(0);
   const carouselPosition = Math.max(0, Math.min(1, (active === 'scheduled' ? 1 : 0) + swipeProgress));
   const [tileHeight, setTileHeight] = useState<number | undefined>();
@@ -1019,7 +997,6 @@ function ActiveWorkTiles({
   const suppressProjectClickUntil = useRef(0);
   const scrollPositions = useRef<Record<ActiveWorkTile, number>>({ active: 0, scheduled: 0 });
   const pendingScroll = useRef<number | null>(null);
-  const router = useRouter();
   const items = [{ id: 'active', label: 'Active Projects' }, { id: 'scheduled', label: 'Scheduled Projects' }] as const;
 
   function select(next: ActiveWorkTile, focus = false) {
@@ -1084,40 +1061,13 @@ function ActiveWorkTiles({
     const start = gesture.current;
     gesture.current = null;
     setSwipeProgress(0);
-  
     if (!start || event.changedTouches.length !== 1 || event.touches.length !== 0) return;
-  
     const touch = event.changedTouches[0];
-    const dx = touch.clientX - start.x;
-    const dy = touch.clientY - start.y;
-  
-    if (
-      Math.abs(dx) < 64 ||
-      Math.abs(dx) <= Math.abs(dy) * 1.5 ||
-      Date.now() - start.startedAt > 800
-    ) return;
-  
-    // Swipe left = advance
-    if (dx < 0) {
-      if (active === 'active') {
-        select('scheduled');
-      } else {
-        router.push('/projects');
-      }
-      return;
-    }
-  
-    // Swipe right = go back
-    if (dx > 0) {
-      if (active === 'scheduled') {
-        select('active');
-      } else {
-        router.push('/dashboard?view=calendar');
-      }
-    }
+    const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 64 || Math.abs(dx) <= Math.abs(dy) * 1.5 || Date.now() - start.startedAt > 800) return;
+    if (dx < 0 && active === 'active') select('scheduled');
+    if (dx > 0 && active === 'scheduled') select('active');
   }
-
-
 
   return <div>
     <div role="region" aria-roledescription="carousel" aria-label="Project views"
@@ -1159,14 +1109,9 @@ function ActiveWorkTiles({
             </button>)}
         </div>
       </div>
-      <p className="sr-only">
-  Swipe right to advance from Active Projects to Scheduled Projects,
-  then Projects Summary. Swipe left to return to the previous view.
-  Project links remain tappable.
-</p>      <div
-  className="min-h-[50dvh] overflow-hidden"
-  style={{ height: tileHeight ? `max(50dvh, ${tileHeight}px)` : '50dvh' }}
->        <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out'}`}
+      <p className="sr-only">Swipe left for Scheduled Projects, right for Active Projects, or use the position buttons. Project links remain tappable; horizontal swipes change project views.</p>
+      <div className="overflow-hidden" style={{ height: tileHeight }}>
+        <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out'}`}
           style={{ transform: `translateX(calc(${-carouselPosition * 100}% + ${carouselPosition * 32}px))` }}>
           {items.map((item, index) => <div key={item.id}
             ref={(element) => {

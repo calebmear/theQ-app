@@ -35,6 +35,7 @@ function ProjectsDirectory() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [projectFilter, setProjectFilter] = useState<ProjectFilter>('All');
+  const { swipeArea, swipeFloor } = useSwipeAreaFloor(!loading);
   const filters: ProjectFilter[] = ['All', 'Active', 'Scheduled', 'Completed'];
   const [drag, setDrag] = useState(0);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -190,7 +191,7 @@ return (
     previous="/activework?view=active"
     next="/customers"
   >
-    <div className="min-h-[70dvh] space-y-3 text-black" style={{ touchAction: 'pan-y pinch-zoom' }}
+    <div ref={swipeArea} data-subtab-swipe className="space-y-3 text-black" style={{ touchAction: 'pan-y pinch-zoom', minHeight: swipeFloor }}
       onTouchStart={(event) => {
         event.stopPropagation(); gesture.current = null; setDrag(0);
         if (event.touches.length !== 1 || document.querySelector('dialog[open]')) return;
@@ -283,7 +284,38 @@ function ProjectsLoading() {
     const timer = window.setTimeout(() => setShowMessage(true), 800);
     return () => window.clearTimeout(timer);
   }, []);
-  return <div aria-busy="true" className="min-h-[50dvh]">
+  return <div aria-busy="true" className="min-h-0">
     {showMessage && <p role="status" className="py-4 text-center text-sm text-gray-500">Loading projects…</p>}
   </div>;
+}
+
+
+function useSwipeAreaFloor(ready = true) {
+  const swipeArea = useRef<HTMLDivElement>(null);
+  const [swipeFloor, setSwipeFloor] = useState(0);
+  useLayoutEffect(() => {
+    if (!ready) return;
+    const element = swipeArea.current;
+    if (!element) return;
+    function measure() {
+      if (!element) return;
+      const documentTop = element.getBoundingClientRect().top + window.scrollY;
+      let bottomSpace = 0;
+      let parent = element.parentElement;
+      while (parent && parent !== document.body) {
+        const style = getComputedStyle(parent);
+        bottomSpace += (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+        parent = parent.parentElement;
+      }
+      const height = Math.max(0, Math.floor(document.documentElement.clientHeight - documentTop - bottomSpace));
+      setSwipeFloor(previous => previous === height ? previous : height);
+    }
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    const header = document.querySelector('aside');
+    if (header) observer?.observe(header);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [ready]);
+  return { swipeArea, swipeFloor };
 }

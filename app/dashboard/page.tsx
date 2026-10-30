@@ -2832,6 +2832,7 @@ function DashboardSections({ revenue, work, actions }: { revenue: ReactNode; wor
   const [swipeProgress, setSwipeProgress] = useState(0);
   const carouselPosition = Math.max(0, Math.min(1, (active === 'work' ? 1 : 0) + swipeProgress));
   const [tileHeight, setTileHeight] = useState<number | undefined>();
+  const { swipeArea, swipeFloor } = useSwipeAreaFloor();
   const [settling, setSettling] = useState(false);
   useEffect(() => {
     if (!settling) return;
@@ -2865,16 +2866,7 @@ function DashboardSections({ revenue, work, actions }: { revenue: ReactNode; wor
     const measure = () => {
       const height = Math.ceil(slide.getBoundingClientRect().height);
 
-const minimumHeight =
-  window.innerHeight -
-  slide.getBoundingClientRect().top -
-  24;
-
-const nextHeight = Math.max(height, minimumHeight);
-
-setTileHeight((current) =>
-  settling ? Math.max(current ?? nextHeight, nextHeight) : nextHeight
-);
+setTileHeight(current => settling ? Math.max(current ?? height, height) : height);
     };
     measure();
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
@@ -2887,7 +2879,7 @@ setTileHeight((current) =>
     if (settling || pendingScroll.current === null) return;
     const position = pendingScroll.current;
     pendingScroll.current = null;
-    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: position, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: position, behavior: 'auto' }));
     return () => window.cancelAnimationFrame(frame);
   }, [active, settling]);
 
@@ -2988,8 +2980,8 @@ setTileHeight((current) =>
         </div>
       </StickyCarouselHeader>
       <p className="sr-only">Swipe left for Work Calendar, right for Revenue Snapshot, or use the position buttons. Use the calendar arrows to change months.</p>      <div
-  className="overflow-hidden motion-safe:transition-[height] motion-safe:duration-200"
-  style={{ height: tileHeight, touchAction: 'pan-y' }}
+  className="overflow-hidden"
+  ref={swipeArea} style={{ height: tileHeight, minHeight: swipeFloor, touchAction: 'pan-y pinch-zoom', overflowAnchor: 'none' }}
   onTouchStart={startSwipe}
   onTouchMove={moveSwipe}
   onTouchEnd={endSwipe}
@@ -3112,3 +3104,34 @@ function StickyCarouselHeader({ children }: { children: ReactNode }) {
   </div>;
 }
 
+
+
+function useSwipeAreaFloor(ready = true) {
+  const swipeArea = useRef<HTMLDivElement>(null);
+  const [swipeFloor, setSwipeFloor] = useState(0);
+  useLayoutEffect(() => {
+    if (!ready) return;
+    const element = swipeArea.current;
+    if (!element) return;
+    function measure() {
+      if (!element) return;
+      const documentTop = element.getBoundingClientRect().top + window.scrollY;
+      let bottomSpace = 0;
+      let parent = element.parentElement;
+      while (parent && parent !== document.body) {
+        const style = getComputedStyle(parent);
+        bottomSpace += (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+        parent = parent.parentElement;
+      }
+      const height = Math.max(0, Math.floor(document.documentElement.clientHeight - documentTop - bottomSpace));
+      setSwipeFloor(previous => previous === height ? previous : height);
+    }
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    const header = document.querySelector('aside');
+    if (header) observer?.observe(header);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [ready]);
+  return { swipeArea, swipeFloor };
+}

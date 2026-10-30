@@ -3403,15 +3403,13 @@ function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactN
     return () => window.clearTimeout(timer);
   }, [settling]);
   const pendingScroll = useRef<number | null>(null);
-  const [minimumHeight, setMinimumHeight] = useState(240);
+  const { swipeArea, swipeFloor } = useSwipeAreaFloor();
   const position = Math.max(0, Math.min(2, active + drag));
   useLayoutEffect(() => {
     const panel = panels.current[active];
     if (!panel) return;
     const measure = () => {
-      const available = Math.max(240, Math.ceil(window.innerHeight - (root.current?.getBoundingClientRect().top ?? 0) - 88));
-      setMinimumHeight(available);
-      setTileHeight(current => { const height = Math.max(available, Math.ceil(panel.getBoundingClientRect().height)); return settling ? Math.max(current ?? height, height) : height; });
+      setTileHeight(current => { const height = Math.ceil(panel.getBoundingClientRect().height); return settling ? Math.max(current ?? height, height) : height; });
     };
     measure();
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
@@ -3434,10 +3432,10 @@ function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactN
   useEffect(() => {
     if (settling || pendingScroll.current === null) return;
     const top = pendingScroll.current; pendingScroll.current = null;
-    const frame = requestAnimationFrame(() => window.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+    const frame = requestAnimationFrame(() => window.scrollTo({ top, behavior: 'auto' }));
     return () => cancelAnimationFrame(frame);
   }, [active, settling]);
-  return <div ref={root} className="min-w-0" style={{ touchAction: 'pan-y pinch-zoom' }}
+  return <div ref={root} role="region" aria-roledescription="carousel" aria-label="Project sections" className="min-w-0" style={{ touchAction: 'pan-y pinch-zoom' }}
     onTouchStart={(event) => {
       touch.current = null; setDrag(0);
       if (settling || document.querySelector('dialog[open]')) return;
@@ -3506,7 +3504,7 @@ function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactN
       </div>
     </StickyCarouselHeader>
     <p className="sr-only">Swipe between project sections or use the position buttons. Use calendar arrows to change months.</p>
-    <div className="overflow-hidden motion-safe:transition-[height] motion-safe:duration-200" style={{ height: tileHeight }}>
+    <div className="overflow-hidden" ref={swipeArea} style={{ height: tileHeight, minHeight: swipeFloor, touchAction: 'pan-y pinch-zoom', overflowAnchor: 'none' }}>
       <div className={`flex items-start gap-2 motion-reduce:transition-none ${drag ? '' : 'motion-safe:transition-transform motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
         style={{ willChange: 'transform', transform: `translate3d(calc(${-position * 100}% + ${position * 12}px), 0, 0)` }}>
         {sections.map((section, index) => <section key={labels[index]}
@@ -3516,7 +3514,7 @@ function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactN
           }}
           role="group" aria-roledescription="slide" id={`${id}-panel-${index}`}
           aria-label={`${index + 1} of 3: ${labels[index]}`} aria-hidden={index !== active}
-          className={`min-w-0 shrink-0 grow-0 ${index === sections.length - 1 ? 'basis-full' : 'basis-[calc(100%_-_20px)]'}`} style={{ minHeight: minimumHeight }}>
+          className={`min-w-0 shrink-0 grow-0 ${index === sections.length - 1 ? 'basis-full' : 'basis-[calc(100%_-_20px)]'}`}>
           {section}
         </section>)}
       </div>
@@ -4393,7 +4391,38 @@ function DetailPageLoading() {
     const timer = window.setTimeout(() => setShowMessage(true), 800);
     return () => window.clearTimeout(timer);
   }, []);
-  return <div aria-busy="true" className="min-h-[50dvh]">
+  return <div aria-busy="true" className="min-h-0">
     {showMessage && <p role="status" className="py-4 text-center text-sm text-gray-500">Loading details…</p>}
   </div>;
+}
+
+
+function useSwipeAreaFloor(ready = true) {
+  const swipeArea = useRef<HTMLDivElement>(null);
+  const [swipeFloor, setSwipeFloor] = useState(0);
+  useLayoutEffect(() => {
+    if (!ready) return;
+    const element = swipeArea.current;
+    if (!element) return;
+    function measure() {
+      if (!element) return;
+      const documentTop = element.getBoundingClientRect().top + window.scrollY;
+      let bottomSpace = 0;
+      let parent = element.parentElement;
+      while (parent && parent !== document.body) {
+        const style = getComputedStyle(parent);
+        bottomSpace += (parseFloat(style.paddingBottom) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+        parent = parent.parentElement;
+      }
+      const height = Math.max(0, Math.floor(document.documentElement.clientHeight - documentTop - bottomSpace));
+      setSwipeFloor(previous => previous === height ? previous : height);
+    }
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    const header = document.querySelector('aside');
+    if (header) observer?.observe(header);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [ready]);
+  return { swipeArea, swipeFloor };
 }

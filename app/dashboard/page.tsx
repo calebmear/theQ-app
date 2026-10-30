@@ -3,8 +3,7 @@
 import Link from 'next/link';
 import { Wrench, Plus, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo, type ReactNode, type TouchEvent } from 'react';
-import { useRouter } from 'next/navigation';
-import { useUserProfile } from '../../lib/useUserProfile';
+import { useRouter, useSearchParams } from 'next/navigation';import { useUserProfile } from '../../lib/useUserProfile';
 
 import { supabase } from '../../lib/supabaseClient';
 
@@ -1755,8 +1754,12 @@ function DashboardServiceCalendar({
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(`${dashboardShopToday()}T00:00:00`));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(dashboardShopToday);
   const [calendarView, setCalendarView] = useState<'all' | 'service' | 'shop'>('all');
-  const monthGesture = useRef<{ x: number; y: number; startedAt: number } | null>(null);
-  const suppressDayClickUntil = useRef(0);
+  const monthGesture = useRef<{
+    x: number;
+    y: number;
+    startedAt: number;
+  } | null>(null);
+  const suppressDayClickUntil = useRef<number>(0);
 
   function startMonthSwipe(event: TouchEvent<HTMLDivElement>) {
     monthGesture.current = null;
@@ -1970,13 +1973,8 @@ function DashboardServiceCalendar({
 
   return (
     <div
-      onClickCapture={(event) => {
-        if (Date.now() < suppressDayClickUntil.current && event.target instanceof Element && event.target.closest('[data-calendar-days]')) {
-          event.preventDefault(); event.stopPropagation();
-        }
-      }}
-      style={{ touchAction: 'pan-y pinch-zoom' }}
-      className="rounded-2xl bg-white p-4 shadow md:p-6">
+    style={{ touchAction: 'pan-y pinch-zoom' }}
+    className="rounded-2xl bg-white p-4 shadow md:p-6">
       <div role="group" aria-label="Calendar work filter" className="grid grid-cols-3 gap-2">
         {([{ value: 'all', label: 'All Work' }, { value: 'service', label: 'Service' }, { value: 'shop', label: 'Shop' }] as const).map((view) => (
           <button key={view.value} type="button" aria-pressed={calendarView === view.value}
@@ -2005,16 +2003,7 @@ function DashboardServiceCalendar({
         </div>
       )}
 
-<div
-  data-dashboard-swipe-ignore
-  style={{ touchAction: 'pan-y' }}
-  onTouchStart={startMonthSwipe}
-  onTouchMove={moveMonthSwipe}
-  onTouchEnd={endMonthSwipe}
-  onTouchCancel={() => {
-    monthGesture.current = null;
-  }}
->
+<div>
   <div className="mt-4 flex items-center justify-center gap-3">        <button
           type="button"
           aria-label="Previous month"
@@ -2803,7 +2792,7 @@ function UnclassifiedProjectsModal({ onSaved }: { onSaved: () => void }) {
                 className={`flex min-h-11 min-w-0 flex-wrap items-center justify-center gap-2 rounded-lg border px-2 py-3 text-sm disabled:opacity-50 ${drafts[row.id] === type ? 'border-[#16324f] bg-[#16324f] text-white' : 'border-[#b8def0] bg-[#e8f7ff] text-[#16324f]'}`}>
                 <span aria-hidden="true" className="inline-flex [&_span]:text-inherit"><ProjectTypeIcon value={type} /></span>{type}
               </button>)}
-            </div> : <p className="mt-3 text-sm text-amber-900">Set this customer's service type before classifying the project.</p>}
+            </div> : <p className="mt-3 text-sm text-amber-900">Set this customer&apos;s service type before classifying the project.</p>}
           <div className="mt-3 flex justify-end"><button type="button" disabled={(row.customerType !== 'Telecom' && (row.customerType !== 'Sewer' || !drafts[row.id])) || !!saving || loading}
             onClick={() => void confirm(row)} className="min-h-11 rounded-lg bg-[#16324f] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">
             {saving === row.id ? 'Saving…' : 'Confirm'}
@@ -2830,7 +2819,16 @@ function CustomerServiceTypePicker({ value, onChange }: { value: string; onChang
 type DashboardSection = 'revenue' | 'work';
 
 function DashboardSections({ revenue, work, actions }: { revenue: ReactNode; work: ReactNode; actions: ReactNode }) {
-  const [active, setActive] = useState<DashboardSection>('revenue');
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [active, setActive] = useState<DashboardSection>(
+    searchParams.get('view') === 'calendar' ? 'work' : 'revenue'
+  );
+
+  useEffect(() => {
+    setActive(searchParams.get('view') === 'calendar' ? 'work' : 'revenue');
+  }, [searchParams]);
   const [swipeProgress, setSwipeProgress] = useState(0);
   const carouselPosition = Math.max(0, Math.min(1, (active === 'work' ? 1 : 0) + swipeProgress));
   const [tileHeight, setTileHeight] = useState<number | undefined>();
@@ -2839,6 +2837,7 @@ function DashboardSections({ revenue, work, actions }: { revenue: ReactNode; wor
   const gesture = useRef<{ x: number; y: number; startedAt: number } | null>(null);
   const scrollPositions = useRef<Record<DashboardSection, number>>({ revenue: 0, work: 0 });
   const pendingScroll = useRef<number | null>(null);
+
   const items = [{ id: 'revenue', label: 'Revenue Snapshot' }, { id: 'work', label: 'Work Calendar' }] as const;
 
   function select(next: DashboardSection, focus = false) {
@@ -2912,12 +2911,33 @@ setTileHeight((current) =>
     const start = gesture.current;
     gesture.current = null;
     setSwipeProgress(0);
+  
     if (!start || event.changedTouches.length !== 1 || event.touches.length !== 0) return;
+  
     const touch = event.changedTouches[0];
-    const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
-    if (Math.abs(dx) < 64 || Math.abs(dx) <= Math.abs(dy) * 1.5 || Date.now() - start.startedAt > 800) return;
-    if (dx < 0 && active === 'revenue') select('work');
-    if (dx > 0 && active === 'work') select('revenue');
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+  
+    if (
+      Math.abs(dx) < 64 ||
+      Math.abs(dx) <= Math.abs(dy) * 1.5 ||
+      Date.now() - start.startedAt > 800
+    ) return;
+  
+    // Swipe left = next view
+    if (dx < 0) {
+      if (active === 'revenue') {
+        select('work');
+      } else {
+        router.push('/activework?view=active');
+      }
+      return;
+    }
+  
+    // Swipe right = previous view
+    if (dx > 0 && active === 'work') {
+      select('revenue');
+    }
   }
 
   return <div>
@@ -2958,8 +2978,7 @@ setTileHeight((current) =>
             </button>)}
         </div>
       </div>
-      <p className="sr-only">Swipe left for Work Calendar, right for Revenue Snapshot, or use the position buttons. Calendar gestures stay within the calendar.</p>
-      <div
+      <p className="sr-only">Swipe left for Work Calendar, right for Revenue Snapshot, or use the position buttons. Use the calendar arrows to change months.</p>      <div
   className="overflow-hidden"
   style={{ height: tileHeight, touchAction: 'pan-y' }}
   onTouchStart={startSwipe}

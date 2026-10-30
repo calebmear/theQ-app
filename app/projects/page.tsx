@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabaseClient';
+import PageSwipeNavigation from '../../components/PageSwipeNavigation';
 
 type Project = {
   id: string;
@@ -158,8 +159,12 @@ function ProjectsDirectory() {
     <button type="button" onClick={() => void loadProjects()} className="mt-2 min-h-11 rounded-lg border px-4 py-2 text-sm font-medium">Retry</button>
   </div>;
 
-  return <div className="space-y-3 text-black">
-    <div role="group" aria-label="Project status" className="grid grid-cols-4 gap-1 rounded-xl border bg-white p-1">
+return (
+  <PageSwipeNavigation
+    previous="/activework?view=scheduled"
+    next="/customers"
+  >
+    <div className="space-y-3 text-black">    <div role="group" aria-label="Project status" className="grid grid-cols-4 gap-1 rounded-xl border bg-white p-1">
       {(['All', 'Active', 'Scheduled', 'Completed'] as ProjectFilter[]).map((filter) => <button
         key={filter} type="button" aria-pressed={projectFilter === filter} onClick={() => setProjectFilter(filter)}
         className={`flex min-h-12 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-2 text-xs font-medium sm:flex-row sm:gap-1.5 sm:text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5] ${projectFilter === filter ? 'bg-[#16324f] text-white' : 'text-gray-600 hover:bg-gray-50'}`}>
@@ -198,5 +203,7 @@ function ProjectsDirectory() {
       </table>
     </div>
     {visibleProjects.length === 0 && <p role="status" className="rounded-xl border border-dashed bg-white p-4 text-center text-sm text-gray-500">No projects match{search ? ` “${search}”` : ''}{projectFilter !== 'All' ? ` with status ${projectFilter}` : ''}.</p>}
-  </div>;
+    </div>
+  </PageSwipeNavigation>
+);
 }

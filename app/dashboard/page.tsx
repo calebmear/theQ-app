@@ -2832,6 +2832,13 @@ function DashboardSections({ revenue, work, actions }: { revenue: ReactNode; wor
   const [swipeProgress, setSwipeProgress] = useState(0);
   const carouselPosition = Math.max(0, Math.min(1, (active === 'work' ? 1 : 0) + swipeProgress));
   const [tileHeight, setTileHeight] = useState<number | undefined>();
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    if (!settling) return;
+    const timer = window.setTimeout(() => setSettling(false), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
+    return () => window.clearTimeout(timer);
+  }, [settling]);
+
   const slides = useRef<Partial<Record<DashboardSection, HTMLDivElement | null>>>({});
   const dots = useRef<Partial<Record<DashboardSection, HTMLButtonElement | null>>>({});
   const gesture = useRef<{ x: number; y: number; startedAt: number } | null>(null);
@@ -2846,6 +2853,7 @@ function DashboardSections({ revenue, work, actions }: { revenue: ReactNode; wor
       pendingScroll.current = scrollPositions.current[next];
       // Keep focus outside an inactive, inert slide.
       if (slides.current[active]?.contains(document.activeElement)) focus = true;
+      setSettling(true);
       setActive(next);
     }
     if (focus) dots.current[next]?.focus({ preventScroll: true });
@@ -2865,7 +2873,7 @@ const minimumHeight =
 const nextHeight = Math.max(height, minimumHeight);
 
 setTileHeight((current) =>
-  current === nextHeight ? current : nextHeight
+  settling ? Math.max(current ?? nextHeight, nextHeight) : nextHeight
 );
     };
     measure();
@@ -2873,20 +2881,20 @@ setTileHeight((current) =>
     observer?.observe(slide);
     window.addEventListener('resize', measure);
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
-  }, [active]);
+  }, [active, settling]);
 
   useEffect(() => {
-    if (pendingScroll.current === null) return;
+    if (settling || pendingScroll.current === null) return;
     const position = pendingScroll.current;
     pendingScroll.current = null;
-    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: position, behavior: 'auto' }));
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: position, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
     return () => window.cancelAnimationFrame(frame);
-  }, [active]);
+  }, [active, settling]);
 
   function startSwipe(event: TouchEvent<HTMLDivElement>) {
     gesture.current = null;
     setSwipeProgress(0);
-    if (event.touches.length !== 1 || document.querySelector('dialog[open]')) return;
+    if (settling || event.touches.length !== 1 || document.querySelector('dialog[open]')) return;
     const target = event.target;
     if (target instanceof Element && target.closest('[data-dashboard-swipe-ignore], input, select, textarea, dialog, [contenteditable="true"]')) return;
     const touch = event.touches[0];
@@ -2918,17 +2926,18 @@ setTileHeight((current) =>
     const dx = touch.clientX - start.x;
     const dy = touch.clientY - start.y;
   
-    if (
-      Math.abs(dx) < 64 ||
-      Math.abs(dx) <= Math.abs(dy) * 1.5 ||
-      Date.now() - start.startedAt > 800
-    ) return;
+    const elapsed = Math.max(1, Date.now() - start.startedAt);
+    const distance = Math.abs(dx);
+    const threshold = Math.max(56, Math.min(96, event.currentTarget.clientWidth * 0.2));
+    const quickFlick = distance >= 24 && elapsed <= 250 && distance / elapsed >= 0.45;
+    if ((distance < threshold && !quickFlick) || distance <= Math.abs(dy) * 1.5) return;
   
     // Swipe left = next view
     if (dx < 0) {
       if (active === 'revenue') {
         select('work');
       } else {
+        if (distance < 64 || elapsed > 800) return;
         router.push('/activework?view=active');
       }
       return;
@@ -2947,12 +2956,12 @@ setTileHeight((current) =>
   aria-roledescription="carousel"
   aria-label="Dashboard tiles"
 >
-      <div className="mb-2">
+      <StickyCarouselHeader>
         <div className="relative h-11 overflow-hidden">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-300 ease-out'}`}
+            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
               style={{ opacity: 1 - carouselPosition * 0.72, left: `${50 * (1 - carouselPosition)}%`, transform: 'translateX(-50%)' }}>Revenue Snapshot</span>
-            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-300 ease-out'}`}
+            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
               style={{ opacity: 0.28 + carouselPosition * 0.72, left: `${100 - carouselPosition * 50}%`, transform: 'translateX(-50%)' }}>Work Calendar</span>
           </div>
           <button type="button" disabled={active === 'revenue'} onClick={() => select('revenue')}
@@ -2977,9 +2986,9 @@ setTileHeight((current) =>
               <span aria-hidden="true" className={`h-2.5 rounded-full ${active === item.id ? 'w-6 bg-[#009be5]' : 'w-2.5 bg-gray-300'}`} />
             </button>)}
         </div>
-      </div>
+      </StickyCarouselHeader>
       <p className="sr-only">Swipe left for Work Calendar, right for Revenue Snapshot, or use the position buttons. Use the calendar arrows to change months.</p>      <div
-  className="overflow-hidden"
+  className="overflow-hidden motion-safe:transition-[height] motion-safe:duration-200"
   style={{ height: tileHeight, touchAction: 'pan-y' }}
   onTouchStart={startSwipe}
   onTouchMove={moveSwipe}
@@ -2988,8 +2997,8 @@ setTileHeight((current) =>
     gesture.current = null;
     setSwipeProgress(0);
   }}
->       <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out'}`}
-          style={{ transform: `translateX(calc(${-carouselPosition * 100}% + ${carouselPosition * 32}px))` }}>
+>       <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
+          style={{ willChange: 'transform', transform: `translate3d(calc(${-carouselPosition * 100}% + ${carouselPosition * 12}px), 0, 0)` }}>
           {items.map((item, index) => <div key={item.id}
             ref={(element) => {
               slides.current[item.id] = element;
@@ -2998,7 +3007,7 @@ setTileHeight((current) =>
             id={`dashboard-tile-${item.id}`} role="group" aria-roledescription="slide"
             aria-label={`${index + 1} of ${items.length}: ${item.label}`}
             aria-hidden={active !== item.id}
-            className="min-w-0 shrink-0 grow-0 basis-[calc(100%_-_20px)]">
+            className={`min-w-0 shrink-0 grow-0 ${index === items.length - 1 ? 'basis-full' : 'basis-[calc(100%_-_20px)]'}`}>
             {item.id === 'revenue' ? revenue : work}
           </div>)}
         </div>
@@ -3064,7 +3073,7 @@ function DashboardQuickAdd({ modalOpen, onProject, onCustomer }: {
 
   if (modalOpen || otherDialogOpen) return null;
   const faded = scrolling && !open;
-  return <div ref={container} className={`fixed bottom-[calc(env(safe-area-inset-bottom)_+_1rem)] right-4 z-30 flex flex-col items-end gap-3 transition-opacity duration-200 motion-reduce:transition-none md:right-8 ${faded ? 'opacity-25' : 'opacity-100'}`}>
+  return <div ref={container} className={`fixed bottom-[calc(env(safe-area-inset-bottom)_+_2rem)] right-6 md:bottom-[calc(env(safe-area-inset-bottom)_+_1rem)] z-30 flex flex-col items-end gap-3 transition-opacity duration-200 motion-reduce:transition-none md:right-8 ${faded ? 'opacity-25' : 'opacity-100'}`}>
     {open && <div id="dashboard-quick-add-actions" role="group" aria-label="Add to dashboard"
       className="flex w-52 flex-col gap-1 rounded-2xl border border-gray-200 bg-white p-2 text-black shadow-xl">
       <button type="button" onClick={() => { setOpen(false); onProject(); }}
@@ -3086,3 +3095,20 @@ function DashboardQuickAdd({ modalOpen, onProject, onCustomer }: {
     </button>
   </div>;
 }
+
+function StickyCarouselHeader({ children }: { children: ReactNode }) {
+  const [top, setTop] = useState(0);
+  useLayoutEffect(() => {
+    const header = document.querySelector('aside');
+    const measure = () => setTop(window.matchMedia('(min-width: 768px)').matches ? 0 : Math.ceil(header?.getBoundingClientRect().height ?? 0));
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (header) observer?.observe(header);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, []);
+  return <div className="sticky z-20 -mx-4 mb-2 border-b border-gray-200 bg-gray-100 px-4 md:mx-0 md:px-0" style={{ top }}>
+    {children}
+  </div>;
+}
+

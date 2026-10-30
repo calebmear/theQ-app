@@ -1,5 +1,6 @@
 'use client';
 
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { usePathname } from 'next/navigation';
 import AppNav from './AppNav';
 import AppSearch from './AppSearch';
@@ -8,12 +9,29 @@ import UserMenu from './UserMenu';
 import FloatingReceiptButton from './FloatingReceiptButton';
 
 const publicRoutes = ['/', '/login'];
+const mainSections = ['/dashboard', '/activework', '/projects', '/customers'];
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isPublicRoute = publicRoutes.includes(pathname);
-  const mainSections = ['/dashboard', '/activework', '/projects', '/customers'];
-  const isMainSection = mainSections.some((route) => pathname === route || pathname.startsWith(`${route}/`));
+  const currentSection = mainSections.find((route) => pathname === route || pathname.startsWith(`${route}/`)) ?? null;
+  const isMainSection = currentSection !== null;
+  const contentRef = useRef<HTMLElement>(null);
+  const previousSection = useRef(currentSection);
+
+  useLayoutEffect(() => {
+    const prior = previousSection.current;
+    previousSection.current = currentSection;
+    if (!prior || !currentSection || prior === currentSection) return;
+    const content = contentRef.current;
+    if (!content || typeof content.animate !== 'function' || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    const animation = content.animate(
+      [{ opacity: 0 }, { opacity: 1 }],
+      { duration: 180, easing: 'ease-out' }
+    );
+    return () => animation.cancel();
+  }, [currentSection]);
 
   if (isPublicRoute) {
     return <AuthGuard>{children}</AuthGuard>;
@@ -31,9 +49,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <AppNav />
         </aside>
 
-        <main className={`min-w-0 flex-1 ${isMainSection ? 'px-4 pb-4 pt-2' : 'p-4'} md:p-8`}>
-  {children}
-</main>
+        <main ref={contentRef} className={`min-w-0 flex-1 ${isMainSection ? 'px-4 pb-4 pt-2' : 'p-4'} md:p-8`}>
+          {children}
+        </main>
 
         <div className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom)+7rem)] right-0 z-30">
           <div className="pointer-events-auto"><FloatingReceiptButton /></div>

@@ -235,7 +235,7 @@ const canManageCustomers =
   })).filter((group) => group.customers.length > 0);
 
   if (loading) {
-    return <div className="text-black">Loading customers...</div>;
+    return <CustomersLoading />;
   }
 
   return (
@@ -475,4 +475,16 @@ function CustomerTypeBadge({ value }: { value: string | null | undefined }) {
       </>}
     </svg>
   </span>;
+}
+
+
+function CustomersLoading() {
+  const [showMessage, setShowMessage] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowMessage(true), 800);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <div aria-busy="true" className="min-h-[50dvh]">
+    {showMessage && <p role="status" className="py-4 text-center text-sm text-gray-500">Loading customers…</p>}
+  </div>;
 }

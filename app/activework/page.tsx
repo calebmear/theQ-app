@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Wrench, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Wrench, X, ChevronLeft, ChevronRight, Map } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type TouchEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useRouter } from 'next/navigation';
@@ -149,7 +149,7 @@ export default function ActiveWorkPage() {
   return (
     <div className="space-y-6 pb-20 text-black">
       {projectsLoading ? (
-        <p role="status" className="rounded-xl bg-white p-4 text-sm text-gray-600">Loading projects...</p>
+        <ActiveWorkLoading />
       ) : projectsError ? (
         <div className="rounded-xl bg-white p-4">
           <p role="alert" className="text-sm text-red-700">{projectsError}</p>
@@ -243,10 +243,10 @@ function ProjectTable({
         className={`${hideTitle ? '' : 'mt-4'} ${canExpand && expanded ? 'overflow-y-auto pr-2' : ''}`}>
       <div className="space-y-3 md:hidden">
         {visibleProjects.map((project) => (
-          <article data-project-row key={project.id} className="rounded-xl border">
+          <article data-project-row key={project.id} className="relative rounded-xl border">
             <Link href={`/projects/${encodeURIComponent(project.id)}?from=/activework&fromLabel=Active%20Work`}
               className="block rounded-xl p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#009be5]">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className={`flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between ${project.projectLocation ? 'pr-12' : ''}`}>
   <div className="min-w-0 flex-1">
   <h3 className="break-words font-bold">{project.id}</h3>
     <p className="mt-1 break-words text-sm font-medium">{project.customer}</p>
@@ -271,21 +271,24 @@ function ProjectTable({
 
             <div className="mt-3 grid gap-1 break-words text-sm text-gray-600">
   {project.assignedTo && <p>Assigned: {project.assignedTo}</p>}
-  {project.projectLocation && <p>Location: {project.projectLocation}</p>}
+
 </div>
 
 </Link>
 {project.projectLocation && (
-  <div className="px-4 pb-4">
+  <div className="flex items-center gap-2 px-4 pb-4 text-sm text-gray-600">
+    <p className="min-w-0 flex-1 break-words">Location: {project.projectLocation}</p>
     <a
       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
         project.projectLocation
       )}`}
       target="_blank"
       rel="noreferrer"
-      className="flex min-h-11 w-full items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-2 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
+      aria-label={`Open maps for ${project.id}`}
+      title="Open in Maps"
+      className="absolute right-3 top-3 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#e8f7ff] p-0 text-[#16324f] hover:bg-[#d9f0fc] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]"
       >
-      Open in Maps
+      <Map aria-hidden="true" size={20} className="block" />
     </a>
   </div>
 )}
@@ -553,7 +556,7 @@ function ShopWorkCard() {
   return (
     <div>
       {!showShopWorkForm && !showShopCalendar && <div
-        className={`fixed bottom-[calc(env(safe-area-inset-bottom)_+_1rem)] right-4 z-30 flex flex-col items-end gap-3 transition-opacity duration-200 motion-reduce:transition-none md:right-8 ${scrolling ? 'opacity-25' : 'opacity-100'}`}>
+        className={`fixed bottom-[calc(env(safe-area-inset-bottom)_+_2rem)] right-6 z-30 md:bottom-[calc(env(safe-area-inset-bottom)_+_1rem)] flex flex-col items-end gap-3 transition-opacity duration-200 motion-reduce:transition-none md:right-8 ${scrolling ? 'opacity-25' : 'opacity-100'}`}>
         <button ref={shopTriggerRef} type="button" aria-label="Open shop calendar to add shop time" aria-haspopup="dialog"
           onClick={() => setShowShopCalendar(true)} className="inline-flex h-14 w-14 shrink-0 items-center justify-center rounded-full border-0 bg-[#16324f] p-0 text-white shadow-lg hover:bg-[#10263d] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]">
           <Wrench aria-hidden="true" size={26} strokeWidth={2.25} />
@@ -1013,6 +1016,13 @@ function ActiveWorkTiles({
   const [swipeProgress, setSwipeProgress] = useState(0);
   const carouselPosition = Math.max(0, Math.min(1, (active === 'scheduled' ? 1 : 0) + swipeProgress));
   const [tileHeight, setTileHeight] = useState<number | undefined>();
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    if (!settling) return;
+    const timer = window.setTimeout(() => setSettling(false), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
+    return () => window.clearTimeout(timer);
+  }, [settling]);
+
   const slides = useRef<Partial<Record<ActiveWorkTile, HTMLDivElement | null>>>({});
   const dots = useRef<Partial<Record<ActiveWorkTile, HTMLButtonElement | null>>>({});
   const gesture = useRef<{ x: number; y: number; startedAt: number } | null>(null);
@@ -1028,6 +1038,7 @@ function ActiveWorkTiles({
       pendingScroll.current = scrollPositions.current[next];
       // Keep focus outside an inactive, inert slide.
       if (slides.current[active]?.contains(document.activeElement)) focus = true;
+      setSettling(true);
       setActive(next);
     }
     if (focus) dots.current[next]?.focus({ preventScroll: true });
@@ -1038,27 +1049,27 @@ function ActiveWorkTiles({
     if (!slide) return;
     const measure = () => {
       const height = Math.ceil(slide.getBoundingClientRect().height);
-      setTileHeight((current) => current === height ? current : height);
+      setTileHeight((current) => settling ? Math.max(current ?? height, height) : height);
     };
     measure();
     const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
     observer?.observe(slide);
     window.addEventListener('resize', measure);
     return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
-  }, [active]);
+  }, [active, settling]);
 
   useEffect(() => {
-    if (pendingScroll.current === null) return;
+    if (settling || pendingScroll.current === null) return;
     const position = pendingScroll.current;
     pendingScroll.current = null;
-    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: position, behavior: 'auto' }));
+    const frame = window.requestAnimationFrame(() => window.scrollTo({ top: position, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
     return () => window.cancelAnimationFrame(frame);
-  }, [active]);
+  }, [active, settling]);
 
   function startSwipe(event: TouchEvent<HTMLDivElement>) {
     gesture.current = null;
     setSwipeProgress(0);
-    if (event.touches.length !== 1 || document.querySelector('dialog[open]')) return;
+    if (settling || event.touches.length !== 1 || document.querySelector('dialog[open]')) return;
     const target = event.target;
     if (target instanceof Element && target.closest('[data-dashboard-swipe-ignore], button, input, select, textarea, dialog, [contenteditable="true"]')) return;
     const touch = event.touches[0];
@@ -1091,17 +1102,18 @@ function ActiveWorkTiles({
     const dx = touch.clientX - start.x;
     const dy = touch.clientY - start.y;
   
-    if (
-      Math.abs(dx) < 64 ||
-      Math.abs(dx) <= Math.abs(dy) * 1.5 ||
-      Date.now() - start.startedAt > 800
-    ) return;
+    const elapsed = Math.max(1, Date.now() - start.startedAt);
+    const distance = Math.abs(dx);
+    const threshold = Math.max(56, Math.min(96, event.currentTarget.clientWidth * 0.2));
+    const quickFlick = distance >= 24 && elapsed <= 250 && distance / elapsed >= 0.45;
+    if ((distance < threshold && !quickFlick) || distance <= Math.abs(dy) * 1.5) return;
   
     // Swipe left = advance
     if (dx < 0) {
       if (active === 'active') {
         select('scheduled');
       } else {
+        if (distance < 64 || elapsed > 800) return;
         router.push('/projects');
       }
       return;
@@ -1112,7 +1124,8 @@ function ActiveWorkTiles({
       if (active === 'scheduled') {
         select('active');
       } else {
-        router.push('/dashboard?view=calendar');
+        if (distance < 64 || elapsed > 800) return;
+        router.push('/dashboard');
       }
     }
   }
@@ -1128,12 +1141,12 @@ function ActiveWorkTiles({
         }
       }}
       onTouchStart={startSwipe} onTouchMove={moveSwipe} onTouchEnd={endSwipe} onTouchCancel={() => { gesture.current = null; setSwipeProgress(0); }}>
-      <div className="mb-2">
+      <StickyCarouselHeader>
         <div className="relative h-11 overflow-hidden">
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-300 ease-out'}`}
+            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
               style={{ opacity: 1 - carouselPosition * 0.72, left: `${50 * (1 - carouselPosition)}%`, transform: 'translateX(-50%)' }}>Active Projects ({activeCount})</span>
-            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-300 ease-out'}`}
+            <span className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${swipeProgress ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
               style={{ opacity: 0.28 + carouselPosition * 0.72, left: `${100 - carouselPosition * 50}%`, transform: 'translateX(-50%)' }}>Scheduled Projects ({scheduledCount})</span>
           </div>
           <button type="button" disabled={active === 'active'} onClick={() => select('active')}
@@ -1158,7 +1171,7 @@ function ActiveWorkTiles({
               <span aria-hidden="true" className={`h-2.5 rounded-full ${active === item.id ? 'w-6 bg-[#009be5]' : 'w-2.5 bg-gray-300'}`} />
             </button>)}
         </div>
-      </div>
+      </StickyCarouselHeader>
       <p className="sr-only">
   Swipe right to advance from Active Projects to Scheduled Projects,
   then Projects Summary. Swipe left to return to the previous view.
@@ -1166,8 +1179,8 @@ function ActiveWorkTiles({
 </p>      <div
   className="min-h-[50dvh] overflow-hidden"
   style={{ height: tileHeight ? `max(50dvh, ${tileHeight}px)` : '50dvh' }}
->        <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-300 motion-safe:ease-out'}`}
-          style={{ transform: `translateX(calc(${-carouselPosition * 100}% + ${carouselPosition * 32}px))` }}>
+>        <div className={`flex items-start gap-2 motion-reduce:transition-none ${swipeProgress ? '' : 'motion-safe:transition-transform motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
+          style={{ willChange: 'transform', transform: `translate3d(calc(${-carouselPosition * 100}% + ${carouselPosition * 12}px), 0, 0)` }}>
           {items.map((item, index) => <div key={item.id}
             ref={(element) => {
               slides.current[item.id] = element;
@@ -1176,7 +1189,7 @@ function ActiveWorkTiles({
             id={`activework-tile-${item.id}`} role="group" aria-roledescription="slide"
             aria-label={`${index + 1} of ${items.length}: ${item.label}`}
             aria-hidden={active !== item.id}
-            className="min-w-0 shrink-0 grow-0 basis-[calc(100%_-_20px)]">
+            className={`min-w-0 shrink-0 grow-0 ${index === items.length - 1 ? 'basis-full' : 'basis-[calc(100%_-_20px)]'}`}>
             {item.id === 'active' ? activeProjects : scheduledProjects}
           </div>)}
         </div>
@@ -1186,3 +1199,32 @@ function ActiveWorkTiles({
 }
 
 
+
+
+function StickyCarouselHeader({ children }: { children: ReactNode }) {
+  const [top, setTop] = useState(0);
+  useLayoutEffect(() => {
+    const header = document.querySelector('aside');
+    const measure = () => setTop(window.matchMedia('(min-width: 768px)').matches ? 0 : Math.ceil(header?.getBoundingClientRect().height ?? 0));
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (header) observer?.observe(header);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, []);
+  return <div className="sticky z-20 -mx-4 mb-2 border-b border-gray-200 bg-gray-100 px-4 md:mx-0 md:px-0" style={{ top }}>
+    {children}
+  </div>;
+}
+
+
+function ActiveWorkLoading() {
+  const [showMessage, setShowMessage] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowMessage(true), 800);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <div aria-busy="true" className="min-h-[50dvh]">
+    {showMessage && <p role="status" className="py-4 text-center text-sm text-gray-500">Loading projects…</p>}
+  </div>;
+}

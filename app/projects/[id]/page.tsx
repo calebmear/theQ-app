@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Copy, ChevronDown } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useId, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react';
+import { Copy, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../../../lib/supabaseClient';
 import { useSearchParams } from 'next/navigation';
 import { useUserProfile } from '../../../lib/useUserProfile';
@@ -242,7 +242,11 @@ const [timeForm, setTimeForm] = useState<TimeForm>({
 });
 
 const [calendarMonth, setCalendarMonth] = useState(() => new Date());
-const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+const calendarInitializedFor = useRef<string | null>(null);
+const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(() => {
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+});
 
 const searchParams = useSearchParams();
 const from = searchParams.get('from') ?? '/projects';
@@ -271,7 +275,7 @@ const [projectNotes, setProjectNotes] = useState<ProjectNote[]>([]);
 const [newProjectNote, setNewProjectNote] = useState('');
 
 const [showServiceSubmission, setShowServiceSubmission] = useState(false);
-const [showServiceLog, setShowServiceLog] = useState(false);
+
 const [showNotes, setShowNotes] = useState(false);
 
 
@@ -280,26 +284,13 @@ const [expandedTimeEntryId, setExpandedTimeEntryId] = useState<string | null>(
 );
 const [expandedServiceDates, setExpandedServiceDates] = useState<string[]>([]);
 
-const [expandedServiceNoteDates, setExpandedServiceNoteDates] = useState<string[]>([]);
+
 
 const [employees, setEmployees] = useState<Employee[]>([]);
 
 const projectNoteHistory = projectNotes.filter(
   (note) => !note.note.toLowerCase().startsWith('service note:')
 );
-
-const serviceNoteHistory = Object.entries(
-  timeEntries
-    .filter((entry) => entry.notes?.trim())
-    .reduce<Record<string, TimeEntry[]>>((groups, entry) => {
-      if (!groups[entry.work_date]) {
-        groups[entry.work_date] = [];
-      }
-
-      groups[entry.work_date].push(entry);
-      return groups;
-    }, {})
-).sort(([dateA], [dateB]) => dateB.localeCompare(dateA));
 
 const [managingProjectNotes, setManagingProjectNotes] = useState(false);
 
@@ -334,6 +325,24 @@ const [editingProjectNoteId, setEditingProjectNoteId] = useState<string | null>(
 const [projectNoteEditText, setProjectNoteEditText] = useState('');
 
 const [managingTimeEntries, setManagingTimeEntries] = useState(false);
+const entryDetailsRef = useRef<HTMLDivElement>(null);
+useEffect(() => {
+  if (!managingTimeEntries) return;
+  const cancelManagement = () => { setManagingTimeEntries(false); cancelInlineTimeEdit(); };
+  const outside = (event: PointerEvent) => {
+    if (document.querySelector('dialog[open]')) return;
+    if (event.target instanceof Node && !entryDetailsRef.current?.contains(event.target)) cancelManagement();
+  };
+  const escape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !document.querySelector('dialog[open]')) cancelManagement(); };
+  document.addEventListener('pointerdown', outside);
+  document.addEventListener('keydown', escape);
+  return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
+}, [managingTimeEntries]);
+useEffect(() => {
+  setManagingTimeEntries(false);
+  cancelInlineTimeEdit();
+}, [selectedCalendarDate]);
+
 const [inlineEditingTimeEntryId, setInlineEditingTimeEntryId] = useState<
   string | null
 >(null);
@@ -857,24 +866,16 @@ billing_methods_updated_at: data.billing_methods_updated_at,
   }, []);
 
   useEffect(() => {
-    if (timeEntries.length === 0) return;
-  
-    const sortedDates = [...timeEntries]
-      .map((entry) => entry.work_date)
-      .sort();
-  
-    const latestEntryDate = sortedDates[sortedDates.length - 1];
-  
-    if (!latestEntryDate) return;
-  
-    const [year, month] = latestEntryDate.split('-').map(Number);
-  
-    setCalendarMonth(new Date(year, month - 1, 1));
-  }, [timeEntries]);
+    if (!project?.id || calendarInitializedFor.current === project.id) return;
+    calendarInitializedFor.current = project.id;
+    const today = new Date();
+    setCalendarMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setSelectedCalendarDate(`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`);
+  }, [project?.id]);
   
 
   if (loading) {
-    return <div className="text-black">Loading project...</div>;
+    return <DetailPageLoading />;
   }
 
   if (!project) {
@@ -1148,6 +1149,7 @@ flatRates: 0,
   }
   
   function changeCalendarMonth(direction: number) {
+    calendarInitializedFor.current = project?.id ?? null;
     setCalendarMonth(
       new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + direction, 1)
     );
@@ -1612,7 +1614,9 @@ flat_rate: item.billingMethod === 'Flat Rate',
   setExpandedServiceDates((dates) =>
     dates.includes(timeForm.workDate) ? dates : [timeForm.workDate, ...dates]
   );
-  setShowServiceLog(true);
+  setSelectedCalendarDate(timeForm.workDate);
+  const [submittedYear, submittedMonth] = timeForm.workDate.split('-').map(Number);
+  setCalendarMonth(new Date(submittedYear, submittedMonth - 1, 1));
   setShowServiceSubmission(false);
 }
 
@@ -2064,19 +2068,9 @@ async function saveProjectEdit() {
 
   return (
     <div className="space-y-6 text-black">
-      <div className="text-sm text-gray-500">
-  <Link href={from} className="hover:text-black hover:underline">
-    {fromLabel}
-  </Link>
 
-  <span className="mx-2">/</span>
-
-  <span className="font-medium text-gray-700">
-    {project.project_number}
-  </span>
-</div>
-
-
+<ProjectDetailSections onSectionChange={() => { setManagingTimeEntries(false); cancelInlineTimeEdit(); }} sections={[
+  <div key="summary" className="min-w-0 space-y-4">
 <div className="rounded-2xl bg-white p-4 shadow sm:p-6">
   {editingProject && (
     <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm font-medium text-yellow-800">
@@ -2395,9 +2389,676 @@ async function saveProjectEdit() {
   </div>
 )}
 </div>
+  {dayUpdateNotice && <p role="status" className="text-sm text-green-700">{dayUpdateNotice}</p>}
+
+
+          <div className="rounded-2xl bg-white p-6 shadow">
+          
+
+{timeEntries.length > 0 && (
+  <div className="rounded-xl border bg-gray-50 p-4">
+  <div className="grid grid-cols-2 gap-3 text-center">
+  <div className="rounded-lg bg-white px-3 py-3">
+    <p className="text-xs font-medium uppercase text-gray-500">
+      Service Days
+    </p>
+    <p className="mt-1 text-lg font-bold">
+      {serviceSummary.dayCount}
+    </p>
+  </div>
+
+  <div className="rounded-lg bg-white px-3 py-3">
+    <p className="text-xs font-medium uppercase text-gray-500">
+      Submissions
+    </p>
+    <p className="mt-1 text-lg font-bold">
+      {serviceSummary.entryCount}
+    </p>
+  </div>
+</div>
+
+{canManageProjects ? <ProjectRevenueSummary projectId={project.id}
+  version={JSON.stringify([projectPricingRevision, project.billing_method_source, project.status, timeEntries.map((entry) => [entry.id, entry.work_date, entry.updated_at, entry.work_completed, entry.hours, entry.feet, entry.laterals, entry.mainline_tests, entry.residences, entry.flat_rate, entry.notes])])}
+  services={serviceSummary.services}
+/> : (<div className="mt-4 border-t pt-4">
+  <div className="mb-3 flex items-center justify-between">
+    <p className="text-sm font-bold text-gray-800">
+      Service Totals
+    </p>
+
+    
+  </div>
+
+  <div className="space-y-2">
+  {serviceSummary.services.map((service, index) => (
+  <div
+    key={`${service.serviceType}-${service.summary}-${index}`}
+    className="rounded-lg border bg-white px-3 py-2"
+  >
+<div className="flex items-center justify-between gap-3 text-sm">          <span className="font-semibold text-gray-800">
+            {service.serviceType}
+          </span>
+
+          <span className="whitespace-pre-line text-right font-medium text-gray-600">
+  {service.summary}
+</span>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>)}
+
+
+  </div>
+)}
+
+</div>
+  </div>,
+  <div key="services" className="min-w-0 space-y-4">
+    <p className="break-words text-center text-xs font-medium text-gray-500">Project {project.project_number}</p>
+  <div className="rounded-2xl bg-white p-6 shadow">
+  
+
+<div className="grid grid-cols-2 items-center gap-x-3 gap-y-2 text-[11px] font-medium text-gray-600 sm:grid-cols-4">
+  <div className="flex min-w-0 items-center justify-center gap-1">
+    <span className="h-3.5 w-3.5 shrink-0 rounded bg-[#009be5]" />
+    <span className="whitespace-nowrap">Serviced</span>
+  </div>
+
+  <div className="flex min-w-0 items-center justify-center gap-1">
+    <span className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_3px,#8fd8f7_3px,#8fd8f7_5px)]" />
+    <span className="whitespace-nowrap">Holiday/Unable</span>
+  </div>
+
+  <div className="flex min-w-0 items-center justify-center gap-1">
+    <span aria-hidden="true" className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_3px,#16324f_3px,#16324f_5px)]" />
+    <span className="whitespace-nowrap">Non-billable</span>
+  </div>
+
+  <div className="flex min-w-0 items-center justify-center gap-1">
+    <span className="h-3.5 w-3.5 shrink-0 rounded border bg-gray-50" />
+    <span className="whitespace-nowrap">No Service</span>
+  </div>
+</div>
+
+<div className="mt-4 flex items-center justify-center gap-3">
+  <button
+    type="button"
+    onClick={() => changeCalendarMonth(-1)}
+    aria-label="Previous month"
+    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#b8def0] bg-[#e8f7ff] p-0 text-[#16324f] transition-colors hover:border-[#16324f] hover:bg-[#d9f0fc] active:bg-[#c5e8fa] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]"
+  >
+    <ChevronLeft aria-hidden="true" size={22} strokeWidth={2.5} className="block" />
+  </button>
+
+  <p aria-live="polite" className="min-w-[10rem] text-center text-sm font-bold text-gray-800">    {calendarMonthLabel}
+  </p>
+
+  <button
+    type="button"
+    onClick={() => changeCalendarMonth(1)}
+    aria-label="Next month"
+    className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#b8def0] bg-[#e8f7ff] p-0 text-[#16324f] transition-colors hover:border-[#16324f] hover:bg-[#d9f0fc] active:bg-[#c5e8fa] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#007bb5]"
+  >
+    <ChevronRight aria-hidden="true" size={22} strokeWidth={2.5} className="block" />
+  </button>
+</div>
+
+  {nonbillableLoading && <p role="status" className="mt-2 text-xs text-gray-500">Loading non-billable work…</p>}
+  {nonbillableError && <div className="mt-2"><p role="alert" className="text-sm text-red-700">Non-billable work: {nonbillableError}</p><button type="button" className="min-h-11 rounded-lg border px-3 py-2 text-sm" onClick={()=>setNonbillableRevision(value=>value+1)}>Retry</button></div>}
+  {dayUpdatesLoading && <p role="status" className="mt-2 text-xs text-gray-500">Loading Holiday/Unable updates…</p>}
+  {dayUpdatesError && <div className="mt-2"><p role="alert" className="text-sm text-red-700">Holiday/Unable updates unavailable: {dayUpdatesError}</p><button type="button" onClick={() => setDayRevision((value) => value + 1)} className="mt-1 rounded-lg border px-3 py-2 text-sm">Retry</button></div>}
+
+  <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase text-gray-500">
+    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+      <div key={day}>{day}</div>
+    ))}
+  </div>
+
+  <div className="mt-2 grid grid-cols-7 gap-1">
+    {calendarBlankDays.map((_, index) => (
+      <div key={`blank-${index}`} className="aspect-square" />
+    ))}
+
+    {calendarDays.map((day) => {
+      const hasService = day.serviceCount > 0;
+      const hasZeroQuantity = day.hasZeroQuantity;
+      const hasDayUpdate = interruptedDates.has(day.key);
+      const hasNonbillable = nonbillableEntries.some(entry=>entry.work_date===day.key);
+      const isSelected = selectedCalendarDate === day.key;
+
+      return (
+        <button
+          key={day.key}
+          type="button"
+          onClick={() => { calendarInitializedFor.current = project.id; setSelectedCalendarDate(isSelected ? null : day.key); }}
+          className={`relative flex aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
+            (hasZeroQuantity || (hasDayUpdate && !hasService))
+    ? 'bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_7px,#8fd8f7_7px,#8fd8f7_9px)] text-[#005f8f] shadow-sm'
+    : hasService
+    ? 'bg-[#009be5] text-white shadow-sm'
+    : hasNonbillable ? 'bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_7px,#16324f_7px,#16324f_9px)] text-[#16324f] shadow-sm' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+          } ${isSelected ? 'ring-2 ring-black ring-offset-2' : ''} ${
+            day.isToday && !isSelected ? 'ring-2 ring-[#009be5] ring-offset-1' : ''
+          }`}
+        >
+          {day.day}
+          {hasNonbillable && (hasService || hasDayUpdate) && <span aria-label="Non-billable work also recorded" className="absolute bottom-1 right-1 h-3 w-3 rounded-sm border border-white bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_2px,#16324f_2px,#16324f_4px)]" />}
+          {hasDayUpdate && hasService && <span aria-label="Holiday or unable-to-work update also recorded" className="absolute right-1 top-1 h-2.5 w-2.5 rounded border border-white bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_2px,#8fd8f7_2px,#8fd8f7_4px)]" />}
+
+          {day.serviceCount > 0 && (
+  <span className="absolute bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-0.5">
+    {Array.from({ length: Math.min(day.serviceCount, 3) }).map((_, index) => (
+      <span
+        key={index}
+        className={`h-1 w-1 rounded-full ${
+          hasService ? 'bg-white' : 'bg-[#007bb8]'
+        }`}
+      />
+    ))}
+
+    {day.serviceCount > 3 && (
+      <span
+        className={`ml-0.5 text-[9px] leading-none ${
+          hasService ? 'text-white' : 'text-[#007bb8]'
+        }`}
+      >
+        +
+      </span>
+    )}
+  </span>
+)}
+        </button>
+      );
+    })}
+  </div>
+
+  {!selectedCalendarDate && <p className="mt-4 text-center text-sm text-gray-500">Select a date to view or record service.</p>}
+  {selectedCalendarDate && (
+    <div ref={entryDetailsRef} className="mt-4 rounded-xl border bg-gray-50 p-3">
+      <p className="text-sm font-bold text-gray-900">
+        {formatDate(selectedCalendarDate)}
+      </p>
+      {canSubmitService && (
+        <div className="mt-3">
+          <ProjectSubmissionActions projectId={project.id} projectNumber={project.project_number}
+      onNonbillable={(date) => setNonbillableModal({date,entry:null})}
+            defaultDate={selectedCalendarDate} buttonLabel="Record Service"
+            onRecordService={() => {
+              setTimeForm((current) => ({ ...current, workDate: selectedCalendarDate }));
+              setShowServiceSubmission(true);
+            }}
+            onDayRecorded={(date) => {
+              setDayRevision((value) => value + 1);
+              setSelectedCalendarDate(date);
+              const [year, month] = date.split('-').map(Number);
+              setCalendarMonth(new Date(year, month - 1, 1));
+              setDayUpdateNotice('Project update saved.');
+            }} />
+        </div>
+      )}
+
+      {(selectedCalendarEntries.some(entry => canManageEntry(entry)) ||
+        selectedDayUpdates.some(entry => canManageHistory || (normalizedRole === 'field' && entry.created_by === currentUserId)) ||
+        nonbillableEntries.some(entry => entry.work_date === selectedCalendarDate && (canManageHistory || (normalizedRole === 'field' && entry.created_by === currentUserId)))) && (
+      <div className="mt-3 flex justify-end">
+        <button type="button" onClick={() => { setManagingTimeEntries(!managingTimeEntries); setInlineEditingTimeEntryId(null); }}
+          className="min-h-11 rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50">
+          {managingTimeEntries ? 'Done' : 'Manage Entries'}
+        </button>
+      </div>
+      )}
+      <div className="mt-3 space-y-2">
+        {nonbillableEntries.filter(entry => entry.work_date === selectedCalendarDate).map(entry => <NonbillableCard key={entry.id} entry={entry}
+          onEdit={managingTimeEntries && (canManageHistory || (normalizedRole === 'field' && entry.created_by === currentUserId)) ? () => setNonbillableModal({date:entry.work_date,entry}) : undefined} />)}
+    {selectedDayUpdates.map((entry) => (
+      <ProjectDayHistoryEntry key={`day-${entry.id}`} entry={entry} projectId={project.id}
+        managing={managingTimeEntries}
+        canEdit={canManageHistory || (normalizedRole === 'field' && entry.created_by === currentUserId)}
+        canDelete={canManageHistory}
+        onSaved={(date) => {
+          setDayRevision((value) => value + 1);
+          setExpandedServiceDates((dates) => dates.includes(date) ? dates : [...dates, date]);
+          setSelectedCalendarDate(date);
+          const [year, month] = date.split('-').map(Number);
+          setCalendarMonth(new Date(year, month - 1, 1));
+        }} />
+    ))}
+    {selectedCalendarEntries.map((entry) => {
+  const isEditing = inlineEditingTimeEntryId === entry.id;
+
+  return (
+    <div key={entry.id} className="rounded-lg border bg-white p-3">
+      {isEditing ? (
+        <div className="grid min-w-0 gap-4 md:grid-cols-2">
+          <div className="min-w-0">
+  <label className="mb-2 block text-sm font-medium">
+    Service Date
+  </label>
+  <input
+    type="date"
+    value={inlineTimeForm.workDate}
+    onChange={(e) =>
+      setInlineTimeForm({
+        ...inlineTimeForm,
+        workDate: e.target.value,
+      })
+    }
+    className="block w-full min-w-0 max-w-full appearance-none rounded-lg border p-3 text-sm"
+  />
+</div>
+
+
+{billingMethodForService(inlineTimeForm.workCompleted) !== 'Flat Rate' && (
+  <div className="min-w-0">
+    <label className="mb-2 block text-sm font-medium">
+      {quantityLabelForService(inlineTimeForm.workCompleted)}
+    </label>
+
+    <div className="flex min-w-0 overflow-hidden rounded-lg border bg-white">
+      <input
+        type="number"
+        value={
+          billingMethodForService(inlineTimeForm.workCompleted) === 'Per Hour'
+            ? inlineTimeForm.hours
+            : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Foot'
+            ? inlineTimeForm.feet
+            : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Lateral'
+            ? inlineTimeForm.laterals
+            : inlineTimeForm.hours
+        }
+        onChange={(e) => {
+          const billingMethod = billingMethodForService(inlineTimeForm.workCompleted);
+
+          if (billingMethod === 'Per Foot') {
+            setInlineTimeForm({ ...inlineTimeForm, feet: e.target.value });
+            return;
+          }
+
+          if (billingMethod === 'Per Lateral') {
+            setInlineTimeForm({ ...inlineTimeForm, laterals: e.target.value });
+            return;
+          }
+
+          setInlineTimeForm({ ...inlineTimeForm, hours: e.target.value });
+        }}
+        className="min-w-0 flex-1 border-0 p-3 text-sm outline-none"
+      />
+
+      <span className="flex items-center border-l bg-gray-50 px-3 text-sm font-medium text-gray-600">
+        {billingMethodForService(inlineTimeForm.workCompleted) === 'Per Hour'
+          ? 'hrs'
+          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Foot'
+          ? 'ft'
+          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Lateral'
+          ? 'laterals'
+          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Mainline Segment'
+          ? 'tests'
+          : ''}
+      </span>
+    </div>
+  </div>
+)}
+
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Work Type
+            </label>
+            <select
+              value={inlineTimeForm.workCompleted}
+              onChange={(e) => {
+                const nextWorkCompleted = e.target.value;
+                const nextBillingMethod = billingMethodForService(nextWorkCompleted);
+              
+                setInlineTimeForm({
+                  ...inlineTimeForm,
+                  workCompleted: nextWorkCompleted,
+                  hours:
+                    nextBillingMethod === 'Per Hour' ||
+                    nextBillingMethod === 'Per Residence' ||
+                    nextBillingMethod === 'Per Mainline Segment'
+                      ? inlineTimeForm.hours
+                      : '',
+                  feet: nextBillingMethod === 'Per Foot' ? inlineTimeForm.feet : '',
+                  laterals: nextBillingMethod === 'Per Lateral' ? inlineTimeForm.laterals : '',
+                });
+              }}
+              className="block w-full min-w-0 max-w-full rounded-lg border p-3 text-sm"
+              >
+              <option value="">Select work type</option>
+              <option>Mainline</option>
+              <option>Lateral</option>
+              <option>Jetter</option>
+              <option>Push Rod</option>
+              <option>Dye</option>
+              <option>Smoke</option>
+              <option>Laborer</option>
+              <option>Traffic Control</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-sm font-medium">
+              Service Vehicle
+            </label>
+            <select
+              value={inlineTimeForm.serviceVehicle}
+              onChange={(e) =>
+                setInlineTimeForm({
+                  ...inlineTimeForm,
+                  serviceVehicle: e.target.value,
+                })
+              }
+              className="block w-full min-w-0 max-w-full rounded-lg border p-3 text-sm"
+              >
+              <option value="">Select service vehicle</option>
+              <option>2016 Ford Van</option>
+              <option>2007 Ford F-150</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="mb-2 block text-sm font-medium">
+              Notes
+            </label>
+            <textarea
+              value={inlineTimeForm.notes}
+              onChange={(e) =>
+                setInlineTimeForm({
+                  ...inlineTimeForm,
+                  notes: e.target.value,
+                })
+              }
+              className="w-full rounded-lg border p-3"
+              rows={3}
+            />
+          </div>
+
+          <div className="flex gap-2 md:col-span-2">
+            <button
+              type="button"
+              onClick={() => saveInlineTimeEntry(entry.id)}
+              className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+            >
+              Save
+            </button>
+
+            <button
+              type="button"
+              onClick={cancelInlineTimeEdit}
+              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+
+            {canManageHistory && (
+  <button
+    type="button"
+    onClick={() => deleteTimeEntry(entry.id)}
+    className="ml-auto rounded-lg border px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+  >
+    Delete
+  </button>
+)}
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-900">
+                {entry.work_completed || 'No work type selected'}
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                {entry.service_vehicle || 'No vehicle selected'}
+              </p>
+            </div>
+
+            <p className="shrink-0 text-right text-sm font-semibold text-gray-700">
+              {quantityLabelForEntry(entry)}
+            </p>
+          </div>
+
+          {entry.notes && (
+            <p className="mt-3 rounded-lg bg-gray-50 p-2 text-sm text-gray-700">
+              {entry.notes}
+            </p>
+          )}
+
+          <p className="mt-2 text-xs text-gray-500">
+            Submitted by {entry.created_profile?.full_name || (entry.created_by === currentUserId ? currentUserName : null) || 'Unknown'} · {formatTimestamp(entry.created_at)}
+          </p>
+          {entry.updated_at && new Date(entry.updated_at).getTime() - new Date(entry.created_at).getTime() > 5000 && (
+            <p className="mt-1 text-xs text-gray-500">{submittedUpdatedLabel(entry)}</p>
+          )}
+
+          {managingTimeEntries && canManageEntry(entry) && (
+  <div className="mt-3 flex gap-2">
+    <button
+      type="button"
+      onClick={() => startInlineTimeEdit(entry)}
+      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+    >
+      Edit
+    </button>
+
+    {canManageHistory && (
+      <button
+        type="button"
+        onClick={() => deleteTimeEntry(entry.id)}
+        className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+      >
+        Delete
+      </button>
+    )}
+  </div>
+)}
+        </>
+      )}
+    </div>
+  );
+})}
+        {selectedCalendarEntries.length === 0 && selectedDayUpdates.length === 0 && !nonbillableEntries.some(entry => entry.work_date === selectedCalendarDate) && !nonbillableLoading && !dayUpdatesLoading && !nonbillableError && !dayUpdatesError && (
+          <p className="rounded-lg bg-white p-3 text-sm text-gray-500">No entries recorded for this date.</p>
+        )}
+      </div>
+    </div>
+  )}
+</div>
+
+  </div>,
+  <div key="history" className="min-w-0 space-y-4">
+    <p className="break-words text-center text-xs font-medium text-gray-500">Project {project.project_number}</p>
+<div className="rounded-2xl bg-white p-6 shadow">
+  <button
+    type="button"
+    onClick={() => setShowNotes(!showNotes)}
+    className="flex w-full items-center justify-between gap-4 text-left"
+  >
+    <div>
+      <h2 className="text-xl font-bold">Notes</h2>
+    </div>
+
+    <span className="text-2xl leading-none text-gray-500">
+      {showNotes ? '⌄' : '›'}
+    </span>
+  </button>
+
+  {showNotes && (
+    <>
+      <div className="mt-4 flex justify-end">
+        <button
+          type="button"
+          onClick={() => {
+            setManagingProjectNotes(!managingProjectNotes);
+            setEditingProjectNoteId(null);
+          }}
+          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+        >
+          {managingProjectNotes ? 'Done' : 'Manage Notes'}
+        </button>
+      </div>
+
+      <div className="mt-4 flex gap-2">
+
+  <input
+    type="text"
+    value={newProjectNote}
+    onChange={(e) => setNewProjectNote(e.target.value)}
+    placeholder="Add project note..."
+    className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
+  />
+
+  <button
+    type="button"
+    onClick={saveProjectNote}
+    className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
+  >
+    Save
+  </button>
+</div>
+
+
+  <div className="mt-5 h-[20rem] space-y-5 overflow-y-auto pr-2">
+  <div>
+    <h3 className="text-sm font-bold text-gray-700">Project Notes</h3>
+
+    <div className="mt-3 space-y-3">
+      {projectNoteHistory.map((note) => {
+        const isEditingNote = editingProjectNoteId === note.id;
+
+        return (
+          <div key={note.id} className="rounded-xl border p-4">
+            {isEditingNote ? (
+              <>
+                <textarea
+                  value={projectNoteEditText}
+                  onChange={(e) => setProjectNoteEditText(e.target.value)}
+                  className="w-full rounded-lg border p-3"
+                  rows={3}
+                />
+
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateProjectNote(note.id)}
+                    className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
+                  >
+                    Save
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={cancelProjectNoteEdit}
+                    className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-700">{note.note}</p>
+                <p className="mt-2 text-xs text-gray-500">
+                {noteSubmittedUpdatedLabel(note)}
+                </p>
+
+                {managingProjectNotes && (
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => startProjectNoteEdit(note)}
+                      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteProjectNote(note.id)}
+                      className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        );
+      })}
+
+      {projectNoteHistory.length === 0 && (
+        <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+          No project notes yet.
+        </div>
+      )}
+    </div>
+  </div>
 
 
 
+  </div>
+    </>
+  )}
+</div>
+        <div className="rounded-2xl bg-white p-6 shadow">
+
+
+  <label className="relative flex min-h-[56px] cursor-pointer items-center justify-center rounded-lg border border-dashed p-4 text-center text-sm font-medium text-gray-600 hover:bg-gray-50">
+  {uploadingAttachment ? 'Uploading...' : 'Upload maps, plans, or photos'}
+
+  <input
+    type="file"
+    multiple
+    accept="image/*,application/pdf,.pdf"
+    onChange={uploadProjectAttachments}
+    disabled={uploadingAttachment}
+    className="absolute inset-0 cursor-pointer opacity-0"
+  />
+</label>
+
+  <div className="mt-4 space-y-2">
+  {projectAttachments.map((attachment) => (
+  <div key={attachment.id} className="rounded-lg border px-3 py-2 text-sm">
+    <a
+      href={attachment.signedUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="block font-medium hover:underline"
+    >
+      {attachment.file_name}
+    </a>
+
+    <p className="mt-1 text-xs text-gray-500">
+    Uploaded by {attachment.uploaded_by_username || 'Unknown'} on{' '}
+      {formatTimestamp(attachment.uploaded_at)}
+    </p>
+
+    {canManageProjects && (
+      <button
+        type="button"
+        onClick={() => deleteProjectAttachment(attachment)}
+        className="mt-2 rounded-lg border px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+      >
+        Delete
+      </button>
+    )}
+  </div>
+))}
+
+    {projectAttachments.length === 0 && (
+      <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
+        No maps, plans, or photos uploaded yet.
+      </div>
+    )}
+  </div>
+</div>
+
+  </div>,
+]} />
 {nonbillableModal && <NonbillableModal projectId={project.id} projectName={project.project_number}
  date={nonbillableModal.date} entry={nonbillableModal.entry} onClose={()=>setNonbillableModal(null)}
  onSaved={(date)=>{
@@ -2406,23 +3067,6 @@ async function saveProjectEdit() {
   const [year,month]=date.split('-').map(Number);setCalendarMonth(new Date(year,month-1,1));
   setDayUpdateNotice('Non-billable work updated.');
  }}/>}
-<div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-  <div className="min-w-0 space-y-6">
-
-  {canSubmitService && (
-    <ProjectSubmissionActions projectId={project.id} projectNumber={project.project_number}
-      onNonbillable={(date) => setNonbillableModal({date,entry:null})}
-      onRecordService={() => setShowServiceSubmission(true)}
-      onDayRecorded={(date) => {
-        setDayRevision((value) => value + 1);
-        setSelectedCalendarDate(date);
-        const [year, month] = date.split('-').map(Number);
-        setCalendarMonth(new Date(year, month - 1, 1));
-        setDayUpdateNotice('Project update saved. It is shown in the calendar below.');
-      }} />
-  )}
-  {dayUpdateNotice && <p role="status" className="text-sm text-green-700">{dayUpdateNotice}</p>}
-
 {canSubmitService && showServiceSubmission && (
   <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
     <button
@@ -2735,876 +3379,149 @@ async function saveProjectEdit() {
     </div>
   </div>
 )}
-
-
-          <div className="rounded-2xl bg-white p-6 shadow">
-          <div>
-  <h2 className="text-xl font-bold">Service Summary</h2>
-  <p className="mt-1 text-sm text-gray-600">
-    View service totals and submitted entries.
-  </p>
-</div>
-
-{timeEntries.length > 0 && (
-  <div className="mt-4 rounded-xl border bg-gray-50 p-4">
-  <div className="grid grid-cols-2 gap-3 text-center">
-  <div className="rounded-lg bg-white px-3 py-3">
-    <p className="text-xs font-medium uppercase text-gray-500">
-      Service Days
-    </p>
-    <p className="mt-1 text-lg font-bold">
-      {serviceSummary.dayCount}
-    </p>
-  </div>
-
-  <div className="rounded-lg bg-white px-3 py-3">
-    <p className="text-xs font-medium uppercase text-gray-500">
-      Submissions
-    </p>
-    <p className="mt-1 text-lg font-bold">
-      {serviceSummary.entryCount}
-    </p>
-  </div>
-</div>
-
-{canManageProjects ? <ProjectRevenueSummary projectId={project.id}
-  version={JSON.stringify([projectPricingRevision, project.billing_method_source, project.status, timeEntries.map((entry) => [entry.id, entry.work_date, entry.updated_at, entry.work_completed, entry.hours, entry.feet, entry.laterals, entry.mainline_tests, entry.residences, entry.flat_rate, entry.notes])])}
-  services={serviceSummary.services}
-/> : (<div className="mt-4 border-t pt-4">
-  <div className="mb-3 flex items-center justify-between">
-    <p className="text-sm font-bold text-gray-800">
-      Service Totals
-    </p>
-
-    
-  </div>
-
-  <div className="space-y-2">
-  {serviceSummary.services.map((service, index) => (
-  <div
-    key={`${service.serviceType}-${service.summary}-${index}`}
-    className="rounded-lg border bg-white px-3 py-2"
-  >
-<div className="flex items-center justify-between gap-3 text-sm">          <span className="font-semibold text-gray-800">
-            {service.serviceType}
-          </span>
-
-          <span className="whitespace-pre-line text-right font-medium text-gray-600">
-  {service.summary}
-</span>
-        </div>
-      </div>
-    ))}
-  </div>
-</div>)}
-
-
-  </div>
-)}
-
-</div>
-  <div className="rounded-2xl bg-white p-6 shadow">
-  <div>
-  <h2 className="text-xl font-bold">Service Calendar</h2>
-  <p className="mt-1 text-sm text-gray-600">
-    Monthly view of services completed for this project.
-  </p>
-</div>
-
-<div className="mt-4 grid grid-cols-2 items-center gap-x-3 gap-y-2 text-[11px] font-medium text-gray-600 sm:grid-cols-4">
-  <div className="flex min-w-0 items-center justify-center gap-1">
-    <span className="h-3.5 w-3.5 shrink-0 rounded bg-[#009be5]" />
-    <span className="whitespace-nowrap">Serviced</span>
-  </div>
-
-  <div className="flex min-w-0 items-center justify-center gap-1">
-    <span className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_3px,#8fd8f7_3px,#8fd8f7_5px)]" />
-    <span className="whitespace-nowrap">Holiday/Unable</span>
-  </div>
-
-  <div className="flex min-w-0 items-center justify-center gap-1">
-    <span aria-hidden="true" className="h-3.5 w-3.5 shrink-0 rounded bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_3px,#16324f_3px,#16324f_5px)]" />
-    <span className="whitespace-nowrap">Non-billable</span>
-  </div>
-
-  <div className="flex min-w-0 items-center justify-center gap-1">
-    <span className="h-3.5 w-3.5 shrink-0 rounded border bg-gray-50" />
-    <span className="whitespace-nowrap">No Service</span>
-  </div>
-</div>
-
-<div className="mt-4 flex items-center justify-center gap-3">
-  <button
-    type="button"
-    onClick={() => changeCalendarMonth(-1)}
-    aria-label="Previous month"
-    className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
-  >
-    ‹
-  </button>
-
-  <p className="min-w-[10rem] text-center text-sm font-bold text-gray-800">    {calendarMonthLabel}
-  </p>
-
-  <button
-    type="button"
-    onClick={() => changeCalendarMonth(1)}
-    aria-label="Next month"
-    className="flex h-9 w-9 items-center justify-center rounded-full border text-lg font-semibold hover:bg-gray-50"
-  >
-    ›
-  </button>
-</div>
-
-  {nonbillableLoading && <p role="status" className="mt-2 text-xs text-gray-500">Loading non-billable work…</p>}
-  {nonbillableError && <div className="mt-2"><p role="alert" className="text-sm text-red-700">Non-billable work: {nonbillableError}</p><button type="button" className="min-h-11 rounded-lg border px-3 py-2 text-sm" onClick={()=>setNonbillableRevision(value=>value+1)}>Retry</button></div>}
-  {dayUpdatesLoading && <p role="status" className="mt-2 text-xs text-gray-500">Loading Holiday/Unable updates…</p>}
-  {dayUpdatesError && <div className="mt-2"><p role="alert" className="text-sm text-red-700">Holiday/Unable updates unavailable: {dayUpdatesError}</p><button type="button" onClick={() => setDayRevision((value) => value + 1)} className="mt-1 rounded-lg border px-3 py-2 text-sm">Retry</button></div>}
-
-  <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase text-gray-500">
-    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-      <div key={day}>{day}</div>
-    ))}
-  </div>
-
-  <div className="mt-2 grid grid-cols-7 gap-1">
-    {calendarBlankDays.map((_, index) => (
-      <div key={`blank-${index}`} className="aspect-square" />
-    ))}
-
-    {calendarDays.map((day) => {
-      const hasService = day.serviceCount > 0;
-      const hasZeroQuantity = day.hasZeroQuantity;
-      const hasDayUpdate = interruptedDates.has(day.key);
-      const hasNonbillable = nonbillableEntries.some(entry=>entry.work_date===day.key);
-      const isSelected = selectedCalendarDate === day.key;
-
-      return (
-        <button
-          key={day.key}
-          type="button"
-          onClick={() => setSelectedCalendarDate(isSelected ? null : day.key)}
-          className={`relative flex aspect-square items-center justify-center rounded-lg text-sm font-semibold ${
-            (hasZeroQuantity || (hasDayUpdate && !hasService))
-    ? 'bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_7px,#8fd8f7_7px,#8fd8f7_9px)] text-[#005f8f] shadow-sm'
-    : hasService
-    ? 'bg-[#009be5] text-white shadow-sm'
-    : hasNonbillable ? 'bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_7px,#16324f_7px,#16324f_9px)] text-[#16324f] shadow-sm' : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-          } ${isSelected ? 'ring-2 ring-black ring-offset-2' : ''} ${
-            day.isToday && !isSelected ? 'ring-2 ring-[#009be5] ring-offset-1' : ''
-          }`}
-        >
-          {day.day}
-          {hasNonbillable && (hasService || hasDayUpdate) && <span aria-label="Non-billable work also recorded" className="absolute bottom-1 right-1 h-3 w-3 rounded-sm border border-white bg-[repeating-linear-gradient(135deg,#edf2f7_0,#edf2f7_2px,#16324f_2px,#16324f_4px)]" />}
-          {hasDayUpdate && hasService && <span aria-label="Holiday or unable-to-work update also recorded" className="absolute right-1 top-1 h-2.5 w-2.5 rounded border border-white bg-[repeating-linear-gradient(135deg,#f1faff_0,#f1faff_2px,#8fd8f7_2px,#8fd8f7_4px)]" />}
-
-          {day.serviceCount > 0 && (
-  <span className="absolute bottom-1 left-1/2 flex -translate-x-1/2 items-center gap-0.5">
-    {Array.from({ length: Math.min(day.serviceCount, 3) }).map((_, index) => (
-      <span
-        key={index}
-        className={`h-1 w-1 rounded-full ${
-          hasService ? 'bg-white' : 'bg-[#007bb8]'
-        }`}
-      />
-    ))}
-
-    {day.serviceCount > 3 && (
-      <span
-        className={`ml-0.5 text-[9px] leading-none ${
-          hasService ? 'text-white' : 'text-[#007bb8]'
-        }`}
-      >
-        +
-      </span>
-    )}
-  </span>
-)}
-        </button>
-      );
-    })}
-  </div>
-
-  {selectedCalendarDate && (
-    <div className="mt-4 rounded-xl border bg-gray-50 p-3">
-      <p className="text-sm font-bold text-gray-900">
-        {formatDate(selectedCalendarDate)}
-      </p>
-      {canSubmitService && (
-        <div className="mt-3">
-          <ProjectSubmissionActions projectId={project.id} projectNumber={project.project_number}
-      onNonbillable={(date) => setNonbillableModal({date,entry:null})}
-            defaultDate={selectedCalendarDate} buttonLabel="+ Add entry for this date"
-            onRecordService={() => {
-              setTimeForm((current) => ({ ...current, workDate: selectedCalendarDate }));
-              setShowServiceSubmission(true);
-            }}
-            onDayRecorded={(date) => {
-              setDayRevision((value) => value + 1);
-              setSelectedCalendarDate(date);
-              const [year, month] = date.split('-').map(Number);
-              setCalendarMonth(new Date(year, month - 1, 1));
-              setDayUpdateNotice('Project update saved.');
-            }} />
-        </div>
-      )}
-
-      <div className="mt-3 space-y-2">
-        {nonbillableEntries.filter(entry=>entry.work_date===selectedCalendarDate).map(entry=><NonbillableCard key={entry.id} entry={entry} />)}
-        {selectedDayUpdates.map((entry) => (
-          <div key={`day-${entry.id}`} className="rounded-lg border border-blue-100 bg-white p-3 text-sm">
-            <p className="font-semibold text-[#005f8f]">{entry.reason}</p>
-            {entry.note && <p className="mt-2 whitespace-pre-wrap break-words text-gray-700">{entry.note}</p>}
-            <p className="mt-2 text-xs text-gray-500">Submitted by {entry.technician} · {new Date(entry.created_at).toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'short', timeStyle: 'short' })} ET</p>
-          </div>
-        ))}
-        {selectedCalendarEntries.map((entry) => (
-          <div key={entry.id} className="rounded-lg bg-white p-3 text-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-semibold text-gray-900">
-                  {entry.work_completed || 'Service'}
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  {entry.service_vehicle || 'No vehicle selected'}
-                </p>
-              </div>
-
-              <p className="shrink-0 font-semibold text-gray-700">
-                {quantityLabelForEntry(entry)}
-              </p>
-            </div>
-
-            {entry.notes && (
-              <p className="mt-2 rounded-lg bg-gray-50 p-2 text-gray-700">
-                {entry.notes}
-              </p>
-            )}
-          </div>
-        ))}
-      </div>
     </div>
-  )}
-</div>
+  );
+}
 
-<div className="rounded-2xl bg-white p-6 shadow">
-  <div>
-    <button
-      type="button"
-      onClick={() => setShowServiceLog(!showServiceLog)}
-      className="flex w-full items-center justify-between gap-4 text-left"
-    >
-      <div>
-        <h2 className="text-xl font-bold">Service History</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          View service, holiday, and unable-to-service submissions.
-        </p>
-      </div>
 
-      <span className="text-2xl leading-none text-gray-500">
-        {showServiceLog ? '⌄' : '›'}
-      </span>
-    </button>
-  </div>
-{showServiceLog && (
-  <>
+function ProjectDetailSections({ sections, onSectionChange }: { sections: ReactNode[]; onSectionChange: () => void }) {
+  const labels = ['Project Summary', 'Service Calendar', 'Notes & Files'];
+  const [active, setActive] = useState(0);
+  const [drag, setDrag] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
+  const panels = useRef<Array<HTMLElement | null>>([]);
+  const tabButtons = useRef<Array<HTMLButtonElement | null>>([]);
+  const scrollPositions = useRef([0, 0, 0]);
+  const touch = useRef<{ x: number; y: number; time: number } | null>(null);
+  const suppressClickUntil = useRef(0);
+  const id = useId();
+  const [tileHeight, setTileHeight] = useState<number | undefined>();
+  const [settling, setSettling] = useState(false);
+  useEffect(() => {
+    if (!settling) return;
+    const timer = window.setTimeout(() => setSettling(false), window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 260);
+    return () => window.clearTimeout(timer);
+  }, [settling]);
+  const pendingScroll = useRef<number | null>(null);
+  const [minimumHeight, setMinimumHeight] = useState(240);
+  const position = Math.max(0, Math.min(2, active + drag));
+  useLayoutEffect(() => {
+    const panel = panels.current[active];
+    if (!panel) return;
+    const measure = () => {
+      const available = Math.max(240, Math.ceil(window.innerHeight - (root.current?.getBoundingClientRect().top ?? 0) - 88));
+      setMinimumHeight(available);
+      setTileHeight(current => { const height = Math.max(available, Math.ceil(panel.getBoundingClientRect().height)); return settling ? Math.max(current ?? height, height) : height; });
+    };
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    observer?.observe(panel);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, [active, settling]);
+  function select(next: number, keyboard = false) {
+    setDrag(0);
+    if (next < 0 || next >= labels.length || next === active) return;
+    onSectionChange();
+    scrollPositions.current[active] = window.scrollY;
+    const focusInside = panels.current[active]?.contains(document.activeElement);
+    pendingScroll.current = scrollPositions.current[next];
+    setSettling(true);
+    setActive(next);
+    if (keyboard || focusInside) tabButtons.current[next]?.focus({ preventScroll: true });
 
-    
-    <div className="mt-4 flex justify-end">
-
-        <button
-          type="button"
-          onClick={() => {
-            setManagingTimeEntries(!managingTimeEntries);
-            setInlineEditingTimeEntryId(null);
-          }}
-          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-        >
-          {managingTimeEntries ? 'Done' : 'Manage Entries'}
-        </button>
-      </div>
-
-      {dayUpdatesError && <p role="alert" className="mt-3 text-sm text-red-700">Holiday/Unable history unavailable: {dayUpdatesError}</p>}
-      <div className="mt-4 max-h-[28rem] space-y-3 overflow-y-auto pr-2">
-
-      {groupedSubmissionHistory.map(({ workDate, entries, dayEntries, nonbillable }) => {
-  const isDateExpanded = expandedServiceDates.includes(workDate);
-  const summary = serviceDateSummary(entries);
-
-  return (
-    <div key={workDate} className="rounded-xl border">
-      <button
-  type="button"
-  onClick={() =>
-    setExpandedServiceDates((dates) =>
-      dates.includes(workDate)
-        ? dates.filter((date) => date !== workDate)
-        : [...dates, workDate]
-    )
   }
-  className="w-full rounded-xl bg-white px-4 py-3 text-left"
->
-  <div className="flex items-start justify-between gap-3">
-    <div className="min-w-0">
-      <p className="text-sm font-bold text-gray-900">
-        {formatDate(workDate)}
-      </p>
-
-      <p className="mt-1 truncate text-sm text-gray-600">
-  {[...(entries.length ? [serviceNamesForEntries(entries)] : []), ...Array.from(new Set(dayEntries.map((entry) => entry.reason))), ...(nonbillable.length ? ['Non-billable Work'] : [])].join(', ')}
-</p>
-    </div>
-
-    <div className="shrink-0 text-right">
-      <p className="text-xs font-medium text-gray-500">
-        {entries.length + dayEntries.length + nonbillable.length} {entries.length + dayEntries.length + nonbillable.length === 1 ? 'entry' : 'entries'}
-      </p>
-
-      <span className="mt-1 block text-xl leading-none text-gray-400">
-        {isDateExpanded ? '⌄' : '›'}
-      </span>
-    </div>
-  </div>
-</button>
-
-
-
-{isDateExpanded && (
-  <div className="max-h-[60vh] space-y-2 overflow-y-auto border-t bg-gray-50 p-3 pr-2 md:max-h-none md:overflow-visible md:pr-3">
-    {nonbillable.map(entry=><NonbillableCard key={entry.id} entry={entry}
-      onEdit={managingTimeEntries && (canManageHistory || (normalizedRole==='field' && entry.created_by===currentUserId)) ? ()=>setNonbillableModal({date:entry.work_date,entry}) : undefined} />)}
-    {dayEntries.map((entry) => (
-      <ProjectDayHistoryEntry key={`day-${entry.id}`} entry={entry} projectId={project.id}
-        managing={managingTimeEntries}
-        canEdit={canManageHistory || (normalizedRole === 'field' && entry.created_by === currentUserId)}
-        canDelete={canManageHistory}
-        onSaved={(date) => {
-          setDayRevision((value) => value + 1);
-          setExpandedServiceDates((dates) => dates.includes(date) ? dates : [...dates, date]);
-          setSelectedCalendarDate(date);
-          const [year, month] = date.split('-').map(Number);
-          setCalendarMonth(new Date(year, month - 1, 1));
-        }} />
-    ))}
-    {entries.map((entry) => {
-  const isEditing = inlineEditingTimeEntryId === entry.id;
-
-  return (
-    <div key={entry.id} className="rounded-lg border bg-white p-3">
-      {isEditing ? (
-        <div className="grid min-w-0 gap-4 md:grid-cols-2">
-          <div className="min-w-0">
-  <label className="mb-2 block text-sm font-medium">
-    Service Date
-  </label>
-  <input
-    type="date"
-    value={inlineTimeForm.workDate}
-    onChange={(e) =>
-      setInlineTimeForm({
-        ...inlineTimeForm,
-        workDate: e.target.value,
-      })
-    }
-    className="block w-full min-w-0 max-w-full appearance-none rounded-lg border p-3 text-sm"
-  />
-</div>
-
-
-{billingMethodForService(inlineTimeForm.workCompleted) !== 'Flat Rate' && (
-  <div className="min-w-0">
-    <label className="mb-2 block text-sm font-medium">
-      {quantityLabelForService(inlineTimeForm.workCompleted)}
-    </label>
-
-    <div className="flex min-w-0 overflow-hidden rounded-lg border bg-white">
-      <input
-        type="number"
-        value={
-          billingMethodForService(inlineTimeForm.workCompleted) === 'Per Hour'
-            ? inlineTimeForm.hours
-            : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Foot'
-            ? inlineTimeForm.feet
-            : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Lateral'
-            ? inlineTimeForm.laterals
-            : inlineTimeForm.hours
-        }
-        onChange={(e) => {
-          const billingMethod = billingMethodForService(inlineTimeForm.workCompleted);
-
-          if (billingMethod === 'Per Foot') {
-            setInlineTimeForm({ ...inlineTimeForm, feet: e.target.value });
-            return;
-          }
-
-          if (billingMethod === 'Per Lateral') {
-            setInlineTimeForm({ ...inlineTimeForm, laterals: e.target.value });
-            return;
-          }
-
-          setInlineTimeForm({ ...inlineTimeForm, hours: e.target.value });
-        }}
-        className="min-w-0 flex-1 border-0 p-3 text-sm outline-none"
-      />
-
-      <span className="flex items-center border-l bg-gray-50 px-3 text-sm font-medium text-gray-600">
-        {billingMethodForService(inlineTimeForm.workCompleted) === 'Per Hour'
-          ? 'hrs'
-          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Foot'
-          ? 'ft'
-          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Lateral'
-          ? 'laterals'
-          : billingMethodForService(inlineTimeForm.workCompleted) === 'Per Mainline Segment'
-          ? 'tests'
-          : ''}
-      </span>
-    </div>
-  </div>
-)}
-
-
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Work Type
-            </label>
-            <select
-              value={inlineTimeForm.workCompleted}
-              onChange={(e) => {
-                const nextWorkCompleted = e.target.value;
-                const nextBillingMethod = billingMethodForService(nextWorkCompleted);
-              
-                setInlineTimeForm({
-                  ...inlineTimeForm,
-                  workCompleted: nextWorkCompleted,
-                  hours:
-                    nextBillingMethod === 'Per Hour' ||
-                    nextBillingMethod === 'Per Residence' ||
-                    nextBillingMethod === 'Per Mainline Segment'
-                      ? inlineTimeForm.hours
-                      : '',
-                  feet: nextBillingMethod === 'Per Foot' ? inlineTimeForm.feet : '',
-                  laterals: nextBillingMethod === 'Per Lateral' ? inlineTimeForm.laterals : '',
-                });
-              }}
-              className="block w-full min-w-0 max-w-full rounded-lg border p-3 text-sm"
-              >
-              <option value="">Select work type</option>
-              <option>Mainline</option>
-              <option>Lateral</option>
-              <option>Jetter</option>
-              <option>Push Rod</option>
-              <option>Dye</option>
-              <option>Smoke</option>
-              <option>Laborer</option>
-              <option>Traffic Control</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Service Vehicle
-            </label>
-            <select
-              value={inlineTimeForm.serviceVehicle}
-              onChange={(e) =>
-                setInlineTimeForm({
-                  ...inlineTimeForm,
-                  serviceVehicle: e.target.value,
-                })
-              }
-              className="block w-full min-w-0 max-w-full rounded-lg border p-3 text-sm"
-              >
-              <option value="">Select service vehicle</option>
-              <option>2016 Ford Van</option>
-              <option>2007 Ford F-150</option>
-            </select>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className="mb-2 block text-sm font-medium">
-              Notes
-            </label>
-            <textarea
-              value={inlineTimeForm.notes}
-              onChange={(e) =>
-                setInlineTimeForm({
-                  ...inlineTimeForm,
-                  notes: e.target.value,
-                })
-              }
-              className="w-full rounded-lg border p-3"
-              rows={3}
-            />
-          </div>
-
-          <div className="flex gap-2 md:col-span-2">
-            <button
-              type="button"
-              onClick={() => saveInlineTimeEntry(entry.id)}
-              className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
-            >
-              Save
-            </button>
-
-            <button
-              type="button"
-              onClick={cancelInlineTimeEdit}
-              className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
-            >
-              Cancel
-            </button>
-
-            {canManageHistory && (
-  <button
-    type="button"
-    onClick={() => deleteTimeEntry(entry.id)}
-    className="ml-auto rounded-lg border px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-  >
-    Delete
-  </button>
-)}
-          </div>
+  useEffect(() => {
+    if (settling || pendingScroll.current === null) return;
+    const top = pendingScroll.current; pendingScroll.current = null;
+    const frame = requestAnimationFrame(() => window.scrollTo({ top, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }));
+    return () => cancelAnimationFrame(frame);
+  }, [active, settling]);
+  return <div ref={root} className="min-w-0" style={{ touchAction: 'pan-y pinch-zoom' }}
+    onTouchStart={(event) => {
+      touch.current = null; setDrag(0);
+      if (settling || document.querySelector('dialog[open]')) return;
+      const target = event.target as HTMLElement;
+      if (event.touches.length !== 1 || target.closest('input, textarea, select, [contenteditable="true"], [role="dialog"], dialog')) { touch.current = null; return; }
+      const point = event.touches[0];
+      if (point.clientX < 24 || point.clientX > window.innerWidth - 24) return;
+      touch.current = { x: point.clientX, y: point.clientY, time: Date.now() };
+    }}
+    onTouchMove={(event) => {
+      if (!touch.current) return;
+      if (event.touches.length !== 1) { touch.current = null; setDrag(0); return; }
+      const dx = event.touches[0].clientX - touch.current.x;
+      const dy = event.touches[0].clientY - touch.current.y;
+      if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { touch.current = null; setDrag(0); return; }
+      if (Math.abs(dx) > Math.abs(dy) * 1.5) {
+        const progress = Math.max(-1, Math.min(1, -dx / (root.current?.clientWidth || 320)));
+        setDrag(active + progress < 0 || active + progress > 2 ? 0 : progress);
+      }
+    }}
+    onTouchEnd={(event) => {
+      const start = touch.current; touch.current = null; setDrag(0);
+      if (!start || !event.changedTouches.length) return;
+      const dx = event.changedTouches[0].clientX - start.x;
+      const dy = event.changedTouches[0].clientY - start.y;
+      const elapsed = Math.max(1, Date.now() - start.time);
+      const distance = Math.abs(dx);
+      const threshold = Math.max(56, Math.min(96, (root.current?.clientWidth || 320) * 0.2));
+      const quickFlick = distance >= 24 && elapsed <= 250 && distance / elapsed >= 0.45;
+      if ((distance >= threshold || quickFlick) && distance > Math.abs(dy) * 1.5) {
+        suppressClickUntil.current = Date.now() + 600;
+        select(active + (dx < 0 ? 1 : -1));
+      }
+    }}
+    onTouchCancel={() => { touch.current = null; setDrag(0); }}
+    onClickCapture={(event) => { if (Date.now() < suppressClickUntil.current) { event.preventDefault(); event.stopPropagation(); } }}>
+    <StickyCarouselHeader>
+      <div className="relative h-11 overflow-hidden">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          {labels.map((label, index) => <span key={label}
+            className={`absolute inset-y-0 flex w-max items-center whitespace-nowrap text-sm font-semibold text-[#16324f] motion-reduce:transition-none ${drag ? '' : 'transition-[opacity,left] duration-[260ms] ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
+            style={{ left: `${50 + (index - position) * 50}%`, transform: 'translateX(-50%)', opacity: Math.max(0, 1 - Math.abs(index - position) * 0.72) }}>
+            {label}
+          </span>)}
         </div>
-      ) : (
-        <>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">
-                {entry.work_completed || 'No work type selected'}
-              </p>
-
-              <p className="mt-1 text-xs text-gray-500">
-                {entry.service_vehicle || 'No vehicle selected'}
-              </p>
-            </div>
-
-            <p className="shrink-0 text-right text-sm font-semibold text-gray-700">
-              {quantityLabelForEntry(entry)}
-            </p>
-          </div>
-
-          {entry.notes && (
-            <p className="mt-3 rounded-lg bg-gray-50 p-2 text-sm text-gray-700">
-              {entry.notes}
-            </p>
-          )}
-
-          <p className="mt-2 text-xs text-gray-500">
-            {submittedUpdatedLabel(entry)}
-          </p>
-
-          {managingTimeEntries && canManageEntry(entry) && (
-  <div className="mt-3 flex gap-2">
-    <button
-      type="button"
-      onClick={() => startInlineTimeEdit(entry)}
-      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-    >
-      Edit
-    </button>
-
-    {canManageHistory && (
-      <button
-        type="button"
-        onClick={() => deleteTimeEntry(entry.id)}
-        className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-      >
-        Delete
-      </button>
-    )}
-  </div>
-)}
-        </>
-      )}
-    </div>
-  );
-})}
-
-  </div>
-)}
-</div>
-  );
-})}
-
-{timeEntries.length === 0 && dayUpdates.length === 0 && nonbillableEntries.length === 0 && !nonbillableLoading && !nonbillableError && !dayUpdatesLoading && !dayUpdatesError && (
-    <div className="rounded-xl border border-dashed p-4 text-center text-sm text-gray-500">
-      No submissions yet.
-    </div>
-  )}
+        <button type="button" disabled={active === 0} onClick={() => select(active - 1)}
+          aria-label={`Show previous section: ${labels[Math.max(0, active - 1)]}`}
+          className={`absolute left-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 0 ? 'invisible' : ''}`} />
+        <button type="button" disabled={active === 2} onClick={() => select(active + 1)}
+          aria-label={`Show next section: ${labels[Math.min(2, active + 1)]}`}
+          className={`absolute right-0 top-0 h-11 w-14 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5] ${active === 2 ? 'invisible' : ''}`} />
       </div>
-    </>
-  )}
-</div>
-
-
-
-    
-
-<div className="rounded-2xl bg-white p-6 shadow">
-  <button
-    type="button"
-    onClick={() => setShowNotes(!showNotes)}
-    className="flex w-full items-center justify-between gap-4 text-left"
-  >
-    <div>
-      <h2 className="text-xl font-bold">Notes</h2>
-      <p className="mt-1 text-sm text-gray-600">
-        View project and service notes.
-      </p>
-    </div>
-
-    <span className="text-2xl leading-none text-gray-500">
-      {showNotes ? '⌄' : '›'}
-    </span>
-  </button>
-
-  {showNotes && (
-    <>
-      <div className="mt-4 flex justify-end">
-        <button
-          type="button"
-          onClick={() => {
-            setManagingProjectNotes(!managingProjectNotes);
-            setEditingProjectNoteId(null);
+      <p className="sr-only" aria-live="polite">{labels[active]}</p>
+      <div role="group" aria-label="Choose project section" className="-mt-1 flex items-center justify-center"
+        onKeyDown={(event) => {
+          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          select(event.key === 'Home' ? 0 : event.key === 'End' ? 2 : Math.max(0, Math.min(2, active + (event.key === 'ArrowRight' ? 1 : -1))), true);
+        }}>
+        {labels.map((label, index) => <button key={label} type="button" onClick={() => select(index)}
+          ref={(node) => { tabButtons.current[index] = node; }} aria-label={`Show ${label}`}
+          aria-controls={`${id}-panel-${index}`} aria-current={index === active ? 'true' : undefined}
+          className="inline-flex h-11 w-11 items-center justify-center rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#007bb5]">
+          <span aria-hidden="true" className={`h-2.5 rounded-full ${index === active ? 'w-6 bg-[#009be5]' : 'w-2.5 bg-gray-300'}`} />
+        </button>)}
+      </div>
+    </StickyCarouselHeader>
+    <p className="sr-only">Swipe between project sections or use the position buttons. Use calendar arrows to change months.</p>
+    <div className="overflow-hidden motion-safe:transition-[height] motion-safe:duration-200" style={{ height: tileHeight }}>
+      <div className={`flex items-start gap-2 motion-reduce:transition-none ${drag ? '' : 'motion-safe:transition-transform motion-safe:duration-[260ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]'}`}
+        style={{ willChange: 'transform', transform: `translate3d(calc(${-position * 100}% + ${position * 12}px), 0, 0)` }}>
+        {sections.map((section, index) => <section key={labels[index]}
+          ref={(node) => {
+            panels.current[index] = node;
+            if (node) { if (index === active) node.removeAttribute('inert'); else node.setAttribute('inert', ''); }
           }}
-          className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-        >
-          {managingProjectNotes ? 'Done' : 'Manage Notes'}
-        </button>
-      </div>
-
-      <div className="mt-4 flex gap-2">
-
-  <input
-    type="text"
-    value={newProjectNote}
-    onChange={(e) => setNewProjectNote(e.target.value)}
-    placeholder="Add project note..."
-    className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
-  />
-
-  <button
-    type="button"
-    onClick={saveProjectNote}
-    className="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-gray-50"
-  >
-    Save
-  </button>
-</div>
-
-
-  <div className="mt-5 h-[20rem] space-y-5 overflow-y-auto pr-2">
-  <div>
-    <h3 className="text-sm font-bold text-gray-700">Project Notes</h3>
-
-    <div className="mt-3 space-y-3">
-      {projectNoteHistory.map((note) => {
-        const isEditingNote = editingProjectNoteId === note.id;
-
-        return (
-          <div key={note.id} className="rounded-xl border p-4">
-            {isEditingNote ? (
-              <>
-                <textarea
-                  value={projectNoteEditText}
-                  onChange={(e) => setProjectNoteEditText(e.target.value)}
-                  className="w-full rounded-lg border p-3"
-                  rows={3}
-                />
-
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => updateProjectNote(note.id)}
-                    className="rounded-lg bg-black px-4 py-2 text-sm text-white hover:bg-gray-800"
-                  >
-                    Save
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={cancelProjectNoteEdit}
-                    className="rounded-lg border px-4 py-2 text-sm hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-gray-700">{note.note}</p>
-                <p className="mt-2 text-xs text-gray-500">
-                {noteSubmittedUpdatedLabel(note)}
-                </p>
-
-                {managingProjectNotes && (
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => startProjectNoteEdit(note)}
-                      className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      Edit
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => deleteProjectNote(note.id)}
-                      className="rounded-lg border px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        );
-      })}
-
-      {projectNoteHistory.length === 0 && (
-        <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
-          No project notes yet.
-        </div>
-      )}
-    </div>
-  </div>
-
-  <div>
-  <h3 className="text-sm font-bold text-gray-700">Service Notes</h3>
-
-  <div className="mt-3 space-y-3">
-  {serviceNoteHistory.map(([workDate, entries]) => {
-  const isExpanded = expandedServiceNoteDates.includes(workDate);
-
-  return (
-    <div key={workDate} className="rounded-xl border">
-      <button
-        type="button"
-        onClick={() =>
-          setExpandedServiceNoteDates((dates) =>
-            dates.includes(workDate)
-              ? dates.filter((date) => date !== workDate)
-              : [...dates, workDate]
-          )
-        }
-        className="w-full rounded-xl bg-white px-4 py-3 text-left"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-bold text-gray-900">
-              {formatDate(workDate)}
-            </p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              {entries.length} {entries.length === 1 ? 'note' : 'notes'}
-            </p>
-          </div>
-
-          <span className="text-xl leading-none text-gray-400">
-            {isExpanded ? '⌄' : '›'}
-          </span>
-        </div>
-      </button>
-
-      {isExpanded && (
-        <div className="space-y-3 border-t bg-gray-50 p-3">
-          {entries.map((entry) => (
-            <div key={entry.id} className="rounded-lg bg-white p-3">
-              <p className="text-sm font-semibold text-gray-900">
-                {entry.work_completed || 'Service'}
-              </p>
-
-              <p className="mt-1 text-sm text-gray-700">
-                {entry.notes}
-              </p>
-
-              <p className="mt-2 text-xs text-gray-500">
-                {submittedUpdatedLabel(entry)}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-})}
-
-
-    {serviceNoteHistory.length === 0 && (
-      <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
-        No service notes yet.
-      </div>
-    )}
-  </div>
-</div>
-
-  </div>
-    </>
-  )}
-</div>
-
-        </div>
-
-        <div className="space-y-6">
-          
-
-        <div className="rounded-2xl bg-white p-6 shadow">
-  <h2 className="text-xl font-bold">Project Maps / Plans</h2>
-
-  <label className="relative mt-4 flex min-h-[56px] cursor-pointer items-center justify-center rounded-lg border border-dashed p-4 text-center text-sm font-medium text-gray-600 hover:bg-gray-50">
-  {uploadingAttachment ? 'Uploading...' : 'Upload maps, plans, or photos'}
-
-  <input
-    type="file"
-    multiple
-    accept="image/*,application/pdf,.pdf"
-    onChange={uploadProjectAttachments}
-    disabled={uploadingAttachment}
-    className="absolute inset-0 cursor-pointer opacity-0"
-  />
-</label>
-
-  <div className="mt-4 space-y-2">
-  {projectAttachments.map((attachment) => (
-  <div key={attachment.id} className="rounded-lg border px-3 py-2 text-sm">
-    <a
-      href={attachment.signedUrl}
-      target="_blank"
-      rel="noreferrer"
-      className="block font-medium hover:underline"
-    >
-      {attachment.file_name}
-    </a>
-
-    <p className="mt-1 text-xs text-gray-500">
-    Uploaded by {attachment.uploaded_by_username || 'Unknown'} on{' '}
-      {formatTimestamp(attachment.uploaded_at)}
-    </p>
-
-    {canManageProjects && (
-      <button
-        type="button"
-        onClick={() => deleteProjectAttachment(attachment)}
-        className="mt-2 rounded-lg border px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-      >
-        Delete
-      </button>
-    )}
-  </div>
-))}
-
-    {projectAttachments.length === 0 && (
-      <div className="rounded-xl border border-dashed p-4 text-sm text-gray-500">
-        No maps, plans, or photos uploaded yet.
-      </div>
-    )}
-  </div>
-</div>
-        </div>
+          role="group" aria-roledescription="slide" id={`${id}-panel-${index}`}
+          aria-label={`${index + 1} of 3: ${labels[index]}`} aria-hidden={index !== active}
+          className={`min-w-0 shrink-0 grow-0 ${index === sections.length - 1 ? 'basis-full' : 'basis-[calc(100%_-_20px)]'}`} style={{ minHeight: minimumHeight }}>
+          {section}
+        </section>)}
       </div>
     </div>
-  );
+  </div>;
 }
 
 function ProjectSubmissionActions({ projectId, projectNumber, onRecordService, onDayRecorded, onNonbillable, defaultDate, buttonLabel = '+ Record Service' }: {
@@ -4271,7 +4188,7 @@ function ProjectRevenueSummary({ projectId, version, services }: {
   }, [load, version]);
   const partialCount = (result?.missing_count ?? 0) + (result?.review_count ?? 0);
   return <div className="mt-4 space-y-4 border-t pt-4">
-    <div className="rounded-lg bg-white p-4">
+    <div className="rounded-lg bg-white p-4 text-center">
       <p className="text-xs font-medium uppercase text-gray-500">Estimated Billable Revenue</p>
       {loading ? <p role="status" className="mt-2 text-sm text-gray-600">Calculating estimate…</p> : error ? <p role="alert" className="mt-2 break-words text-sm text-red-700">{error}</p> : result && <>
         <p className="mt-1 text-2xl font-bold">{revenueMoney(Number(result.total))}</p>
@@ -4450,4 +4367,33 @@ function ProjectClassificationIcon({ project }: { project: ProjectDetail }) {
   }
   return <span role="img" aria-label="Unclassified project" title="Unclassified project"
     className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-amber-400 bg-amber-50 text-sm font-semibold text-amber-900">?</span>;
+}
+
+
+function StickyCarouselHeader({ children }: { children: ReactNode }) {
+  const [top, setTop] = useState(0);
+  useLayoutEffect(() => {
+    const header = document.querySelector('aside');
+    const measure = () => setTop(window.matchMedia('(min-width: 768px)').matches ? 0 : Math.ceil(header?.getBoundingClientRect().height ?? 0));
+    measure();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (header) observer?.observe(header);
+    window.addEventListener('resize', measure);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', measure); };
+  }, []);
+  return <div className="sticky z-20 -mx-4 mb-2 border-b border-gray-200 bg-gray-100 px-4 md:mx-0 md:px-0" style={{ top }}>
+    {children}
+  </div>;
+}
+
+
+function DetailPageLoading() {
+  const [showMessage, setShowMessage] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowMessage(true), 800);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <div aria-busy="true" className="min-h-[50dvh]">
+    {showMessage && <p role="status" className="py-4 text-center text-sm text-gray-500">Loading details…</p>}
+  </div>;
 }

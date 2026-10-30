@@ -300,7 +300,7 @@ setProjects(formattedProjects);
   
 
   if (loading) {
-    return <div className="text-black">Loading customer...</div>;
+    return <DetailPageLoading />;
   }
 
   const activeProjects = projects.filter((project) =>
@@ -320,13 +320,6 @@ setProjects(formattedProjects);
 
   return (
     <div className="space-y-6 text-black">
-      <div className="text-sm text-gray-500">
-        <Link href="/customers" className="hover:text-black hover:underline">
-          Customers
-        </Link>
-        <span className="mx-2">/</span>
-        <span className="font-medium text-gray-700">{customer.name}</span>
-      </div>
 
       <div className="rounded-2xl bg-white p-4 shadow md:p-6">
         <div className="flex items-start justify-between gap-4 border-b pb-3">
@@ -1097,4 +1090,15 @@ function CustomerTypeBadge({ value }: { value: string | null | undefined }) {
       </>}
     </svg>
   </span>;
+}
+
+function DetailPageLoading() {
+  const [showMessage, setShowMessage] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowMessage(true), 800);
+    return () => window.clearTimeout(timer);
+  }, []);
+  return <div aria-busy="true" className="min-h-[50dvh]">
+    {showMessage && <p role="status" className="py-4 text-center text-sm text-gray-500">Loading details…</p>}
+  </div>;
 }
